@@ -156,9 +156,13 @@ GitHub Actions 会构建两套前端，把静态文件嵌入 Rust 二进制，�
 musl 单文件，运行镜像不编译源码，也不包含 Node.js 或 Rust。
 
 ```bash
-git clone https://github.com/noxue/zebra-store.git
-cd zebra-store/deploy/release
-cp ../../backend/config.example.yml config.yml
+sudo mkdir -p /opt/zebra-store
+sudo chown "$USER":"$(id -gn)" /opt/zebra-store
+cd /opt/zebra-store
+BASE=https://raw.githubusercontent.com/noxue/zebra-store/main
+curl -fsSLO "$BASE/deploy/release/Dockerfile"
+curl -fsSLo compose.yml "$BASE/deploy/release/compose.yml"
+curl -fsSLo config.yml "$BASE/backend/config.example.yml"
 # 编辑 config.yml，设置三个 secret 和初始管理员密码
 docker compose build --no-cache
 docker compose up -d

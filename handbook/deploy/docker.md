@@ -37,15 +37,19 @@ docker compose version
 ## 1. 获取部署文件
 
 ```bash
-git clone https://github.com/noxue/zebra-store.git
-cd zebra-store/deploy/release
-cp ../../backend/config.example.yml config.yml
+sudo mkdir -p /opt/zebra-store
+sudo chown "$USER":"$(id -gn)" /opt/zebra-store
+cd /opt/zebra-store
+BASE=https://raw.githubusercontent.com/noxue/zebra-store/main
+curl -fsSLO "$BASE/deploy/release/Dockerfile"
+curl -fsSLo compose.yml "$BASE/deploy/release/compose.yml"
+curl -fsSLo config.yml "$BASE/backend/config.example.yml"
 ```
 
-部署目录只有三个必要文件：
+不需要克隆仓库。部署目录只有三个必要文件：
 
 ```text
-deploy/release/
+/opt/zebra-store/
 ├── Dockerfile       # 从 GitHub Release 下载、校验并复制单文件
 ├── compose.yml      # 一个容器、两个数据卷、本机端口 18180
 └── config.yml       # 站点配置，不提交到 Git
@@ -160,11 +164,13 @@ Nginx 或宝塔反向代理的目标填写 `http://127.0.0.1:18180`，整个域�
 
 ## 升级
 
-拉取最新部署文件并指定新 Release：
+刷新两个部署文件并指定新 Release。不要重新下载 `config.yml`，否则会覆盖站点密钥和管理员初始配置：
 
 ```bash
-git pull
-cd deploy/release
+cd /opt/zebra-store
+BASE=https://raw.githubusercontent.com/noxue/zebra-store/main
+curl -fsSLO "$BASE/deploy/release/Dockerfile"
+curl -fsSLo compose.yml "$BASE/deploy/release/compose.yml"
 RELEASE=v新版本 docker compose build --no-cache
 RELEASE=v新版本 docker compose up -d --no-build
 curl -fsS http://127.0.0.1:18180/health

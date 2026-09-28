@@ -4,7 +4,11 @@ This deployment runs one container and downloads the embedded-web Linux binary f
 [GitHub Releases](https://github.com/noxue/zebra-store/releases) while building the small runtime image.
 
 ```bash
-cp ../../backend/config.example.yml config.yml
+mkdir -p zebra-store && cd zebra-store
+BASE=https://raw.githubusercontent.com/noxue/zebra-store/main
+curl -fsSLO "$BASE/deploy/release/Dockerfile"
+curl -fsSLo compose.yml "$BASE/deploy/release/compose.yml"
+curl -fsSLo config.yml "$BASE/backend/config.example.yml"
 # Set the secrets and initial admin password in config.yml.
 docker compose build --no-cache
 docker compose up -d
