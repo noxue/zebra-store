@@ -1,145 +1,138 @@
 # Zebra Store
 
-A self-hosted digital-goods commerce platform with a **Rust (axum + sea-orm)** backend and two independent
-**Vue 3 + TSX** frontends in an anime (二次元) style.
+[简体中文](README.md) | [English](README.en.md)
 
-Repository: [github.com/noxue/zebra-store](https://github.com/noxue/zebra-store)
+Zebra Store 是一个可自行部署的数字商品商城，后端使用 **Rust（axum + SeaORM）**，用户前台和管理后台使用 **Vue 3 + TSX**。
 
-Linux releases are single binaries with both Vue frontends embedded. Every pushed `v*` tag builds
-x86_64/aarch64 GNU and musl archives and publishes them to
-[GitHub Releases](https://github.com/noxue/zebra-store/releases). On a systemd-based Linux server:
+- 项目地址：[github.com/noxue/zebra-store](https://github.com/noxue/zebra-store)
+- 使用文档：[zebra-store-docs.noxue.com](https://zebra-store-docs.noxue.com)
+- 版本下载：[GitHub Releases](https://github.com/noxue/zebra-store/releases)
+
+## 推荐：Release 单文件部署
+
+Linux Release 是一个已经内嵌用户前台、管理后台、API 和后台任务的可执行文件。无需安装 Node.js、Rust，也无需上传 `dist` 或克隆整个仓库。
+
+在使用 systemd 的 x86_64 或 aarch64 Linux 服务器上，以 root 身份执行：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/noxue/zebra-store/main/scripts/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/noxue/zebra-store/main/scripts/install.sh | bash
 ```
 
-| Project | Path | Stack | Dev port |
+安装脚本只下载当前架构对应的 Release 压缩包和 `SHA256SUMS`，校验后安装程序、生成配置并创建 systemd 服务。安装完成时会显示后台初始账号和随机密码。
+
+随后将 Caddy、Nginx 或宝塔 Nginx 的整个域名反向代理到：
+
+```text
+http://127.0.0.1:8081
+```
+
+Web 服务器只负责 HTTPS 和反向代理，不需要分别配置前台、后台或 API 路径。完整步骤见[部署手册](https://zebra-store-docs.noxue.com/deploy/)。
+
+如果使用 Docker，请参考 [Docker Release 单文件部署](https://zebra-store-docs.noxue.com/deploy/docker)。该方式只下载 Dockerfile、Compose 配置、示例配置和 Release 单文件。
+
+## 自动发布
+
+推送以 `v` 开头的 Git 标签后，GitHub Actions 会自动构建并发布：
+
+- x86_64 Linux musl
+- aarch64 Linux musl
+- x86_64 Linux GNU
+- aarch64 Linux GNU
+
+每个版本同时发布 `SHA256SUMS`，下载地址见 [GitHub Releases](https://github.com/noxue/zebra-store/releases)。
+
+## 项目组成
+
+| 项目 | 目录 | 技术栈 | 开发端口 |
 |---|---|---|---|
-| Backend API | `backend/` | Rust 2024, axum 0.8, sea-orm 2.0 | 8081 |
-| Storefront (shop) | `storefront/` | Vue 3 + TSX, Vite, Pinia, vue-i18n, Tailwind v4 | 5185 |
-| Admin panel | `admin/` | Vue 3 + TSX, Vite, Pinia, vue-i18n, Tailwind v4 | 5186 |
+| 后端 API | `backend/` | Rust 2024、axum 0.8、SeaORM 2.0 | 8081 |
+| 用户前台 | `storefront/` | Vue 3 + TSX、Vite、Pinia、vue-i18n、Tailwind CSS v4 | 5185 |
+| 管理后台 | `admin/` | Vue 3 + TSX、Vite、Pinia、vue-i18n、Tailwind CSS v4 | 5186 |
+| 用户手册 | `handbook/` | VitePress | 5190 |
 
-The API uses stable paths, JSON fields, a `{status_code, msg, data, pagination}` envelope, consistent error
-keys, and money values such as `"12.30"`. Supplier adapters provide compatibility with supported third-party sites.
+API 使用统一的 `{status_code, msg, data, pagination}` 返回结构，金额使用类似 `"12.30"` 的字符串表示。供应商适配器用于对接受支持的第三方站点。
 
-Documentation: [`CLAUDE.md`](CLAUDE.md) (engineering rules), [`docs/PLAN.md`](docs/PLAN.md),
-[`docs/TODO.md`](docs/TODO.md), [`docs/BACKEND_GUIDE.md`](docs/BACKEND_GUIDE.md),
-[`docs/DESIGN.md`](docs/DESIGN.md), and the reference material in [`docs/reference/`](docs/reference/)
-(API specifications, screenshots, and regression lessons).
+## 开发环境快速启动
 
-## 文档
-
-The user handbook (Chinese, written for beginners: deployment via 宝塔 / Docker / Nginx / Caddy, storefront and
-admin usage, payment gateways, site integrations, reseller subsites, FAQ) lives in [`handbook/`](handbook/) as a
-VitePress site and is published at **https://zebra-store-docs.noxue.com**.
+需要 Rust 1.90 或更高版本、Node.js 20 或更高版本。
 
 ```bash
-cd handbook && npm install
-npm run docs:dev        # http://localhost:5190 (live reload)
-npm run docs:build      # static site in handbook/.vitepress/dist (fails on dead links)
-```
-
-The handbook includes 89 application screenshots captured from tested deployments and a fresh local instance.
-The six screenshots that require a separate 宝塔 panel are tracked in
-[`handbook/SCREENSHOTS.md`](handbook/SCREENSHOTS.md). The manual/end-to-end checklist for the lab is
-[`docs/TEST_FLOWS.md`](docs/TEST_FLOWS.md).
-
-## Quick start (development)
-
-Requirements: Rust ≥ 1.90, Node ≥ 20.
-
-```bash
-# 1. Backend
+# 后端
 cd backend
-cp config.example.yml config.yml      # then set the three secrets and the admin password
-cargo run -p zs-server                # http://localhost:8081 — creates data/zebra.db (SQLite)
+cp config.example.yml config.yml      # 修改三个密钥和管理员密码
+cargo run -p zs-server                # http://localhost:8081
 
-# 2. Storefront
-cd storefront && npm install
+# 用户前台
+cd ../storefront
+npm install
 VITE_API_TARGET=http://localhost:8081 npm run dev     # http://localhost:5185
 
-# 3. Admin panel
-cd admin && npm install
-VITE_API_TARGET=http://localhost:8081 npm run dev     # http://localhost:5186  (login: bootstrap admin)
+# 管理后台
+cd ../admin
+npm install
+VITE_API_TARGET=http://localhost:8081 npm run dev     # http://localhost:5186
 ```
 
-On first start the server creates every table, the six built-in RBAC roles and the super administrator
-from `bootstrap.default_admin_username` / `default_admin_password`.
+首次启动时，服务会创建数据表、六个内置 RBAC 角色，以及配置中指定的超级管理员。
 
-## Choosing the database
+## 数据库
 
-Only the URL changes — no code or rebuild:
+默认使用 SQLite，也支持 MySQL 8+ 和 PostgreSQL 14+。切换数据库只需修改 URL：
 
 ```yaml
 database:
-  url: sqlite://data/zebra.db?mode=rwc                  # default
-  # url: mysql://user:pass@127.0.0.1:3306/zebra          # MySQL 8+
-  # url: postgres://user:pass@127.0.0.1:5432/zebra       # PostgreSQL 14+
+  url: sqlite://data/zebra.db?mode=rwc
+  # url: mysql://user:pass@127.0.0.1:3306/zebra
+  # url: postgres://user:pass@127.0.0.1:5432/zebra
 ```
 
-or via environment: `ZS__DATABASE__URL=postgres://…`. Tables are created/extended automatically on start
-(entity-first schema sync) and dialect-specific data migrations (partial unique indexes, MySQL
-`DATETIME(6)` columns) run afterwards. The database must exist; the user needs DDL rights.
+也可以使用环境变量，例如 `ZS__DATABASE__URL=postgres://…`。程序启动时会自动创建或补齐表结构；数据库本身需要提前创建，连接用户需要 DDL 权限。
 
-## Configuration
+## 配置
 
-`backend/config.example.yml` documents every key. Any key can be overridden with
-`ZS__SECTION__KEY` environment variables (double underscores), e.g. `ZS__SERVER__PORT=9000`.
+[`backend/config.example.yml`](backend/config.example.yml) 记录了全部配置项。配置可以用 `ZS__SECTION__KEY` 形式的环境变量覆盖，例如 `ZS__SERVER__PORT=9000`。
 
-The server refuses to start unless `app.secret_key`, `jwt.secret` and `user_jwt.secret` are set to
-three **different** values of at least 16 characters. Site name, logo, favicon, theme colours,
-background and mascot image are configured in the admin panel (系统设置 → 站点设置 / 主题外观).
+`app.secret_key`、`jwt.secret` 和 `user_jwt.secret` 必须互不相同，且至少包含 16 个字符。站点名称、Logo、图标、主题颜色和图片可以在管理后台修改。Redis 是可选组件。
 
-Redis is optional (not required): cache, rate limiting and the job queue run in-process / in the database.
-
-## Build & deploy
+常用管理员命令：
 
 ```bash
-cd backend && cargo build --release -p zs-server        # target/release/zebra-store
-cd storefront && npm ci && npm run build                 # storefront/dist
-cd admin && npm ci && npm run build                      # admin/dist
+zebra-store admin list-admins
+zebra-store admin reset-password --username admin --password '新密码'
+zebra-store admin reset-2fa --username admin
 ```
 
-Run `zebra-store --config /etc/zebra/config.yml` behind a reverse proxy that serves the two `dist`
-folders and forwards `/api`, `/uploads`, `/sitemap.xml`, `/robots.txt` (plus `/shared/` and `/plugin/open-api/`
-when the acg-faka / mcy provider-compat protocols are enabled) to the backend. List the proxy in
-`server.trusted_proxies` so client IPs are resolved correctly.
+## 从源码构建
 
-Operator commands: `zebra-store admin list-admins | reset-password --username X | reset-2fa --username X`.
+源码构建主要用于开发。需要先生成两个前端产物，Rust 构建脚本会将它们嵌入最终的 `zebra-store`：
 
-## Tests
+```bash
+cd storefront && npm ci && npm run build
+cd ../admin && npm ci && npm run build
+cd ../backend && cargo build --release -p zs-server
+```
+
+最终仍然只需运行 `backend/target/release/zebra-store`，无需单独部署前端目录。
+
+## 测试
 
 ```bash
 cd backend
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace                                   # in-memory SQLite
+cargo test --workspace
 
-# The same integration tests against PostgreSQL / MySQL (a fresh database per test):
-ZS_TEST_DATABASE_URL=postgres://zebra:zebra@127.0.0.1:15432/zebra cargo test -p zs-api
-ZS_TEST_DATABASE_URL=mysql://root:zebra@127.0.0.1:13306/zebra cargo test -p zs-api
-scripts/drop_test_dbs.sh                                 # remove the zs_t_* test databases
-scripts/db_smoke.sh                                      # real server on SQLite, PostgreSQL, MySQL
-
-cd storefront && npm run typecheck && npm run lint && npm run test && npm run build
-cd admin && npm run typecheck && npm run lint && npm run test && npm run build
+cd ../storefront && npm run typecheck && npm run lint && npm run test && npm run build
+cd ../admin && npm run typecheck && npm run lint && npm run test && npm run build
 ```
 
-Test databases for the commands above:
+## 文档与架构
 
-```bash
-docker run -d --name zebra-pg -e POSTGRES_USER=zebra -e POSTGRES_PASSWORD=zebra -e POSTGRES_DB=zebra -p 15432:5432 postgres:16-alpine
-docker run -d --name zebra-mysql -e MYSQL_ROOT_PASSWORD=zebra -e MYSQL_DATABASE=zebra -p 13306:3306 mysql:8.4
-```
+中文用户手册源码位于 [`handbook/`](handbook/)。工程资料见 [`CLAUDE.md`](CLAUDE.md)、[`docs/PLAN.md`](docs/PLAN.md)、[`docs/TODO.md`](docs/TODO.md)、[`docs/BACKEND_GUIDE.md`](docs/BACKEND_GUIDE.md)、[`docs/DESIGN.md`](docs/DESIGN.md) 和 [`docs/reference/`](docs/reference/)。
 
-## Architecture (backend)
-
-```
+```text
 zs-shared ← zs-domain ← zs-app ← zs-infra ← zs-api ← zs-server
                                   zs-migration ↗
 ```
 
-Domain models, business rules and ports live in `zs-domain`; use cases in `zs-app`; database, gateways,
-mail and the job queue in `zs-infra`; HTTP in `zs-api`. The crate graph enforces the layering. Each business
-area (identity, catalog, content, marketing, order, payment, wallet, affiliate, reseller, integration,
-notify, dashboard) is a folder in every layer. See [`docs/BACKEND_GUIDE.md`](docs/BACKEND_GUIDE.md).
+领域模型和业务规则位于 `zs-domain`，用例位于 `zs-app`，数据库、网关、邮件和任务队列位于 `zs-infra`，HTTP 接口位于 `zs-api`。
