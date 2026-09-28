@@ -35,7 +35,7 @@ release_dir="$root/docs-releases/$release_id"
 current="$root/docs-current"
 legacy="$root/docs"
 
-install -d "$release_dir/assets"
+install -d "$release_dir"
 
 # Keep existing hashed assets so cached HTML from an earlier release continues
 # to load after the atomic switch.
@@ -45,13 +45,21 @@ if [ -L "$current" ]; then
 elif [ -d "$legacy" ]; then
   source_dir=$legacy
 fi
-if [ -n "$source_dir" ] && [ -d "$source_dir/assets" ]; then
-  cp -a "$source_dir/assets/." "$release_dir/assets/"
+if [ -n "$source_dir" ]; then
+  # Hard links make unchanged screenshots and pages effectively free. Rsync
+  # replaces changed files atomically, so the active release is untouched.
+  cp -al "$source_dir/." "$release_dir/"
 fi
+install -d "$release_dir/assets"
 REMOTE
 
 echo "Uploading complete release"
-rsync -az "$REPO_ROOT/handbook/.vitepress/dist/" "$DEPLOY_HOST:$RELEASE_DIR/"
+# Remove obsolete pages from the staged release, but retain old hashed assets
+# for clients that still have an earlier HTML page in cache.
+rsync -az --delete --exclude '/assets/' \
+  "$REPO_ROOT/handbook/.vitepress/dist/" "$DEPLOY_HOST:$RELEASE_DIR/"
+rsync -az "$REPO_ROOT/handbook/.vitepress/dist/assets/" \
+  "$DEPLOY_HOST:$RELEASE_DIR/assets/"
 
 echo "Validating and switching atomically"
 ssh "$DEPLOY_HOST" sh -s -- "$DEPLOY_ROOT" "$RELEASE_ID" <<'REMOTE'
