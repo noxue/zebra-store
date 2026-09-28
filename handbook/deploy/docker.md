@@ -78,15 +78,15 @@ bootstrap:
 普通 Intel / AMD 服务器：
 
 ```bash
-RELEASE=v0.1.3 docker compose build --no-cache
-RELEASE=v0.1.3 docker compose up -d --no-build
+RELEASE=v0.1.4 docker compose build --no-cache
+RELEASE=v0.1.4 docker compose up -d --no-build
 ```
 
 ARM64 服务器把构建命令改为：
 
 ```bash
-TARGET=aarch64 RELEASE=v0.1.3 docker compose build --no-cache
-RELEASE=v0.1.3 docker compose up -d --no-build
+TARGET=aarch64 RELEASE=v0.1.4 docker compose build --no-cache
+RELEASE=v0.1.4 docker compose up -d --no-build
 ```
 
 不写 `RELEASE` 时默认下载最新 Release。固定版本更容易确认当前运行的程序，也方便回滚。
@@ -111,7 +111,7 @@ curl -fsS http://127.0.0.1:18180/api/v1/public/config | head -c 200
 正常情况下只有一个业务容器：
 
 ```text
-zebra-store-app   zebra-store/release:v0.1.3   Up ... (healthy)
+zebra-store-app   zebra-store/release:v0.1.4   Up ... (healthy)
 ```
 
 数据库与上传文件分别保存在 `zebra-store_store_data` 和 `zebra-store_store_uploads` 卷中。

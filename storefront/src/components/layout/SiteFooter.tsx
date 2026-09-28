@@ -1,7 +1,7 @@
 import { computed, defineComponent } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Mail, MessageCircle, Send } from 'lucide-vue-next'
+import { Github, Mail, MessageCircle, Send } from 'lucide-vue-next'
 import { useLocalized } from '@/composables/useLocalized'
 import { useNavConfig } from '@/composables/useNavConfig'
 import { useAppStore } from '@/stores/app'
@@ -101,7 +101,16 @@ export const SiteFooter = defineComponent({
             <div>
               © {year} {appStore.siteName}. {t('footer.rights')}
             </div>
-            <div class="flex items-center gap-4">
+            <div class="flex flex-wrap items-center gap-4">
+              <a
+                href="https://github.com/noxue/zebra-store"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="inline-flex items-center gap-1.5 hover:text-primary-text"
+              >
+                <Github class="size-4" />
+                github.com/noxue/zebra-store
+              </a>
               <RouterLink to="/privacy" class="hover:text-primary-text">
                 {t('footer.privacy')}
               </RouterLink>

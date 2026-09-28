@@ -22,6 +22,6 @@ docker compose exec store zebra-store --config /app/config.yml \
 printf 'New admin password: %s\n' "$NEW_PASSWORD"
 ```
 
-Use `TARGET=aarch64` on an ARM64 server. Pin a release with `RELEASE=v0.1.3`; the default is the latest release.
+Use `TARGET=aarch64` on an ARM64 server. Pin a release with `RELEASE=v0.1.4`; the default is the latest release.
 The SQLite database and uploads use the `zebra-store_store_data` and
 `zebra-store_store_uploads` volumes. Put Caddy or Nginx in front of `127.0.0.1:18180`.

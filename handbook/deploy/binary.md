@@ -166,5 +166,5 @@ curl http://127.0.0.1:18180/health
 ```
 
 ARM64 服务器执行 `TARGET=aarch64 docker compose build --no-cache`。需要固定版本时使用
-`RELEASE=v0.1.3 docker compose build --no-cache`。Caddy 或 Nginx 把整个域名反向代理到
+`RELEASE=v0.1.4 docker compose build --no-cache`。Caddy 或 Nginx 把整个域名反向代理到
 `127.0.0.1:18180` 即可。
