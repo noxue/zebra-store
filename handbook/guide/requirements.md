@@ -23,8 +23,8 @@
 | Git | 任意 | 拉取代码 |
 
 ::: tip 小白提示
-只想用、不想改代码的话，**不需要安装 Rust 和 Node.js**：拿到编译好的 `zebra-store` 程序和两个 `dist` 网页文件夹，
-按 [Caddy](/deploy/caddy)、[Nginx](/deploy/nginx) 或 [宝塔面板](/deploy/bt-panel) 部署即可。
+只想用、不想改代码的话，**不需要安装 Rust 和 Node.js**。直接使用
+[单文件二进制](/deploy/binary)：一个 `zebra-store` 文件已经包含后端、用户前台和管理后台。
 :::
 
 ## 浏览器

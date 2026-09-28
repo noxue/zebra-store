@@ -18,6 +18,8 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    /// Create a secure config.yml for a new installation.
+    Init,
     /// Run the HTTP API and background worker (default).
     Serve,
     /// Write a consistent online copy of the SQLite database (`VACUUM INTO`);
@@ -212,6 +214,8 @@ mod tests {
             cli.command,
             Some(Command::Backup { output: Some(_) })
         ));
+        let cli = Cli::try_parse_from(["zebra-store", "init"]).unwrap_or_else(|e| panic!("{e}"));
+        assert!(matches!(cli.command, Some(Command::Init)));
     }
 
     // QA-A07: CLI errors show the translated message, not only the raw key.

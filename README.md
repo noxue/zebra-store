@@ -5,6 +5,14 @@ A self-hosted digital-goods commerce platform with a **Rust (axum + sea-orm)** b
 
 Repository: [github.com/noxue/zebra-store](https://github.com/noxue/zebra-store)
 
+Linux releases are single binaries with both Vue frontends embedded. Every pushed `v*` tag builds
+x86_64/aarch64 GNU and musl archives and publishes them to
+[GitHub Releases](https://github.com/noxue/zebra-store/releases). On a systemd-based Linux server:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/noxue/zebra-store/main/scripts/install.sh | sudo bash
+```
+
 | Project | Path | Stack | Dev port |
 |---|---|---|---|
 | Backend API | `backend/` | Rust 2024, axum 0.8, sea-orm 2.0 | 8081 |

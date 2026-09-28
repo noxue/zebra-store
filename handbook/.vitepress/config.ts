@@ -20,6 +20,7 @@ const sidebar: DefaultTheme.Sidebar = {
       text: '部署',
       items: [
         { text: '选择部署方式', link: '/deploy/' },
+        { text: '单文件二进制（推荐）', link: '/deploy/binary' },
         { text: '宝塔面板部署', link: '/deploy/bt-panel' },
         { text: 'Docker Compose 部署', link: '/deploy/docker' },
         { text: 'Nginx 部署', link: '/deploy/nginx' },
@@ -191,6 +192,7 @@ export default defineConfig({
       { text: '对接', link: '/integration/', activeMatch: '^/integration/' },
       { text: '分站', link: '/reseller/', activeMatch: '^/reseller/' },
       { text: '常见问题', link: '/faq/', activeMatch: '^/faq/' },
+      { text: 'GitHub 仓库', link: 'https://github.com/noxue/zebra-store' },
     ],
     socialLinks: [
       { icon: 'github', link: 'https://github.com/noxue/zebra-store' },
@@ -227,7 +229,7 @@ export default defineConfig({
     },
     footer: {
       message: '斑马小铺 Zebra Store：Rust + Vue 3 数字商品交易系统',
-      copyright: '文档内容随源码仓库 handbook/ 目录一起维护',
+      copyright: '<a href="https://github.com/noxue/zebra-store">github.com/noxue/zebra-store</a>',
     },
   },
 })

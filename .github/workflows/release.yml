@@ -1,0 +1,113 @@
+name: Release Linux binaries
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  web:
+    name: Build embedded web assets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            storefront/package-lock.json
+            admin/package-lock.json
+      - name: Build storefront
+        working-directory: storefront
+        run: npm ci && npm run build
+      - name: Build admin
+        working-directory: admin
+        run: npm ci && npm run build -- --base=/admin/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: |
+            storefront/dist
+            admin/dist
+          if-no-files-found: error
+          retention-days: 1
+
+  build:
+    name: Build ${{ matrix.target }}
+    needs: web
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            asset: zebra-store-linux-x86_64-musl.tar.gz
+          - target: aarch64-unknown-linux-musl
+            asset: zebra-store-linux-aarch64-musl.tar.gz
+          - target: x86_64-unknown-linux-gnu
+            asset: zebra-store-linux-x86_64-gnu.tar.gz
+          - target: aarch64-unknown-linux-gnu
+            asset: zebra-store-linux-aarch64-gnu.tar.gz
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: .
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: mlugg/setup-zig@v2
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend -> target
+          key: ${{ matrix.target }}
+      - name: Install cargo-zigbuild
+        run: cargo install cargo-zigbuild --locked
+      - name: Build single-file server
+        working-directory: backend
+        run: cargo zigbuild --release -p zs-server --features embedded-web --target "${{ matrix.target }}"
+      - name: Package
+        env:
+          TARGET: ${{ matrix.target }}
+          ASSET: ${{ matrix.asset }}
+        run: |
+          mkdir -p release/package
+          cp "backend/target/$TARGET/release/zebra-store" release/package/zebra-store
+          zig strip release/package/zebra-store
+          tar -C release/package -czf "release/$ASSET" zebra-store
+          (cd release && sha256sum "$ASSET" > "$ASSET.sha256")
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ matrix.target }}
+          path: release/*
+          if-no-files-found: error
+          retention-days: 1
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: package-*
+          path: release
+          merge-multiple: true
+      - name: Create checksums
+        run: cat release/*.sha256 > release/SHA256SUMS
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" release/*.tar.gz release/SHA256SUMS --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" release/*.tar.gz release/SHA256SUMS \
+              --verify-tag --generate-notes --title "Zebra Store $TAG" --repo "$GITHUB_REPOSITORY"
+          fi

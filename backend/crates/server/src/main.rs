@@ -2,6 +2,8 @@
 //! and background worker.
 
 mod cli;
+#[cfg(feature = "embedded-web")]
+mod embedded_web;
 mod serving;
 mod settings;
 
@@ -21,12 +23,18 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
+    if matches!(&cli.command, Some(Command::Init)) {
+        settings::init(&cli.config)?;
+        return Ok(());
+    }
+    settings::init_if_missing(&cli.config)?;
     let cfg = settings::load(&cli.config)?;
     init_tracing(&cfg);
     match cli.command.unwrap_or(Command::Serve) {
         Command::Serve => serve(cfg).await,
         Command::Admin(cmd) => cli::run_admin(cfg, cmd).await,
         Command::Backup { output } => cli::run_backup(cfg, output).await,
+        Command::Init => Ok(()),
     }
 }
 
@@ -92,6 +100,8 @@ async fn serve(cfg: Config) -> anyhow::Result<()> {
             http::StatusCode::REQUEST_TIMEOUT,
             REQUEST_TIMEOUT,
         ));
+    #[cfg(feature = "embedded-web")]
+    let router = router.fallback(embedded_web::serve);
 
     let addr: SocketAddr = format!("{}:{}", cfg.server.host, cfg.server.port)
         .parse()
