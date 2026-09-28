@@ -124,3 +124,22 @@ git push origin v0.1.0
 ```
 
 GitHub Actions 会构建两套前端，把静态文件嵌入 Rust 二进制，交叉编译四个 Linux 目标，并把压缩包与校验文件添加到对应 Release。
+
+## Docker 中运行 Release 单文件
+
+仓库的 `deploy/release/` 提供了另一种安装方式：Docker 构建阶段直接从 GitHub Release 下载并校验
+musl 单文件，运行镜像不编译源码，也不包含 Node.js 或 Rust。
+
+```bash
+git clone https://github.com/noxue/zebra-store.git
+cd zebra-store/deploy/release
+cp ../../backend/config.example.yml config.yml
+# 编辑 config.yml，设置三个 secret 和初始管理员密码
+docker compose build --no-cache
+docker compose up -d
+curl http://127.0.0.1:18180/health
+```
+
+ARM64 服务器执行 `TARGET=aarch64 docker compose build --no-cache`。需要固定版本时使用
+`RELEASE=v0.1.0 docker compose build --no-cache`。Caddy 或 Nginx 把整个域名反向代理到
+`127.0.0.1:18180` 即可。

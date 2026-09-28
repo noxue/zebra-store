@@ -1,0 +1,30 @@
+name: zebra-store
+
+services:
+  store:
+    build:
+      context: .
+      args:
+        REPOSITORY: ${REPOSITORY:-noxue/zebra-store}
+        RELEASE: ${RELEASE:-latest}
+        TARGET: ${TARGET:-x86_64}
+    image: zebra-store/release:${RELEASE:-latest}
+    container_name: zebra-store-app
+    restart: unless-stopped
+    environment:
+      TZ: UTC
+    volumes:
+      - ./config.yml:/app/config.yml:ro
+      - store_data:/app/data
+      - store_uploads:/app/uploads
+    ports:
+      - "127.0.0.1:${HTTP_PORT:-18180}:8081"
+    mem_limit: 512m
+    cpus: 1.5
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+volumes:
+  store_data:
+  store_uploads:
