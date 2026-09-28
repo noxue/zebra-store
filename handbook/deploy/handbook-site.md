@@ -20,7 +20,41 @@ npm run docs:preview      # 预览构建结果
 
 构建时会检查所有站内链接，有坏链接会直接报错。
 
-## 上线
+## 推荐：原子发布
+
+VitePress 的 JS 和 CSS 文件名包含构建哈希。不要使用 `rsync --delete` 直接覆盖 Web 服务器正在读取的目录：旧文件被删除后，浏览器中缓存的旧 HTML 会请求已经不存在的哈希文件，页面可能短暂白屏。
+
+仓库提供了原子发布脚本：
+
+```bash
+DOCS_URL=https://docs.example.com \
+  ./scripts/deploy-handbook.sh root@你的服务器
+```
+
+脚本会自动完成构建，并执行以下步骤：
+
+1. 将完整站点上传到新的版本目录；
+2. 保留旧版本的哈希资源，兼容浏览器缓存；
+3. 校验 `index.html`、`404.html` 和资源目录；
+4. 原子切换 `/opt/zebra-store/docs-current` 软链接；
+5. 保留最近三个完整版本，以便快速回滚；
+6. 检查线上首页和部署页面。
+
+Web 服务器始终读取软链接，不会看到上传到一半的目录。Caddy 示例：
+
+```text
+docs.example.com {
+	root * /opt/zebra-store/docs-current
+	encode zstd gzip
+	try_files {path} {path}.html {path}/ /404.html
+	file_server
+	header /assets/* Cache-Control "public, max-age=31536000, immutable"
+}
+```
+
+服务器上的目标根目录可以通过 `DOCS_DEPLOY_ROOT` 修改。需要定期检查源站时，可以安装仓库中 `deploy/systemd/zebra-docs-healthcheck.*` 的 service 和 timer；它会验证首页及入口 JS，失败时重启 Caddy。
+
+## 手动上线
 
 `.vitepress/dist` 是纯静态文件，放到任何 Web 服务器即可。Caddy 示例：
 

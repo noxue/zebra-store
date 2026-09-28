@@ -1,0 +1,8 @@
+[Unit]
+Description=Check Zebra Store documentation origin
+After=network-online.target caddy.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/zebra-docs-healthcheck
