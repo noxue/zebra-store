@@ -1,0 +1,25 @@
+import { admin, browser, adminCtx, shot, watch, load, save, note, sleep } from './lib.mjs'
+const st = load()
+const z = await admin('zs2')
+const b = await browser(); const errs = []
+const ctx = await adminCtx(b, 'zs2', z.token); const p = await ctx.newPage(); watch(p, errs)
+const net = []
+p.on('response', async (r) => { if (r.url().includes('/api/v1/admin/site-connections') && r.request().method() !== 'GET') { try { net.push(`${r.request().method()} ${new URL(r.url()).pathname} ${r.status()} ${(await r.text()).slice(0, 1500)}`) } catch {} } })
+await p.goto('https://zs2.dot2.com/admin/site-connections'); await sleep(2500)
+await p.getByRole('button', { name: /新建连接/ }).first().click(); await sleep(1000)
+await p.locator('input[name=connection_code]').fill(st.qaCode.code)
+await p.getByRole('button', { name: /^解析$/ }).click(); await sleep(4000)
+await shot(p, 'integration', 'I061-02-parsed-prefilled', false)
+const vals = await p.locator('[role=dialog] input:visible, [role=dialog] select:visible').evaluateAll((els) => els.map((e) => `${e.getAttribute('placeholder') || e.tagName}=${e.type === 'password' ? '***' : e.value}`))
+console.log(vals)
+console.log('dialog text', (await p.locator('[role=dialog]').last().innerText()).slice(0, 2500))
+// set name / markup
+const name = p.locator('[role=dialog] input[placeholder="连接名称"]')
+if (!(await name.inputValue())) await name.fill('QA 主站 (zebra-store)')
+else await name.fill('QA 主站 (zebra-store)')
+await p.locator('[role=dialog] input[placeholder="0"]').fill('10')
+await shot(p, 'integration', 'I061-03-before-create', true)
+await p.getByRole('button', { name: /^创建$/ }).click(); await sleep(4000)
+await shot(p, 'integration', 'I061-04-created')
+console.log('ERRS', errs); console.log(net.join('\n'))
+await b.close()

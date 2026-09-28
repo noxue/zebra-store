@@ -1,0 +1,8 @@
+.env
+build/src
+build/state
+build/runtime
+build/*.log
+build/*.tar*
+provision
+docs

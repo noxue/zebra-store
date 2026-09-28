@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="斑马小铺">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff5fa2"/>
+      <stop offset="0.55" stop-color="#8b5cf6"/>
+      <stop offset="1" stop-color="#38bdf8"/>
+    </linearGradient>
+    <clipPath id="c"><rect x="4" y="4" width="56" height="56" rx="16"/></clipPath>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="16" fill="url(#g)"/>
+  <g clip-path="url(#c)" fill="#ffffff" opacity="0.22">
+    <path d="M-4 22 L30 0 L36 0 L-4 28 Z"/>
+    <path d="M-4 40 L50 0 L56 0 L-4 46 Z"/>
+    <path d="M10 68 L70 26 L70 32 L16 68 Z"/>
+  </g>
+  <path d="M20 20 H44 L22 44 H44" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M50 12 l1.6 3.4 3.4 1.6 -3.4 1.6 -1.6 3.4 -1.6 -3.4 -3.4 -1.6 3.4 -1.6 z" fill="#fbbf24"/>
+</svg>

@@ -1,0 +1,22 @@
+import { admin, browser, adminCtx, shot, watch, load, save, note, sleep } from './lib.mjs'
+const st = load(); const a = await admin('store')
+const b = await browser(); const errs = []
+const ctx = await adminCtx(b, 'store', a.token); const p = await ctx.newPage(); watch(p, errs)
+const net = []
+p.on('response', async (r) => { if (r.url().includes('/api/v1/admin/site-connections') && r.request().method() !== 'GET') net.push(`${r.request().method()} ${new URL(r.url()).pathname} ${r.status()} ${(await r.text().catch(() => '')).slice(0, 700)}`) })
+await p.goto('https://store.dot2.com/admin/site-connections'); await sleep(2000)
+await p.getByRole('button', { name: /新建连接/ }).first().click(); await sleep(800)
+const dlg = p.locator('[role=dialog]').last()
+await dlg.getByText('dujiao-next', { exact: true }).click(); await sleep(500)
+await dlg.locator('input[name="config.base_url"]').fill('https://dujiao.dot2.com')
+await dlg.locator('input[name="config.api_key"]').fill(st.djCred.key)
+await dlg.locator('input[name="config.api_secret"]').fill(st.djCred.secret)
+await dlg.getByRole('button', { name: /测试连接/ }).click(); await sleep(4000)
+await shot(p, 'integration', 'I041-01-dj-test', false)
+const apply = dlg.getByRole('button', { name: /^应用$/ }); if (await apply.count()) await apply.first().click()
+await dlg.locator('input[placeholder="连接名称"]').fill('QA 独角 (dujiao-next)')
+await dlg.locator('input[placeholder="0"]').fill('20')
+await dlg.getByRole('button', { name: /^创建$/ }).click(); await sleep(3000)
+await p.locator('tr', { hasText: 'QA 独角' }).getByRole('button', { name: 'Ping' }).click(); await sleep(3000)
+await shot(p, 'integration', 'I041-02-dj-created-pinged')
+console.log(net.join('\n')); console.log('ERRS', errs); await b.close()

@@ -1,0 +1,442 @@
+{
+ "A": {
+  "order": {
+   "order_no": "DJ20260926020847959019",
+   "status": "pending_payment",
+   "currency": "CNY",
+   "original_amount": "10.00",
+   "discount_amount": "0.00",
+   "member_discount_amount": "0.50",
+   "promotion_discount_amount": "0.00",
+   "wholesale_discount_amount": "0.00",
+   "total_amount": "9.50",
+   "wallet_paid_amount": "0.00",
+   "online_paid_amount": "9.50",
+   "refunded_amount": "0.00",
+   "expires_at": "2026-09-25T18:23:47.138427525Z",
+   "paid_at": null,
+   "canceled_at": null,
+   "created_at": "2026-09-25T18:08:47.138427525Z",
+   "items": [
+    {
+     "title": {
+      "zh-CN": "联调测试卡 10 元",
+      "zh-TW": "联调测试卡 10 元",
+      "en-US": "Lab E2E Card"
+     },
+     "sku_snapshot": {
+      "sku_id": 12,
+      "sku_code": "DEFAULT",
+      "spec_values": {},
+      "image": ""
+     },
+     "tags": [
+      "测试",
+      "自动发货"
+     ],
+     "quantity": 1,
+     "original_unit_price": "10.00",
+     "unit_price": "9.50",
+     "original_total_price": "10.00",
+     "total_price": "9.50",
+     "coupon_discount_amount": "0.00",
+     "member_discount_amount": "0.50",
+     "promotion_discount_amount": "0.00",
+     "wholesale_discount_amount": "0.00",
+     "fulfillment_type": "auto",
+     "manual_form_schema_snapshot": {},
+     "manual_form_submission": {}
+    }
+   ],
+   "children": [
+    {
+     "order_no": "DJ20260926020847959019-01",
+     "status": "pending_payment",
+     "currency": "CNY",
+     "original_amount": "9.50",
+     "discount_amount": "0.00",
+     "member_discount_amount": "0.50",
+     "promotion_discount_amount": "0.00",
+     "wholesale_discount_amount": "0.00",
+     "total_amount": "9.50",
+     "wallet_paid_amount": "0.00",
+     "online_paid_amount": "9.50",
+     "refunded_amount": "0.00",
+     "expires_at": "2026-09-25T18:23:47.138427525Z",
+     "paid_at": null,
+     "canceled_at": null,
+     "created_at": "2026-09-25T18:08:47.138427525Z",
+     "items": [
+      {
+       "title": {
+        "zh-CN": "联调测试卡 10 元",
+        "zh-TW": "联调测试卡 10 元",
+        "en-US": "Lab E2E Card"
+       },
+       "sku_snapshot": {
+        "sku_id": 12,
+        "sku_code": "DEFAULT",
+        "spec_values": {},
+        "image": ""
+       },
+       "tags": [
+        "测试",
+        "自动发货"
+       ],
+       "quantity": 1,
+       "original_unit_price": "10.00",
+       "unit_price": "9.50",
+       "original_total_price": "10.00",
+       "total_price": "9.50",
+       "coupon_discount_amount": "0.00",
+       "member_discount_amount": "0.50",
+       "promotion_discount_amount": "0.00",
+       "wholesale_discount_amount": "0.00",
+       "fulfillment_type": "auto",
+       "manual_form_schema_snapshot": {},
+       "manual_form_submission": {}
+      }
+     ]
+    }
+   ]
+  },
+  "order_no": "DJ20260926020847959019",
+  "order_paid": true,
+  "wallet_paid_amount": "9.50",
+  "online_pay_amount": "0.00"
+ },
+ "B": {
+  "order": {
+   "order_no": "DJ20260926020847010244",
+   "status": "pending_payment",
+   "currency": "CNY",
+   "original_amount": "169.00",
+   "discount_amount": "0.00",
+   "member_discount_amount": "8.45",
+   "promotion_discount_amount": "0.00",
+   "wholesale_discount_amount": "0.00",
+   "total_amount": "160.55",
+   "wallet_paid_amount": "0.00",
+   "online_paid_amount": "160.55",
+   "refunded_amount": "0.00",
+   "expires_at": "2026-09-25T18:23:47.563537174Z",
+   "paid_at": null,
+   "canceled_at": null,
+   "created_at": "2026-09-25T18:08:47.563537174Z",
+   "items": [
+    {
+     "title": {
+      "zh-CN": "ChatGPT Team 席位",
+      "zh-TW": "ChatGPT Team 席位",
+      "en-US": "ChatGPT Team Seat"
+     },
+     "sku_snapshot": {
+      "sku_id": 3,
+      "sku_code": "seat-month",
+      "spec_values": {
+       "zh-CN": "单席位 / 月",
+       "zh-TW": "单席位 / 月",
+       "en-US": "1 Seat / Month"
+      },
+      "image": "/uploads/product/2026/09/03dfcb74-9581-4dad-a7fb-3fc669480889.png"
+     },
+     "tags": [
+      "AI",
+      "人工发货"
+     ],
+     "quantity": 1,
+     "original_unit_price": "169.00",
+     "unit_price": "160.55",
+     "original_total_price": "169.00",
+     "total_price": "160.55",
+     "coupon_discount_amount": "0.00",
+     "member_discount_amount": "8.45",
+     "promotion_discount_amount": "0.00",
+     "wholesale_discount_amount": "0.00",
+     "fulfillment_type": "manual",
+     "manual_form_schema_snapshot": {
+      "fields": []
+     },
+     "manual_form_submission": {}
+    }
+   ],
+   "children": [
+    {
+     "order_no": "DJ20260926020847010244-01",
+     "status": "pending_payment",
+     "currency": "CNY",
+     "original_amount": "160.55",
+     "discount_amount": "0.00",
+     "member_discount_amount": "8.45",
+     "promotion_discount_amount": "0.00",
+     "wholesale_discount_amount": "0.00",
+     "total_amount": "160.55",
+     "wallet_paid_amount": "0.00",
+     "online_paid_amount": "160.55",
+     "refunded_amount": "0.00",
+     "expires_at": "2026-09-25T18:23:47.563537174Z",
+     "paid_at": null,
+     "canceled_at": null,
+     "created_at": "2026-09-25T18:08:47.563537174Z",
+     "items": [
+      {
+       "title": {
+        "zh-CN": "ChatGPT Team 席位",
+        "zh-TW": "ChatGPT Team 席位",
+        "en-US": "ChatGPT Team Seat"
+       },
+       "sku_snapshot": {
+        "sku_id": 3,
+        "sku_code": "seat-month",
+        "spec_values": {
+         "zh-CN": "单席位 / 月",
+         "zh-TW": "单席位 / 月",
+         "en-US": "1 Seat / Month"
+        },
+        "image": "/uploads/product/2026/09/03dfcb74-9581-4dad-a7fb-3fc669480889.png"
+       },
+       "tags": [
+        "AI",
+        "人工发货"
+       ],
+       "quantity": 1,
+       "original_unit_price": "169.00",
+       "unit_price": "160.55",
+       "original_total_price": "169.00",
+       "total_price": "160.55",
+       "coupon_discount_amount": "0.00",
+       "member_discount_amount": "8.45",
+       "promotion_discount_amount": "0.00",
+       "wholesale_discount_amount": "0.00",
+       "fulfillment_type": "manual",
+       "manual_form_schema_snapshot": {
+        "fields": []
+       },
+       "manual_form_submission": {}
+      }
+     ]
+    }
+   ]
+  },
+  "order_no": "DJ20260926020847010244",
+  "payment_error": "支付请求不合法"
+ },
+ "C": {
+  "order_no": "DJ20260926020847616641",
+  "status": "pending_payment",
+  "currency": "CNY",
+  "original_amount": "10.00",
+  "discount_amount": "0.00",
+  "member_discount_amount": "0.50",
+  "promotion_discount_amount": "0.00",
+  "wholesale_discount_amount": "0.00",
+  "total_amount": "9.50",
+  "wallet_paid_amount": "0.00",
+  "online_paid_amount": "9.50",
+  "refunded_amount": "0.00",
+  "expires_at": "2026-09-25T18:23:47.988191463Z",
+  "paid_at": null,
+  "canceled_at": null,
+  "created_at": "2026-09-25T18:08:47.988191463Z",
+  "items": [
+   {
+    "title": {
+     "zh-CN": "联调测试卡 10 元",
+     "zh-TW": "联调测试卡 10 元",
+     "en-US": "Lab E2E Card"
+    },
+    "sku_snapshot": {
+     "sku_id": 12,
+     "sku_code": "DEFAULT",
+     "spec_values": {},
+     "image": ""
+    },
+    "tags": [
+     "测试",
+     "自动发货"
+    ],
+    "quantity": 1,
+    "original_unit_price": "10.00",
+    "unit_price": "9.50",
+    "original_total_price": "10.00",
+    "total_price": "9.50",
+    "coupon_discount_amount": "0.00",
+    "member_discount_amount": "0.50",
+    "promotion_discount_amount": "0.00",
+    "wholesale_discount_amount": "0.00",
+    "fulfillment_type": "auto",
+    "manual_form_schema_snapshot": {},
+    "manual_form_submission": {}
+   }
+  ],
+  "children": [
+   {
+    "order_no": "DJ20260926020847616641-01",
+    "status": "pending_payment",
+    "currency": "CNY",
+    "original_amount": "9.50",
+    "discount_amount": "0.00",
+    "member_discount_amount": "0.50",
+    "promotion_discount_amount": "0.00",
+    "wholesale_discount_amount": "0.00",
+    "total_amount": "9.50",
+    "wallet_paid_amount": "0.00",
+    "online_paid_amount": "9.50",
+    "refunded_amount": "0.00",
+    "expires_at": "2026-09-25T18:23:47.988191463Z",
+    "paid_at": null,
+    "canceled_at": null,
+    "created_at": "2026-09-25T18:08:47.988191463Z",
+    "items": [
+     {
+      "title": {
+       "zh-CN": "联调测试卡 10 元",
+       "zh-TW": "联调测试卡 10 元",
+       "en-US": "Lab E2E Card"
+      },
+      "sku_snapshot": {
+       "sku_id": 12,
+       "sku_code": "DEFAULT",
+       "spec_values": {},
+       "image": ""
+      },
+      "tags": [
+       "测试",
+       "自动发货"
+      ],
+      "quantity": 1,
+      "original_unit_price": "10.00",
+      "unit_price": "9.50",
+      "original_total_price": "10.00",
+      "total_price": "9.50",
+      "coupon_discount_amount": "0.00",
+      "member_discount_amount": "0.50",
+      "promotion_discount_amount": "0.00",
+      "wholesale_discount_amount": "0.00",
+      "fulfillment_type": "auto",
+      "manual_form_schema_snapshot": {},
+      "manual_form_submission": {}
+     }
+    ]
+   }
+  ]
+ },
+ "D": {
+  "order": {
+   "order_no": "DJ20260926022050288592",
+   "status": "pending_payment",
+   "currency": "CNY",
+   "original_amount": "169.00",
+   "discount_amount": "0.00",
+   "member_discount_amount": "8.45",
+   "promotion_discount_amount": "0.00",
+   "wholesale_discount_amount": "0.00",
+   "total_amount": "160.55",
+   "wallet_paid_amount": "0.00",
+   "online_paid_amount": "160.55",
+   "refunded_amount": "0.00",
+   "expires_at": "2026-09-25T18:35:50.284398135Z",
+   "paid_at": null,
+   "canceled_at": null,
+   "created_at": "2026-09-25T18:20:50.284398135Z",
+   "items": [
+    {
+     "title": {
+      "zh-CN": "ChatGPT Team 席位",
+      "zh-TW": "ChatGPT Team 席位",
+      "en-US": "ChatGPT Team Seat"
+     },
+     "sku_snapshot": {
+      "sku_id": 3,
+      "sku_code": "seat-month",
+      "spec_values": {
+       "zh-CN": "单席位 / 月",
+       "zh-TW": "单席位 / 月",
+       "en-US": "1 Seat / Month"
+      },
+      "image": "/uploads/product/2026/09/03dfcb74-9581-4dad-a7fb-3fc669480889.png"
+     },
+     "tags": [
+      "AI",
+      "人工发货"
+     ],
+     "quantity": 1,
+     "original_unit_price": "169.00",
+     "unit_price": "160.55",
+     "original_total_price": "169.00",
+     "total_price": "160.55",
+     "coupon_discount_amount": "0.00",
+     "member_discount_amount": "8.45",
+     "promotion_discount_amount": "0.00",
+     "wholesale_discount_amount": "0.00",
+     "fulfillment_type": "manual",
+     "manual_form_schema_snapshot": {
+      "fields": []
+     },
+     "manual_form_submission": {}
+    }
+   ],
+   "children": [
+    {
+     "order_no": "DJ20260926022050288592-01",
+     "status": "pending_payment",
+     "currency": "CNY",
+     "original_amount": "160.55",
+     "discount_amount": "0.00",
+     "member_discount_amount": "8.45",
+     "promotion_discount_amount": "0.00",
+     "wholesale_discount_amount": "0.00",
+     "total_amount": "160.55",
+     "wallet_paid_amount": "0.00",
+     "online_paid_amount": "160.55",
+     "refunded_amount": "0.00",
+     "expires_at": "2026-09-25T18:35:50.284398135Z",
+     "paid_at": null,
+     "canceled_at": null,
+     "created_at": "2026-09-25T18:20:50.284398135Z",
+     "items": [
+      {
+       "title": {
+        "zh-CN": "ChatGPT Team 席位",
+        "zh-TW": "ChatGPT Team 席位",
+        "en-US": "ChatGPT Team Seat"
+       },
+       "sku_snapshot": {
+        "sku_id": 3,
+        "sku_code": "seat-month",
+        "spec_values": {
+         "zh-CN": "单席位 / 月",
+         "zh-TW": "单席位 / 月",
+         "en-US": "1 Seat / Month"
+        },
+        "image": "/uploads/product/2026/09/03dfcb74-9581-4dad-a7fb-3fc669480889.png"
+       },
+       "tags": [
+        "AI",
+        "人工发货"
+       ],
+       "quantity": 1,
+       "original_unit_price": "169.00",
+       "unit_price": "160.55",
+       "original_total_price": "169.00",
+       "total_price": "160.55",
+       "coupon_discount_amount": "0.00",
+       "member_discount_amount": "8.45",
+       "promotion_discount_amount": "0.00",
+       "wholesale_discount_amount": "0.00",
+       "fulfillment_type": "manual",
+       "manual_form_schema_snapshot": {
+        "fields": []
+       },
+       "manual_form_submission": {}
+      }
+     ]
+    }
+   ]
+  },
+  "order_no": "DJ20260926022050288592",
+  "order_paid": true,
+  "wallet_paid_amount": "160.55",
+  "online_pay_amount": "0.00"
+ }
+}

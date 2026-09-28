@@ -1,0 +1,58 @@
+[
+  {
+    "id": "DEV-01",
+    "label": "compatible",
+    "check": ".*",
+    "path": "(seo_meta|content|description|instructions|images|tags|provider_payload|delivery_data)$",
+    "kind": "nullability",
+    "reason": "DEV-01: JSON map/list columns that were never set (product texts/images/tags, order item tags, payment provider_payload, auto-fulfillment delivery_data): the original emits null (nil Go map/slice), ours an empty {} / []. The original emits {} / [] for the same fields once they are saved empty, so clients already handle both (ours included)."
+  },
+  {
+    "id": "DEV-02",
+    "label": "intentional",
+    "check": "^GET /public/config$",
+    "path": "^data\\.theme$",
+    "kind": "extra",
+    "reason": "DEV-02: site_config.theme (colours, background, mascot, effects) is a documented superset of the original config (docs/PLAN.md, docs/DESIGN.md)."
+  },
+  {
+    "id": "DEV-03",
+    "label": "go-bug",
+    "check": "payments/latest",
+    "path": "^data\\.channel_name$",
+    "kind": "extra",
+    "reason": "DEV-03: the original's LatestPaymentResp declares channel_name (omitempty) and its store JOINs payment_channels.name, but Payment.ChannelName is gorm:\"-\" so GORM drops the column and the field is always omitted. Ours fills the declared field."
+  },
+  {
+    "id": "DEV-04",
+    "label": "go-bug",
+    "check": "^GET /admin/products/abc$",
+    "path": "^(status_code|msg)$",
+    "kind": "value",
+    "reason": "DEV-04: the original passes the raw :id into GORM, so a non-numeric id becomes SQL (\"no such column: abc\") and a 500 error.product_fetch_failed. Ours rejects it as 400 error.bad_request."
+  },
+  {
+    "id": "DEV-05",
+    "label": "go-bug",
+    "check": "^GET /admin/reconciliation/jobs/999999$",
+    "path": "^(status_code|msg)$",
+    "kind": "value",
+    "reason": "DEV-05: the original maps record-not-found to 500 with an untranslated key (\"error.reconciliation_fetch_failed\"). Ours returns 404 error.reconciliation_job_not_found."
+  },
+  {
+    "id": "DEV-06",
+    "label": "go-bug",
+    "check": "^(create-and-pay|create order) insufficient card secrets$",
+    "path": "^(status_code|msg)$",
+    "kind": "value",
+    "reason": "DEV-06: the original's order handlers map cardsecretapp.ErrInsufficient to 400 error.card_secret_insufficient, but the order service returns its own sentinel, order/application ErrCardSecretInsufficient, so errors.Is misses it and POST /orders and create-and-pay fall back to 500 error.order_create_failed. Ours returns the intended 400, which the channel API also returns for the same case."
+  },
+  {
+    "id": "DEV-07",
+    "label": "security",
+    "check": "^GET /admin/orders/",
+    "path": "^data\\.payments\\[\\]\\.provider_payload\\.",
+    "kind": "missing",
+    "reason": "DEV-07: upstream commit 4e4d5bbc (payment security hardening) redacts provider_payload, pay_url and qr_code in the admin payment list and detail (redactAdminPayment) but missed the payments embedded in admin order detail. Ours applies the same redaction there."
+  }
+]

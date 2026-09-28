@@ -1,0 +1,17 @@
+import { admin, browser, adminCtx, shot, watch, note, sleep } from './lib.mjs'
+const s = await admin('store'); const b = await browser(); const errs = []
+const ctx = await adminCtx(b, 'store', s.token); const p = await ctx.newPage(); watch(p, errs)
+const net = []; p.on('response', async (r) => { if (r.url().includes('/resellers/') && r.request().method() !== 'GET') net.push(`${r.request().method()} ${new URL(r.url()).pathname} ${r.status()} ${(await r.text().catch(() => '')).slice(0, 250)}`) })
+await p.goto('https://store.dot2.com/admin/resellers/profiles/4'); await sleep(3500)
+await shot(p, 'reseller', 'R004-01-profile-detail')
+console.log((await p.locator('main').innerText()).slice(0, 1200))
+await p.getByRole('tab', { name: '域名' }).click().catch(() => p.getByText('域名', { exact: true }).first().click()); await sleep(1500)
+console.log((await p.locator('main').innerText()).slice(-600)); console.log('btns', await p.locator('main button:visible').allInnerTexts())
+const inp = p.locator('input[placeholder*="子域名"], input[placeholder*="subdomain"]').first()
+console.log('sub input', await inp.count())
+const box = p.locator(`xpath=//*[contains(text(),'系统二级域名')]/ancestor::div[.//button[contains(.,'保存二级域名')]][1]`).first()
+await box.locator('input').first().fill('qaint')
+await shot(p, 'reseller', 'R004-02-subdomain-input', false)
+await box.getByRole('button', { name: /保存二级域名/ }).click(); await sleep(3000)
+await shot(p, 'reseller', 'R004-02-subdomain-set')
+note('R-004', net.join(' || ')); console.log('ERRS', errs); await b.close()

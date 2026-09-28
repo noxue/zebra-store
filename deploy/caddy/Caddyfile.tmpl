@@ -1,0 +1,61 @@
+# Rendered by lab.sh into build/runtime/Caddyfile. ${SITE_PREFIX} is "" in caddy mode
+# (automatic HTTPS, one HTTP-01 cert per host) and "http://" behind a proxy / in rehearsal.
+{
+	${CADDY_GLOBAL}
+	servers {
+		# the host proxy (behind-proxy mode) reaches us from the docker bridge gateway
+		trusted_proxies static private_ranges
+	}
+}
+
+(zebra_site) {
+	encode zstd gzip
+	# backend-owned paths (README "Build & deploy"): API, uploads, SEO files and the
+	# provider-compat protocols used by acg-faka / mcy-shop downstream shops
+	@backend path /api/* /uploads/* /sitemap.xml /robots.txt /shared/* /plugin/open-api/*
+	handle @backend {
+		reverse_proxy {args[0]}:8081
+	}
+	redir /admin /admin/ 308
+	handle_path /admin/* {
+		root * /srv/admin
+		try_files {path} /index.html
+		file_server
+	}
+	handle {
+		root * /srv/storefront
+		try_files {path} /index.html
+		file_server
+	}
+	header /assets/* Cache-Control "public, max-age=31536000, immutable"
+}
+
+# 1. main shop + the three reseller subsites (same backend, tenant chosen by Host)
+${SITE_PREFIX}store.${LAB_DOMAIN}, ${SITE_PREFIX}sakura.${LAB_DOMAIN}, ${SITE_PREFIX}neon.${LAB_DOMAIN}, ${SITE_PREFIX}matcha.${LAB_DOMAIN} {
+	import zebra_site store
+}
+
+# 4. downstream Zebra instance
+${SITE_PREFIX}zs2.${LAB_DOMAIN} {
+	import zebra_site zs2
+}
+
+# 2. 异次元发卡 (nginx inside the image trusts X-Forwarded-* from private ranges)
+${SITE_PREFIX}acg.${LAB_DOMAIN} {
+	reverse_proxy acg:80
+}
+
+# 3. compatibility test service (storefront, /admin, /api)
+${SITE_PREFIX}dujiao.${LAB_DOMAIN} {
+	reverse_proxy dujiao:8080
+}
+
+# handbook (VitePress static build, deploy/docs). In proxy mode the host Caddy serves it
+# directly from <dir>/docs (caddy/zebra.caddy.tmpl); this block covers caddy / rehearsal mode.
+${SITE_PREFIX}docs.${LAB_DOMAIN} {
+	root * /srv/docs
+	encode zstd gzip
+	try_files {path} {path}.html {path}/ /404.html
+	file_server
+	header /assets/* Cache-Control "public, max-age=31536000, immutable"
+}

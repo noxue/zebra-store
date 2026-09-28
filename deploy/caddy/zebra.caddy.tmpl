@@ -1,0 +1,17 @@
+# zebra-lab vhosts for an EXISTING host Caddy (behind-proxy mode). Site blocks only — no
+# global options, no hosts other than our own <name>.${LAB_DOMAIN}.
+# scripts/host-caddy.sh installs this as <dir>/caddy/zebra.caddy and appends ONE line
+#   import <dir>/caddy/zebra.caddy
+# to the host Caddyfile. Certificates: HTTP-01 per host (DNS A records -> this server).
+store.${LAB_DOMAIN}, sakura.${LAB_DOMAIN}, neon.${LAB_DOMAIN}, matcha.${LAB_DOMAIN}, zs2.${LAB_DOMAIN}, acg.${LAB_DOMAIN}, dujiao.${LAB_DOMAIN} {
+	reverse_proxy 127.0.0.1:${PROXY_PORT}
+}
+
+# handbook: static VitePress build, served straight from disk (no container)
+docs.${LAB_DOMAIN} {
+	root * ${LAB_DIR}/docs
+	encode zstd gzip
+	try_files {path} {path}.html {path}/ /404.html
+	file_server
+	header /assets/* Cache-Control "public, max-age=31536000, immutable"
+}

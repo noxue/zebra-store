@@ -1,0 +1,26 @@
+import { admin, browser, adminCtx, shot, watch, load, save, note, sleep } from './lib.mjs'
+const st = load(); const a = await admin('store')
+const b = await browser(); const errs = []
+const ctx = await adminCtx(b, 'store', a.token); const p = await ctx.newPage(); watch(p, errs)
+const net = []
+p.on('response', async (r) => { if (r.url().includes('/api/v1/admin/site-connections') && r.request().method() !== 'GET') net.push(`${r.request().method()} ${new URL(r.url()).pathname} ${r.status()} ${(await r.text().catch(() => '')).slice(0, 900)}`) })
+await p.goto('https://store.dot2.com/admin/site-connections'); await sleep(2000)
+await p.getByRole('button', { name: /新建连接/ }).first().click(); await sleep(800)
+const dlg = p.locator('[role=dialog]').last()
+await dlg.getByText('acg-faka', { exact: true }).click(); await sleep(800)
+console.log('inputs', await dlg.locator('input:visible').evaluateAll((els) => els.map((e) => `${e.getAttribute('name')}|${e.getAttribute('placeholder')}`)))
+console.log(await dlg.innerText().then((t) => t.slice(t.indexOf('连接凭证'), t.indexOf('连接凭证') + 600)))
+await dlg.locator('input[name="config.base_url"]').fill('https://acg.dot2.com')
+const inputs = dlg.locator('input[name^="config."]')
+const names = await inputs.evaluateAll((els) => els.map((e) => e.getAttribute('name')))
+console.log(names)
+for (const n of names) { if (n === 'config.base_url') continue; const v = /key|secret/i.test(n) && !/api_key$/.test(n) ? st.acgSup.app_key : st.acgSup.app_id; await dlg.locator(`input[name="${n}"]`).fill(v) }
+await shot(p, 'integration', 'I001-01-acg-form', false)
+await dlg.getByRole('button', { name: /测试连接/ }).click(); await sleep(4000)
+await shot(p, 'integration', 'I001-02-acg-test-result', false)
+await dlg.locator('input[placeholder="连接名称"]').fill('QA 异次元 (acg-faka)')
+await dlg.locator('input[placeholder="0"]').fill('20')
+await dlg.getByRole('button', { name: /^创建$/ }).click(); await sleep(4000)
+await shot(p, 'integration', 'I001-03-created')
+console.log(net.join('\n')); console.log('ERRS', errs)
+await b.close()

@@ -1,0 +1,37 @@
+import { dialog, field, fieldBox, fillLocalized, TS, toast } from './common.mjs'
+export default async ({ page, api, shot, log, admin }) => {
+  await page.goto(`${admin}/categories`)
+  await page.waitForLoadState('networkidle')
+  await page.getByRole('button', { name: 'Add category' }).click()
+  let dlg = dialog(page, 'Add category')
+  await fillLocalized(fieldBox(dlg, 'Name'), `qa-dup ${TS}`)
+  await field(dlg, 'Slug').fill(`qa-cat-${TS}`)
+  await dlg.getByRole('button', { name: 'Save', exact: true }).click()
+  await page.waitForTimeout(1200)
+  log('dup slug dialog tail:', (await dlg.innerText()).replace(/\s+/g, ' ').slice(-160), 'toast:', await toast(page))
+  await shot(page, 'c-cat-dup')
+  await dlg.getByRole('button', { name: 'Cancel' }).click()
+  await shot(page, 'c-cat-list')
+  const parentRow = page.locator('tr', { hasText: `qa-cat-${TS}` }).filter({ hasNotText: 'child' }).first()
+  await parentRow.getByRole('button', { name: 'Edit' }).click()
+  dlg = dialog(page, 'Edit category')
+  log('parent select disabled?', await field(dlg, 'Parent category', 'select').isDisabled(), 'hint:', (await dlg.innerText()).replace(/\s+/g, ' ').match(/Parent category.{0,160}/)?.[0])
+  // try to set parent via API anyway
+  const cats = (await api('GET', '/admin/categories')).data
+  const par = cats.find((c) => c.slug === `qa-cat-${TS}`), child = cats.find((c) => c.slug === `qa-cat-child-${TS}`)
+  const r = await api('PUT', `/admin/categories/${par.id}`, { name: par.name, slug: par.slug, parent_id: cats.find((c) => c.slug === 'qa-cat-0926')?.id ?? 1, sort_order: 0, icon: '' })
+  log('API move parent-with-children:', r.status_code, r.msg)
+  await dlg.getByRole('button', { name: 'Cancel' }).click()
+  const pub = await page.evaluate(async () => (await (await fetch('/api/v1/public/categories')).json()))
+  log('public has parent', JSON.stringify(pub.data).includes(`qa-cat-${TS}"`), 'child', JSON.stringify(pub.data).includes(`qa-cat-child-${TS}`), 'shape', JSON.stringify(pub.data.find?.((c) => c.slug === `qa-cat-${TS}`) ?? pub.data).slice(0, 300))
+  const childRow = page.locator('tr', { hasText: `qa-cat-child-${TS}` })
+  await childRow.locator('button[title]').first().click()
+  await page.waitForTimeout(1200)
+  log('toast', await toast(page))
+  const pub2 = await page.evaluate(async () => (await (await fetch('/api/v1/public/categories')).json()))
+  log('after deactivate: public has child', JSON.stringify(pub2.data).includes(`qa-cat-child-${TS}`), 'admin child active', (await api('GET', '/admin/categories')).data.find((c) => c.id === child.id).is_active)
+  await shot(page, 'c-cat-deactivated')
+  // delete parent with child -> expect refusal
+  const d = await api('DELETE', `/admin/categories/${par.id}`)
+  log('delete parent with child:', d.status_code, d.msg)
+}

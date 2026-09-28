@@ -1,0 +1,16 @@
+{
+  "name": "zebra-store-handbook",
+  "private": true,
+  "version": "0.1.0",
+  "description": "斑马小铺 Zebra Store 使用手册（VitePress）",
+  "type": "module",
+  "scripts": {
+    "docs:dev": "vitepress dev --port 5190",
+    "docs:build": "vitepress build",
+    "docs:preview": "vitepress preview --port 5190"
+  },
+  "devDependencies": {
+    "vitepress": "1.6.4",
+    "vue": "^3.5.0"
+  }
+}

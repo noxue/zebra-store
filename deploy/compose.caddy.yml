@@ -1,0 +1,8 @@
+# Mode "caddy": the edge owns :80/:443 and gets one Let's Encrypt cert per listed host
+# via HTTP-01. Services reach each other through the public hostnames (public IP).
+services:
+  edge:
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"

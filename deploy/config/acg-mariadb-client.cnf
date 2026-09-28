@@ -1,0 +1,9 @@
+# Mounted into the acg-faka container as /etc/mysql/mariadb.conf.d/99-zebra-lab-client.cnf.
+# The image's first-boot DB init (docker/entrypoint.sh) creates the `acg` user through the
+# MariaDB 11.8 client over the local socket. That client now uses TLS by default and verifies
+# the server's freshly auto-generated certificate, which intermittently fails with
+# "ERROR 2026: TLS/SSL error: certificate is not yet valid" (cert notBefore == boot second):
+# the user is never created and the install wizard then fails with "Access denied".
+# Local socket / loopback connections inside the container need no TLS.
+[client]
+skip-ssl

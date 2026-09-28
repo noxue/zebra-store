@@ -1,0 +1,20 @@
+/backend/target
+/backend/data
+/backend/data-*/
+/backend/uploads
+/backend/config.yml
+node_modules
+dist
+*.log
+.DS_Store
+/backend/target-*
+
+# zebra-lab deploy package: generated secrets, build outputs, provisioning state
+/deploy/.env
+/deploy/build/
+/deploy/docs/
+
+# local live-QA output and session artifacts
+/e2e/live/shots/
+/e2e/live/**/out/
+/e2e/live/**/.state/

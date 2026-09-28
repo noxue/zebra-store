@@ -1,0 +1,88 @@
+# Zebra Store configuration. Copy to config.yml and change the three secrets.
+# Every key can be overridden by environment variables: ZS__DATABASE__URL=... (double underscores).
+
+app:
+  secret_key: change-me-app-secret-at-least-16-chars   # AES-256 key source for sensitive columns
+  totp_issuer: Zebra-Store
+
+server:
+  host: 0.0.0.0
+  port: 8081
+  mode: debug
+
+log:
+  level: info            # trace/debug/info/warn/error, or a tracing EnvFilter string
+  json: false
+
+database:
+  # Only the URL decides the database — no code changes needed:
+  #   SQLite     sqlite://data/zebra.db?mode=rwc          (default)
+  #   MySQL      mysql://user:pass@127.0.0.1:3306/zebra
+  #   PostgreSQL postgres://user:pass@127.0.0.1:5432/zebra
+  url: sqlite://data/zebra.db?mode=rwc
+  max_connections: 10
+  min_connections: 1
+  sql_log: false
+
+jwt:
+  secret: change-me-admin-jwt-secret-16+
+  expire_hours: 24
+
+user_jwt:
+  secret: change-me-user-jwt-secret-16+
+  expire_hours: 24
+  remember_me_expire_hours: 168
+
+bootstrap:
+  default_admin_username: admin
+  default_admin_password: ""   # set before first start
+
+redis:
+  enabled: false               # optional; in-process cache/rate limit is used when disabled
+  url: redis://127.0.0.1:6379/0
+
+queue:
+  concurrency: 8
+  upstream_sync_interval: 5m
+
+upload:
+  dir: uploads
+  max_size: 10485760
+
+cors:
+  allowed_origins: ["*"]
+
+security:
+  login_rate_limit: { window_seconds: 300, max_attempts: 5, block_seconds: 900 }
+  password_policy: { min_length: 8, require_upper: true, require_lower: true, require_number: true, require_special: false }
+
+email:
+  enabled: false
+
+order:
+  payment_expire_minutes: 15
+  max_refund_days: 30
+
+reseller:
+  enabled: false
+  main_hosts: [localhost, 127.0.0.1, "::1"]
+  subdomain_base: ""
+  self_apply_enabled: true
+  settlement_confirm_days: 7
+
+web:
+  admin_path: /admin
+
+integration:
+  # WARNING: only for trusted LAN / testing setups. true lets supplier calls,
+  # callbacks and pushed events reach private, loopback and LAN addresses, which
+  # enables SSRF to private networks. Redirects are refused either way.
+  # Env: ZS__INTEGRATION__ALLOW_PRIVATE_ADDRESSES=true
+  allow_private_addresses: false
+  # Provider-compat protocols (other shop systems buying from this site, see
+  # docs/protocol/third-party/provider-compat.md). They stay inert until a user with
+  # an approved API credential issues a compat key in 个人中心 → API 对接.
+  # acg-faka (异次元发卡) 共享店铺: POST /shared/*  (env ZS__INTEGRATION__ACG_FAKA_COMPAT)
+  acg_faka_compat: true
+  # mcy-shop OpenApi plugin: POST /plugin/open-api/*  (env ZS__INTEGRATION__MCY_COMPAT)
+  mcy_compat: true

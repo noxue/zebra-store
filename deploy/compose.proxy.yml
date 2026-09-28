@@ -1,0 +1,7 @@
+# Mode "behind-proxy": an existing web server (host Caddy / nginx) terminates TLS for all
+# lab hostnames and forwards them, Host header unchanged, to one local port.
+# See caddy/host-snippet.Caddyfile and caddy/host-snippet.nginx.conf.
+services:
+  edge:
+    ports:
+      - "127.0.0.1:${PROXY_PORT:-18180}:80"

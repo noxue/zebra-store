@@ -1,0 +1,1129 @@
+[
+  {
+    "Role": "readonly_auditor",
+    "Inherits": null,
+    "Policies": [
+      {
+        "subject": "",
+        "object": "/admin/dashboard/overview",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/dashboard/trends",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/dashboard/rankings",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/dashboard/inventory-alerts",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/compliance/status",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/authz/me",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/2fa/status",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/ads/render/:slotCode",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/password",
+        "action": "PUT"
+      },
+      {
+        "subject": "",
+        "object": "/admin/ads/impression",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/2fa/setup",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/2fa/enable",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/2fa/disable",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/2fa/recovery-codes/regenerate",
+        "action": "POST"
+      }
+    ],
+    "Immutable": true
+  },
+  {
+    "Role": "operations",
+    "Inherits": [
+      "readonly_auditor"
+    ],
+    "Policies": [
+      {
+        "subject": "",
+        "object": "/admin/products",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/products/:id",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/products/:id/wholesale-prices",
+        "action": "PATCH"
+      },
+      {
+        "subject": "",
+        "object": "/admin/categories",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/categories/:id",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/categories/:id/active",
+        "action": "PATCH"
+      },
+      {
+        "subject": "",
+        "object": "/admin/posts",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/posts/:id",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/posts/:id/products",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/banners",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/banners/:id",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/coupons",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/coupons/:id",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/promotions",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/promotions/:id",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/card-secrets",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/card-secrets/:id",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/card-secrets/batch",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/card-secrets/import",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/card-secrets/batch-status",
+        "action": "PATCH"
+      },
+      {
+        "subject": "",
+        "object": "/admin/card-secrets/batch-delete",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/card-secrets/export",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/card-secrets/export-available",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/card-secrets/stats",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/card-secrets/batches",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/card-secrets/template",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/gift-cards",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/gift-cards/:id",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/gift-cards/generate",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/gift-cards/batch-status",
+        "action": "PATCH"
+      },
+      {
+        "subject": "",
+        "object": "/admin/gift-cards/export",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/upload",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/media/batch-delete",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/media/:id",
+        "action": "PUT"
+      },
+      {
+        "subject": "",
+        "object": "/admin/media/:id",
+        "action": "DELETE"
+      },
+      {
+        "subject": "",
+        "object": "/admin/media",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/affiliates/users",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/affiliates/users/:id/status",
+        "action": "PATCH"
+      },
+      {
+        "subject": "",
+        "object": "/admin/affiliates/users/batch-status",
+        "action": "PATCH"
+      },
+      {
+        "subject": "",
+        "object": "/admin/member-levels",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/member-levels/:id",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/member-levels/backfill",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/member-level-prices",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/member-level-prices/batch",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/member-level-prices/:id",
+        "action": "DELETE"
+      },
+      {
+        "subject": "",
+        "object": "/admin/post-categories",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/post-categories",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/post-categories/:id",
+        "action": "PUT"
+      },
+      {
+        "subject": "",
+        "object": "/admin/post-categories/:id",
+        "action": "DELETE"
+      },
+      {
+        "subject": "",
+        "object": "/admin/post-categories/:id/status",
+        "action": "PATCH"
+      }
+    ],
+    "Immutable": true
+  },
+  {
+    "Role": "support",
+    "Inherits": [
+      "readonly_auditor"
+    ],
+    "Policies": [
+      {
+        "subject": "",
+        "object": "/admin/orders",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/orders/:id",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/orders/:id/fulfillment/download",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/order-refunds",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/order-refunds/:id",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/fulfillments",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/users",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/users/:id",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/users/:id",
+        "action": "PUT"
+      },
+      {
+        "subject": "",
+        "object": "/admin/users/batch-status",
+        "action": "PUT"
+      },
+      {
+        "subject": "",
+        "object": "/admin/users/:id/coupon-usages",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/users/:id/wallet",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/users/:id/wallet/transactions",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/users/:id/member-level",
+        "action": "PUT"
+      },
+      {
+        "subject": "",
+        "object": "/admin/users/:id/oauth/telegram",
+        "action": "DELETE"
+      },
+      {
+        "subject": "",
+        "object": "/admin/users/:id/oauth/google",
+        "action": "DELETE"
+      },
+      {
+        "subject": "",
+        "object": "/admin/users/:id/2fa",
+        "action": "DELETE"
+      },
+      {
+        "subject": "",
+        "object": "/admin/user-login-logs",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/wallet/recharges",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/payments",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/payments/:id",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/gift-cards",
+        "action": "GET"
+      }
+    ],
+    "Immutable": true
+  },
+  {
+    "Role": "integration",
+    "Inherits": [
+      "readonly_auditor"
+    ],
+    "Policies": [
+      {
+        "subject": "",
+        "object": "/admin/site-connections",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/site-connections/:id",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/site-connections/:id/ping",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/site-connections/:id/status",
+        "action": "PUT"
+      },
+      {
+        "subject": "",
+        "object": "/admin/site-connections/:id/reapply-markup",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/site-connections/protocols",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/site-connections/parse-code",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/site-connections/handshake",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/product-mappings",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/product-mappings/:id",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/product-mappings/:id/sync",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/product-mappings/:id/status",
+        "action": "PUT"
+      },
+      {
+        "subject": "",
+        "object": "/admin/product-mappings/import",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/product-mappings/batch-import",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/product-mappings/batch-sync",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/product-mappings/batch-status",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/product-mappings/batch-delete",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/procurement-orders",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/procurement-orders/stats",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/procurement-orders/:id",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/procurement-orders/:id/upstream-payload/download",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/procurement-orders/:id/retry",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/procurement-orders/:id/cancel",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/reconciliation/run",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/reconciliation/jobs",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/reconciliation/jobs/:id",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/reconciliation/items/:id/resolve",
+        "action": "PUT"
+      },
+      {
+        "subject": "",
+        "object": "/admin/api-credentials",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/api-credentials/:id",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/api-credentials/:id/approve",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/api-credentials/:id/reject",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/api-credentials/:id/status",
+        "action": "PUT"
+      },
+      {
+        "subject": "",
+        "object": "/admin/upstream-products",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/upstream-categories",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/resellers/operations/overview",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/resellers/profiles",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/resellers/profiles/:id",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/resellers/profiles/:id",
+        "action": "PUT"
+      },
+      {
+        "subject": "",
+        "object": "/admin/resellers/profiles/:id/system-domain",
+        "action": "PUT"
+      },
+      {
+        "subject": "",
+        "object": "/admin/resellers/profiles/:id/approve",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/resellers/profiles/:id/reject",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/resellers/domains",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/resellers/domains/:id/approve",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/resellers/domains/:id/set-primary",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/resellers/site-configs",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/resellers/site-configs/:reseller_id",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/resellers/site-configs/:reseller_id",
+        "action": "PUT"
+      },
+      {
+        "subject": "",
+        "object": "/admin/resellers/site-configs/:reseller_id/reset",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/resellers/product-settings",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/resellers/product-settings/:reseller_id/:product_id",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/resellers/product-settings/:reseller_id/:product_id/preview",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/resellers/product-settings/:reseller_id/:product_id",
+        "action": "PUT"
+      },
+      {
+        "subject": "",
+        "object": "/admin/resellers/product-settings/:reseller_id/:product_id",
+        "action": "DELETE"
+      }
+    ],
+    "Immutable": true
+  },
+  {
+    "Role": "finance",
+    "Inherits": [
+      "readonly_auditor"
+    ],
+    "Policies": [
+      {
+        "subject": "",
+        "object": "/admin/payments",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/payments/:id",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/payments/export",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/payment-channels",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/payment-channels/:id",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/payment-channels/:id/wechatpay-public-key-test",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/orders",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/orders/:id",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/orders/:id",
+        "action": "PATCH"
+      },
+      {
+        "subject": "",
+        "object": "/admin/orders/:id/refund-to-wallet",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/orders/:id/manual-refund",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/order-refunds",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/order-refunds/:id",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/order-refunds/:id/payment-fee",
+        "action": "PATCH"
+      },
+      {
+        "subject": "",
+        "object": "/admin/affiliates/commissions",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/affiliates/withdraws",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/affiliates/withdraws/:id/reject",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/affiliates/withdraws/:id/pay",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/resellers/operations/finance",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/resellers/ledger-entries",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/resellers/balance-accounts",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/resellers/withdraws",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/resellers/withdraws/:id/reject",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/resellers/withdraws/:id/pay",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/gift-cards",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/gift-cards/export",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/wallet/recharges",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/users/:id/wallet",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/users/:id/wallet/transactions",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/users/:id/wallet/adjust",
+        "action": "POST"
+      }
+    ],
+    "Immutable": true
+  },
+  {
+    "Role": "system_admin",
+    "Inherits": [
+      "readonly_auditor"
+    ],
+    "Policies": [
+      {
+        "subject": "",
+        "object": "/admin/settings",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/settings/smtp",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/settings/smtp/test",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/settings/captcha",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/settings/telegram-auth",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/settings/google-auth",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/users/:id/oauth/google",
+        "action": "DELETE"
+      },
+      {
+        "subject": "",
+        "object": "/admin/settings/notification-center",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/settings/notification-center/logs",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/settings/notification-center/test",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/settings/notifications",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/settings/notifications/logs",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/settings/notifications/test",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/settings/order-email-template",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/settings/order-email-template/reset",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/settings/affiliate",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/settings/telegram-bot",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/settings/telegram-bot/runtime-status",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/authz/me",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/authz/roles",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/authz/roles/:role",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/authz/roles/:role/policies",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/authz/admins",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/authz/admins/:id",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/authz/admins/:id/roles",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/authz/admins/:id/2fa/reset",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/authz/policies",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/authz/permissions/catalog",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/authz/audit-logs",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/system/version/check",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/system/update/capability",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/system/update/status",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/system/update/start",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/system/update/rollback",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/system/restart",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/channel-clients",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/channel-clients/:id",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/channel-clients/:id/status",
+        "action": "PUT"
+      },
+      {
+        "subject": "",
+        "object": "/admin/channel-clients/:id/reset-secret",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/telegram-bot/broadcasts",
+        "action": "*"
+      },
+      {
+        "subject": "",
+        "object": "/admin/telegram-bot/broadcasts/:id",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/telegram-bot/users",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/compliance/acknowledge",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/resellers/profiles/:id/disable",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/resellers/profiles/:id/restore",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/resellers/domains/:id/disable",
+        "action": "POST"
+      }
+    ],
+    "Immutable": true
+  }
+]

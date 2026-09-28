@@ -1,0 +1,172 @@
+/*
+ * 斑马小铺手册主题：沿用 docs/DESIGN.md 的设计 token（樱花粉 · 梦幻紫 · 天空蓝）。
+ * 只覆盖 VitePress 的 --vp-* 变量，不写零散颜色。
+ */
+:root {
+  --zs-primary: #ff5fa2;
+  --zs-primary-soft: #ffe3f0;
+  --zs-secondary: #8b5cf6;
+  --zs-accent: #38bdf8;
+  --zs-gold: #fbbf24;
+  --zs-bg: #fff6fb;
+  --zs-surface: rgba(255, 255, 255, 0.72);
+  --zs-border: rgba(255, 95, 162, 0.18);
+  --zs-text: #2d2445;
+  --zs-text-muted: #7a6f93;
+  --zs-gradient: linear-gradient(135deg, #ff5fa2, #8b5cf6 55%, #38bdf8);
+  --zs-shadow: 0 8px 30px -12px rgba(139, 92, 246, 0.35);
+  --zs-radius: 16px;
+  --zs-font-display: 'ZCOOL KuaiLe', 'M PLUS Rounded 1c', system-ui, sans-serif;
+  --zs-font-body: 'M PLUS Rounded 1c', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+
+  --vp-font-family-base: var(--zs-font-body);
+  --vp-c-brand-1: #e0448a;
+  --vp-c-brand-2: var(--zs-primary);
+  --vp-c-brand-3: var(--zs-primary);
+  --vp-c-brand-soft: rgba(255, 95, 162, 0.14);
+  --vp-c-tip-1: var(--vp-c-brand-1);
+  --vp-c-bg: #ffffff;
+  --vp-c-bg-alt: var(--zs-bg);
+  --vp-c-bg-soft: #fff0f7;
+  --vp-c-divider: var(--zs-border);
+  --vp-c-text-1: var(--zs-text);
+  --vp-c-text-2: var(--zs-text-muted);
+
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: var(--zs-gradient);
+  --vp-home-hero-image-background-image: linear-gradient(135deg, rgba(255, 95, 162, 0.45), rgba(139, 92, 246, 0.45) 55%, rgba(56, 189, 248, 0.45));
+  --vp-home-hero-image-filter: blur(56px);
+
+  --vp-button-brand-bg: var(--zs-primary);
+  --vp-button-brand-hover-bg: #e0448a;
+  --vp-button-brand-active-bg: #c9377a;
+  --vp-button-brand-border: transparent;
+}
+
+.dark {
+  --zs-primary: #ff7ab6;
+  --zs-primary-soft: rgba(255, 122, 182, 0.16);
+  --zs-secondary: #a78bfa;
+  --zs-accent: #5ccfff;
+  --zs-bg: #0e0b1f;
+  --zs-surface: rgba(30, 24, 60, 0.62);
+  --zs-border: rgba(167, 139, 250, 0.22);
+  --zs-text: #efe9ff;
+  --zs-text-muted: #a9a0c8;
+  --zs-gradient: linear-gradient(135deg, #ff7ab6, #a78bfa 55%, #5ccfff);
+
+  --vp-c-brand-1: #ff8fc2;
+  --vp-c-brand-2: var(--zs-primary);
+  --vp-c-brand-3: #e0448a;
+  --vp-c-brand-soft: rgba(255, 122, 182, 0.16);
+  --vp-c-bg: #120e26;
+  --vp-c-bg-alt: var(--zs-bg);
+  --vp-c-bg-soft: #1a1535;
+  --vp-c-bg-elv: #1a1535;
+  --vp-c-divider: var(--zs-border);
+  --vp-c-text-1: var(--zs-text);
+  --vp-c-text-2: var(--zs-text-muted);
+}
+
+/* 标题用圆润的显示字体，大标题渐变字 */
+.vp-doc h1,
+.VPHero .name,
+.VPNavBarTitle .title {
+  font-family: var(--zs-font-display);
+}
+.vp-doc h1 {
+  background: var(--zs-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.vp-doc h2 {
+  border-top-color: var(--zs-border);
+}
+.vp-doc h2::before {
+  content: '✦ ';
+  color: var(--zs-gold);
+  font-size: 0.8em;
+}
+
+/* 玻璃卡片风格的提示块与首页特性卡 */
+.custom-block,
+.VPFeature {
+  border-radius: var(--zs-radius);
+  box-shadow: var(--zs-shadow);
+}
+.VPFeature {
+  background: var(--zs-surface);
+  backdrop-filter: blur(14px) saturate(140%);
+  border: 1px solid var(--zs-border);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.VPFeature:hover {
+  transform: translateY(-2px);
+}
+.VPButton.brand {
+  background-image: var(--zs-gradient);
+  border-radius: 999px;
+}
+.VPButton.alt {
+  border-radius: 999px;
+}
+
+/* 表格圆角 + 行悬浮浅粉底 */
+.vp-doc table {
+  border-radius: 12px;
+  overflow: hidden;
+}
+.vp-doc tr:hover td {
+  background: var(--vp-c-brand-soft);
+}
+
+/* 截图组件 */
+.zs-shot {
+  display: block;
+  margin: 16px 0;
+  text-align: center;
+}
+.zs-shot img {
+  display: block;
+  margin: 0 auto;
+  max-width: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--zs-border);
+  box-shadow: var(--zs-shadow);
+}
+.zs-shot__placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 160px;
+  padding: 20px;
+  border-radius: 12px;
+  border: 2px dashed var(--zs-border);
+  background: var(--vp-c-brand-soft);
+  color: var(--vp-c-brand-1);
+}
+.zs-shot__title {
+  font-weight: 600;
+}
+.zs-shot__path {
+  font-size: 12px;
+  color: var(--vp-c-text-2);
+}
+.zs-shot__caption {
+  display: block;
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--vp-c-text-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .VPFeature {
+    transition: none;
+  }
+  .VPFeature:hover {
+    transform: none;
+  }
+}

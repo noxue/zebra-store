@@ -1,0 +1,22 @@
+# Mode "rehearsal": the whole topology on one laptop, plain HTTP.
+# Every lab hostname is a network alias of the edge container, so inside the compose
+# network store.<domain>, acg.<domain>, ... resolve to the edge's private IP. That is why
+# rehearsal (and only rehearsal) sets integration.allow_private_addresses=true in the
+# Zebra configs: the SSRF guard would otherwise refuse those private addresses.
+# With LAB_DOMAIN=lvh.me the same names also work in a browser on the host
+# (*.lvh.me -> 127.0.0.1): http://store.lvh.me:${EDGE_HTTP_PORT}/
+services:
+  edge:
+    ports:
+      - "127.0.0.1:${EDGE_HTTP_PORT:-18480}:80"
+    networks:
+      lab:
+        aliases:
+          - store.${LAB_DOMAIN}
+          - acg.${LAB_DOMAIN}
+          - dujiao.${LAB_DOMAIN}
+          - zs2.${LAB_DOMAIN}
+          - sakura.${LAB_DOMAIN}
+          - neon.${LAB_DOMAIN}
+          - matcha.${LAB_DOMAIN}
+          - docs.${LAB_DOMAIN}

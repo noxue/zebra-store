@@ -1,0 +1,68 @@
+# Rendered by lab.sh into build/runtime/${INSTANCE}.yml — secrets come from .env.
+app:
+  secret_key: "${APP_SECRET}"
+  totp_issuer: "${SITE_TITLE}"
+
+server:
+  host: 0.0.0.0
+  port: 8081
+  mode: release
+  # only the edge Caddy (inside the lab network) talks to the backend
+  trusted_proxies: ["${LAB_SUBNET}"]
+
+log:
+  level: info
+  json: false
+
+database:
+  url: sqlite://data/zebra.db?mode=rwc
+  max_connections: 10
+  min_connections: 1
+
+jwt:
+  secret: "${JWT_SECRET}"
+  expire_hours: 24
+
+user_jwt:
+  secret: "${USER_JWT_SECRET}"
+  expire_hours: 24
+  remember_me_expire_hours: 168
+
+bootstrap:
+  default_admin_username: admin
+  default_admin_password: "${ADMIN_PASSWORD}"
+
+queue:
+  concurrency: 8
+  upstream_sync_interval: 5m
+
+upload:
+  dir: uploads
+  max_size: 10485760
+
+cors:
+  allowed_origins: ["${SITE_URL}"]
+
+email:
+  enabled: false
+
+order:
+  payment_expire_minutes: 15
+  max_refund_days: 30
+
+reseller:
+  enabled: ${RESELLER_ENABLED}
+  main_hosts: [localhost, 127.0.0.1, "::1", "${HOST}"]
+  subdomain_base: "${RESELLER_BASE}"
+  self_apply_enabled: true
+  # 0 in the lab so the e2e run can settle + withdraw immediately (production default: 7)
+  settlement_confirm_days: ${SETTLEMENT_CONFIRM_DAYS}
+
+web:
+  admin_path: /admin
+
+integration:
+  # true ONLY in rehearsal mode: lab hostnames resolve to private docker IPs there.
+  allow_private_addresses: ${ALLOW_PRIVATE_ADDRESSES}
+  acg_faka_compat: true
+  mcy_compat: true

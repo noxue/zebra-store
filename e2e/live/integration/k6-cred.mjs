@@ -1,0 +1,27 @@
+import { user, admin, browser, adminCtx, shot, zs, note, sleep, load } from './lib.mjs'
+const s = await admin('store'); const u = await user('store', 'qa-cred2@lab.test'); const me = await u.get('/me')
+let c = await u.get('/api-credential', [0, 404]); if (!c?.status || c.status === 'none') { await u.post('/api-credential/apply'); c = await u.get('/api-credential') }
+// I-081 pending key
+const pend = await zs('https://store.dot2.com', c.api_key || 'x', 'whatever', 'GET', '/handshake')
+note('I-081', `pending credential (status=${c.status}) key call: http ${pend.http} ${JSON.stringify(pend.json).slice(0, 120)}`)
+const [rows] = await s.page(`/admin/api-credentials?status=pending_review&user_id=${me.id}`)
+// UI reject
+const b = await browser(); const ctx = await adminCtx(b, 'store', s.token); const p = await ctx.newPage()
+await p.goto('https://store.dot2.com/admin/api-credentials'); await sleep(3000)
+const row = p.locator('tr', { hasText: 'qa-cred2@lab.test' }).first()
+await row.getByRole('button', { name: '拒绝' }).click(); await sleep(1000)
+const ta = p.locator('[role=dialog] textarea:visible, [role=dialog] input[type=text]:visible'); if (await ta.count()) await ta.first().fill('QA 驳回：用途说明不足')
+await shot(p, 'integration', 'I080-04-reject-dialog', false)
+await p.locator('[role=dialog] button:visible', { hasText: /确认|确定|拒绝/ }).last().click(); await sleep(2000)
+c = await u.get('/api-credential'); note('I-080', `after UI reject: user sees status=${c.status} reason=${c.reject_reason || c.remark || JSON.stringify(c).slice(0, 200)}`)
+const re = await u.raw('POST', '/api-credential/apply'); c = await u.get('/api-credential'); note('I-080', `reapply: sc=${re.json.status_code} ${re.json.msg} -> status=${c.status}`)
+const [r2] = await s.page(`/admin/api-credentials?status=pending_review&user_id=${me.id}`); await s.post(`/admin/api-credentials/${r2[0].id}/approve`)
+const sec = (await u.post('/api-credential/regenerate')).api_secret; c = await u.get('/api-credential')
+const ok = await zs('https://store.dot2.com', c.api_key, sec, 'GET', '/handshake')
+await s.put(`/admin/api-credentials/${r2[0].id}/status`, { is_active: false })
+const dis = await zs('https://store.dot2.com', c.api_key, sec, 'GET', '/handshake')
+note('I-080', `approved -> handshake ${ok.http}; admin disabled -> ${dis.http} ${JSON.stringify(dis.json).slice(0, 100)}`)
+await s.put(`/admin/api-credentials/${r2[0].id}/status`, { is_active: true })
+await u.put('/api-credential/status', { is_active: false }); const dis2 = await zs('https://store.dot2.com', c.api_key, sec, 'GET', '/handshake'); note('F-114', `user self-disabled -> ${dis2.http}`)
+await u.put('/api-credential/status', { is_active: true })
+await b.close()

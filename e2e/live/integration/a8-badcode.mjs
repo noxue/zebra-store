@@ -1,0 +1,21 @@
+import { admin, browser, adminCtx, shot, watch, note, sleep } from './lib.mjs'
+const z = await admin('zs2')
+const code = 'zsc1_' + Buffer.from(JSON.stringify({ v: 1, url: 'https://qa-unreachable.dot2.com', key: 'k'.repeat(64), secret: 's'.repeat(64), name: 'QA 不可达' })).toString('base64url')
+const b = await browser(); const errs = []
+const ctx = await adminCtx(b, 'zs2', z.token); const p = await ctx.newPage(); watch(p, errs)
+const net = []
+p.on('response', async (r) => { if (r.url().includes('/api/v1/admin/site-connections') && r.request().method() !== 'GET') net.push(`${r.request().method()} ${new URL(r.url()).pathname} ${r.status()} ${(await r.text().catch(() => '')).slice(0, 700)}`) })
+await p.goto('https://zs2.dot2.com/admin/site-connections'); await sleep(2000)
+await p.getByRole('button', { name: /新建连接/ }).first().click(); await sleep(800)
+await p.locator('input[name=connection_code]').fill(code)
+const t0 = Date.now()
+await p.getByRole('button', { name: /^解析$/ }).click()
+await p.waitForResponse((r) => r.url().includes('/handshake'), { timeout: 60000 }).catch(() => {})
+note('I-062', `handshake round-trip in UI: ${Date.now() - t0} ms`)
+await sleep(1000)
+await shot(p, 'integration', 'I062-01-handshake-failed', false)
+await p.locator('[role=dialog] input[placeholder="连接名称"]').fill('QA 不可达（I-062）')
+await p.getByRole('button', { name: /^创建$/ }).click(); await sleep(8000)
+await shot(p, 'integration', 'I062-02-saved-list')
+console.log(net.join('\n')); console.log('ERRS', errs)
+await b.close()

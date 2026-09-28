@@ -1,0 +1,26 @@
+[package]
+name = "zs-shared"
+description = "Framework-free primitives shared by every Zebra Store crate."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+rust_decimal.workspace = true
+thiserror.workspace = true
+chrono.workspace = true
+rand.workspace = true
+hex.workspace = true
+sha2.workspace = true
+hmac.workspace = true
+md-5.workspace = true
+aes-gcm.workspace = true
+base64.workspace = true
+
+[dev-dependencies]
+rust_decimal_macros.workspace = true
+
+[lints]
+workspace = true

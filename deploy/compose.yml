@@ -1,0 +1,134 @@
+# Zebra Store multi-site test topology ("zebra-lab").
+#
+# Never run this file alone: ./lab.sh adds exactly one mode overlay
+#   compose.caddy.yml      edge owns :80/:443, automatic HTTPS (HTTP-01, one cert per host)
+#   compose.proxy.yml      edge listens on 127.0.0.1:${PROXY_PORT}; an existing proxy terminates TLS
+#   compose.rehearsal.yml  local rehearsal: plain HTTP, lab hostnames resolved in-network by aliases
+# and renders build/runtime/* (configs, Caddyfile) from .env first.
+name: zebra-lab
+
+# Every container is capped (memory / CPU) and its json logs rotated, so the lab can share
+# a small server with other workloads: the caps add up to ~2.3 GiB.
+x-logging: &logging
+  driver: json-file
+  options: {max-size: "10m", max-file: "3"}
+
+x-zebra: &zebra
+  image: zebra-lab/zebra:${IMAGE_TAG:-local}
+  restart: unless-stopped
+  environment:
+    TZ: UTC
+  mem_limit: 384m
+  cpus: 1.0
+  logging: *logging
+  networks: [lab]
+
+services:
+  edge:
+    image: zebra-lab/edge:${IMAGE_TAG:-local}
+    restart: unless-stopped
+    volumes:
+      - ./build/runtime/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./docs:/srv/docs:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [store, zs2, acg, dujiao]
+    mem_limit: 128m
+    cpus: 0.5
+    logging: *logging
+    networks: [lab]
+
+  # 1. main shop: storefront + admin + API, reseller subsites share this backend (Host header)
+  store:
+    <<: *zebra
+    volumes:
+      - ./build/runtime/store.yml:/app/config.yml:ro
+      - store_data:/app/data
+      - store_uploads:/app/uploads
+
+  # 4. downstream Zebra instance (buys from store through the zebra-store protocol)
+  zs2:
+    <<: *zebra
+    volumes:
+      - ./build/runtime/zs2.yml:/app/config.yml:ro
+      - zs2_data:/app/data
+      - zs2_uploads:/app/uploads
+
+  # 2. 异次元发卡 acg-faka, official Dockerfile, single-container mode (bundled MariaDB + Redis)
+  acg:
+    image: zebra-lab/acg-faka:${IMAGE_TAG:-local}
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+    volumes:
+      - acg_data:/data
+      - ./config/acg-mariadb-client.cnf:/etc/mysql/mariadb.conf.d/99-zebra-lab-client.cnf:ro
+    mem_limit: 768m
+    cpus: 1.0
+    logging: *logging
+    networks: [lab]
+
+  # 3. compatibility test service (fullstack single binary)
+  dujiao:
+    image: zebra-lab/dujiao-next:${IMAGE_TAG:-local}
+    restart: unless-stopped
+    environment:
+      TZ: UTC
+    volumes:
+      - ./build/runtime/dujiao.yml:/app/config.yml:ro
+      - dujiao_db:/app/db
+      - dujiao_uploads:/app/uploads
+      - dujiao_logs:/app/logs
+    depends_on: [dujiao-redis]
+    mem_limit: 384m
+    cpus: 1.0
+    logging: *logging
+    networks: [lab]
+
+  dujiao-redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "96mb"]
+    volumes:
+      - dujiao_redis:/data
+    mem_limit: 128m
+    cpus: 0.5
+    logging: *logging
+    networks: [lab]
+
+  # provision / verify runner (./lab.sh provision|verify); never started by `up`
+  tools:
+    image: zebra-lab/tools:${IMAGE_TAG:-local}
+    profiles: [tools]
+    env_file: [.env]
+    environment:
+      PYTHONUNBUFFERED: "1"
+      LAB_SCHEME: ${LAB_SCHEME:-http}
+    volumes:
+      - ./provision:/lab/provision:ro
+      - ./build/seed:/lab/seed:ro
+      - ./build/state:/lab/state
+    working_dir: /lab
+    mem_limit: 256m
+    cpus: 0.5
+    logging: *logging
+    networks: [lab]
+
+networks:
+  lab:
+    ipam:
+      config:
+        - subnet: ${LAB_SUBNET:-172.30.77.0/24}
+
+volumes:
+  caddy_data:
+  caddy_config:
+  store_data:
+  store_uploads:
+  zs2_data:
+  zs2_uploads:
+  acg_data:
+  dujiao_db:
+  dujiao_uploads:
+  dujiao_logs:
+  dujiao_redis:

@@ -1,0 +1,48 @@
+import path from 'node:path'
+import { dialog, field, fieldBox, fillLocalized, selectOption, apiResponse, TS } from './common.mjs'
+const LOGO = path.resolve('fixtures/logo.png')
+export default async ({ page, api, shot, log, admin, base, b }) => {
+  await page.goto(`${admin}/banners`)
+  await page.waitForLoadState('networkidle')
+  await page.getByRole('button', { name: 'Add banner' }).click()
+  const dlg = dialog(page, 'Add banner')
+  await dlg.getByRole('button', { name: 'Create now' }).click()
+  await page.waitForTimeout(700)
+  log('empty submit inline errors:', (await dlg.locator('.text-danger-text').allInnerTexts()).join(' / '), '| toast', (await page.locator('[role=status]').allInnerTexts()).join('|'))
+  await field(dlg, 'Admin name').fill(`qa-banner ${TS}`)
+  await selectOption(field(dlg, 'Position', 'select'), 'Home hero')
+  await fillLocalized(fieldBox(dlg, 'Title'), `qa-banner ${TS}`)
+  const up = await apiResponse(page, 'POST', /\/admin\/upload/, () => fieldBox(dlg, 'Banner image').locator('input[type="file"]').first().setInputFiles(LOGO))
+  log('uploaded', JSON.stringify(up).slice(0, 200))
+  await fieldBox(dlg, 'Mobile image (optional)').locator('input:not([type=file])').last().fill(up.url)
+  const lt = field(dlg, 'Link type', 'select')
+  log('link types', (await lt.locator('option').allTextContents()).join('/'))
+  await selectOption(lt, /External/)
+  await field(dlg, 'Link value').fill('javascript:alert(1)')
+  const now = new Date(Date.now() - 3600e3), end = new Date(Date.now() + 86400e3)
+  const loc = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60e3).toISOString().slice(0, 16)
+  const dts = dlg.locator('input[type="datetime-local"]')
+  await dts.nth(0).fill(loc(now)); await dts.nth(1).fill(loc(end))
+  await dlg.getByRole('button', { name: 'Create now' }).click()
+  await page.waitForTimeout(1500)
+  const got = (await api('GET', '/admin/banners?page=1&page_size=50')).data.filter((x) => x.name === `qa-banner ${TS}`)
+  log('javascript: link accepted?', got.length, JSON.stringify(got.map((x) => [x.id, x.link_type, x.link_value])), (await page.locator('[role=status]').allInnerTexts()).join('|'))
+  if (!got.length) {
+    await field(dlg, 'Link value').fill('https://example.com/qa')
+    const r = await apiResponse(page, 'POST', /\/admin\/banners$/, () => dlg.getByRole('button', { name: 'Create now' }).click())
+    log('created', JSON.stringify(r).slice(0, 500))
+  }
+  await page.waitForTimeout(800)
+  await shot(page, 'c-banner-list')
+  const pub = await page.evaluate(async () => (await (await fetch('/api/v1/public/banners?position=home_hero')).json()))
+  log('public banners', JSON.stringify(pub.data.map((x) => [x.id, x.title?.['en-US'], x.image, x.mobile_image, x.link_value])).slice(0, 600))
+  for (const [nm, vp] of [['desk', { width: 1440, height: 900 }], ['mob', { width: 390, height: 844 }]]) {
+    const ctx = await b.newContext({ viewport: vp, locale: 'en-US' })
+    const sp = await ctx.newPage()
+    await sp.goto(`${base}/`); await sp.waitForLoadState('networkidle'); await sp.waitForTimeout(2000)
+    const imgs = await sp.locator('img').evaluateAll((els) => els.map((e) => e.currentSrc || e.src).filter((s) => s.includes('/uploads/banner')))
+    log('storefront', nm, 'banner imgs', JSON.stringify(imgs))
+    await sp.screenshot({ path: `live/shots/admin/c-sf-home-${nm}.png` })
+    await ctx.close()
+  }
+}

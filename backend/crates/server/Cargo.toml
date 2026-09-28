@@ -1,0 +1,35 @@
+[package]
+name = "zs-server"
+description = "Zebra Store server binary: configuration, wiring, CLI."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "zebra-store"
+path = "src/main.rs"
+
+[dependencies]
+zs-shared.workspace = true
+zs-domain.workspace = true
+zs-app.workspace = true
+zs-infra.workspace = true
+zs-migration.workspace = true
+zs-api.workspace = true
+tokio.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+clap.workspace = true
+serde.workspace = true
+config.workspace = true
+tower-http.workspace = true
+hyper.workspace = true
+hyper-util.workspace = true
+tower.workspace = true
+chrono.workspace = true
+axum.workspace = true
+http.workspace = true
+
+[lints]
+workspace = true
