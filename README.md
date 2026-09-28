@@ -3,6 +3,8 @@
 A self-hosted digital-goods commerce platform with a **Rust (axum + sea-orm)** backend and two independent
 **Vue 3 + TSX** frontends in an anime (二次元) style.
 
+Repository: [github.com/noxue/zebra-store](https://github.com/noxue/zebra-store)
+
 | Project | Path | Stack | Dev port |
 |---|---|---|---|
 | Backend API | `backend/` | Rust 2024, axum 0.8, sea-orm 2.0 | 8081 |
@@ -21,7 +23,7 @@ Documentation: [`CLAUDE.md`](CLAUDE.md) (engineering rules), [`docs/PLAN.md`](do
 
 The user handbook (Chinese, written for beginners: deployment via 宝塔 / Docker / Nginx / Caddy, storefront and
 admin usage, payment gateways, site integrations, reseller subsites, FAQ) lives in [`handbook/`](handbook/) as a
-VitePress site and is published at **https://docs.dot2.com**.
+VitePress site and is published at **https://zebra-store-docs.noxue.com**.
 
 ```bash
 cd handbook && npm install
@@ -29,8 +31,8 @@ npm run docs:dev        # http://localhost:5190 (live reload)
 npm run docs:build      # static site in handbook/.vitepress/dist (fails on dead links)
 ```
 
-The handbook includes 89 application screenshots captured from the tested dot2.com lab and a fresh local
-instance. The six screenshots that require a separate 宝塔 panel are tracked in
+The handbook includes 89 application screenshots captured from tested deployments and a fresh local instance.
+The six screenshots that require a separate 宝塔 panel are tracked in
 [`handbook/SCREENSHOTS.md`](handbook/SCREENSHOTS.md). The manual/end-to-end checklist for the lab is
 [`docs/TEST_FLOWS.md`](docs/TEST_FLOWS.md).
 

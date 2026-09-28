@@ -192,6 +192,9 @@ export default defineConfig({
       { text: '分站', link: '/reseller/', activeMatch: '^/reseller/' },
       { text: '常见问题', link: '/faq/', activeMatch: '^/faq/' },
     ],
+    socialLinks: [
+      { icon: 'github', link: 'https://github.com/noxue/zebra-store' },
+    ],
     sidebar,
     outline: { level: [2, 3], label: '本页目录' },
     search: {

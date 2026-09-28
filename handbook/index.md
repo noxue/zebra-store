@@ -18,6 +18,9 @@ hero:
     - theme: alt
       text: 对接货源
       link: /integration/
+    - theme: alt
+      text: GitHub 源码
+      link: https://github.com/noxue/zebra-store
 
 features:
   - title: 自动发卡

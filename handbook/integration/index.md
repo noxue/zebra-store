@@ -66,15 +66,3 @@
 1. 选择对方的系统，按对应页面一步步操作；
 2. 连好之后，看 [采购单与故障处理](./procurement) 了解出问题时怎么办；
 3. 后台每个对接页面的字段说明见 [对接管理](/admin/integration)。
-
-## 演示环境
-
-我们在 dot2.com 上运行了一套演示环境，可以看到各种协议实际连起来的样子：
-
-| 地址 | 系统 | 和主站的关系 |
-|---|---|---|
-| `https://store.dot2.com` | 斑马小铺（主站） | — |
-| `https://acg.dot2.com` | 异次元发卡 | 主站的上游；同时也通过“共享店铺”从主站进货 |
-| `https://dujiao.dot2.com` | dujiao-next | 主站的上游 |
-| `https://zs2.dot2.com` | 第二个斑马小铺 | 用 Zebra Store 协议从主站进货（下游） |
-| `https://sakura.dot2.com` 等 | 主站的分站 | 见 [分站](/reseller/) |
