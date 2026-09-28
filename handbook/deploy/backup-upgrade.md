@@ -33,11 +33,11 @@ Docker 镜像里没有 `sqlite3`，数据库在 Docker 卷里。在正在运行�
 `data/` 就是数据卷），再把文件拷出来：
 
 ```bash
-cd /opt/zebra-docker && mkdir -p backup
+cd /opt/zebra-store/release && mkdir -p backup
 T=$(date +%F-%H%M)
-docker compose exec zebra zebra-store --config /app/config.yml backup --output data/backup/zebra-$T.db
-docker compose cp zebra:/app/data/backup/zebra-$T.db backup/
-docker compose exec zebra rm /app/data/backup/zebra-$T.db
+docker compose exec store zebra-store --config /app/config.yml backup --output data/backup/zebra-$T.db
+docker compose cp store:/app/data/backup/zebra-$T.db backup/
+docker compose exec store rm /app/data/backup/zebra-$T.db
 ```
 
 ## MySQL / PostgreSQL 备份
@@ -97,10 +97,23 @@ systemctl start zebra-store
 
 ## 升级
 
-1. **先备份**（上面的步骤）；
-2. 拿到新版本的 `zebra-store`、`storefront/dist`、`admin/dist`（打包方法见各部署方式页面的“获取程序和网页”）；
-3. 停止后端 → 替换程序 → 替换两个网页目录 → 启动后端；
-4. 打开网站，按 Ctrl+F5 强制刷新一次。
+Release 单文件已经包含前台和后台，不需要分别替换网页目录。
+
+直接安装的用户重新运行安装脚本即可：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/noxue/zebra-store/main/scripts/install.sh | bash
+```
+
+Docker 用户在 `deploy/release` 目录指定新版本：
+
+```bash
+RELEASE=v新版本 docker compose build --no-cache
+RELEASE=v新版本 docker compose up -d --no-build
+curl -fsS http://127.0.0.1:18180/health
+```
+
+这两个方式都会保留原配置、数据库和上传文件。新版本启动时会自动补齐数据库结构。
 
 新版本第一次启动时会自动：
 

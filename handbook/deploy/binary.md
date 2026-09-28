@@ -2,6 +2,10 @@
 
 这是最省事的部署方式。GitHub Release 中的 `zebra-store` 已经包含：
 
+::: tip 服务器使用 Docker？
+请直接使用 [Docker Release 单文件部署](./docker)。它下载同一个 Release 二进制并校验 SHA256，运行时也只有一个业务容器。
+:::
+
 - Rust 后端、API 和后台任务；
 - 用户前台；
 - `/admin/` 管理后台；
@@ -41,6 +45,27 @@ curl -fsSL https://raw.githubusercontent.com/noxue/zebra-store/main/scripts/inst
 6. 启动服务并检查 `http://127.0.0.1:8081/health`。
 
 首次安装会在终端显示随机生成的管理员密码，**当场保存**。配置文件权限为 `600`，三个应用密钥和管理员密码均随机生成。
+
+## 部署后查看或重置后台密码
+
+后台地址是 `https://你的域名/admin/`，默认用户名是 `admin`。一键安装生成的初始密码会显示在终端，
+也可以从配置文件查看：
+
+```bash
+sudo grep -E 'default_admin_(username|password)' /opt/zebra-store/config.yml
+```
+
+这只代表数据库首次初始化时使用的密码。用户在后台修改密码后，数据库只保存密码哈希，无法读取出当前密码，
+配置文件中的旧值也不会把密码改回去。忘记密码时执行重置命令：
+
+```bash
+NEW_PASSWORD="Zs9-$(openssl rand -hex 10)"
+sudo /usr/local/bin/zebra-store --config /opt/zebra-store/config.yml \
+  admin reset-password --username admin --password "$NEW_PASSWORD"
+printf '新后台密码：%s\n' "$NEW_PASSWORD"
+```
+
+重置会撤销这个管理员已有的登录会话。请立即用新密码登录并保存到密码管理器。
 
 ## 配置域名和 HTTPS
 

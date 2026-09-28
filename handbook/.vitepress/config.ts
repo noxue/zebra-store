@@ -22,7 +22,7 @@ const sidebar: DefaultTheme.Sidebar = {
         { text: '选择部署方式', link: '/deploy/' },
         { text: '单文件二进制（推荐）', link: '/deploy/binary' },
         { text: '宝塔面板部署', link: '/deploy/bt-panel' },
-        { text: 'Docker Compose 部署', link: '/deploy/docker' },
+        { text: 'Docker Release 单文件（推荐）', link: '/deploy/docker' },
         { text: 'Nginx 部署', link: '/deploy/nginx' },
         { text: 'Caddy 部署', link: '/deploy/caddy' },
         { text: '本地开发运行', link: '/deploy/local-dev' },
