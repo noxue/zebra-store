@@ -78,8 +78,6 @@ jobs:
         run: |
           mkdir -p release/package
           cp "backend/target/$TARGET/release/zebra-store" release/package/zebra-store
-          zig objcopy --strip-all release/package/zebra-store release/package/zebra-store.stripped
-          mv release/package/zebra-store.stripped release/package/zebra-store
           tar -C release/package -czf "release/$ASSET" zebra-store
           (cd release && sha256sum "$ASSET" > "$ASSET.sha256")
       - uses: actions/upload-artifact@v4
