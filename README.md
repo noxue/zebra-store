@@ -8,6 +8,71 @@ Zebra Store 是一个可自行部署的数字商品商城，后端使用 **Rust�
 - 使用文档：[zebra-store-docs.noxue.com](https://zebra-store-docs.noxue.com)
 - 版本下载：[GitHub Releases](https://github.com/noxue/zebra-store/releases)
 
+## 界面截图
+
+### 用户前台
+
+|  |  |
+|---|---|
+| <a href="handbook/public/screenshots/storefront/home.png"><img src="handbook/public/screenshots/storefront/home.png" width="440" alt="商城首页"></a><br>商城首页 | <a href="handbook/public/screenshots/storefront/product-detail.png"><img src="handbook/public/screenshots/storefront/product-detail.png" width="440" alt="商品详情"></a><br>商品详情 |
+
+<details>
+<summary>查看全部前台页面截图（22 张）</summary>
+
+|  |  |
+|---|---|
+| <a href="handbook/public/screenshots/storefront/affiliate.png"><img src="handbook/public/screenshots/storefront/affiliate.png" width="440" alt="推广中心"></a><br>推广中心 | <a href="handbook/public/screenshots/storefront/announcement.png"><img src="handbook/public/screenshots/storefront/announcement.png" width="440" alt="公告详情"></a><br>公告详情 |
+| <a href="handbook/public/screenshots/storefront/cart.png"><img src="handbook/public/screenshots/storefront/cart.png" width="440" alt="购物车"></a><br>购物车 | <a href="handbook/public/screenshots/storefront/checkout.png"><img src="handbook/public/screenshots/storefront/checkout.png" width="440" alt="确认订单"></a><br>确认订单 |
+| <a href="handbook/public/screenshots/storefront/gift-card.png"><img src="handbook/public/screenshots/storefront/gift-card.png" width="440" alt="礼品卡"></a><br>礼品卡 | <a href="handbook/public/screenshots/storefront/guest-orders.png"><img src="handbook/public/screenshots/storefront/guest-orders.png" width="440" alt="游客订单查询"></a><br>游客订单查询 |
+| <a href="handbook/public/screenshots/storefront/home-dark.png"><img src="handbook/public/screenshots/storefront/home-dark.png" width="440" alt="深色首页"></a><br>深色首页 | <a href="handbook/public/screenshots/storefront/home-mobile.png"><img src="handbook/public/screenshots/storefront/home-mobile.png" width="440" alt="移动端首页"></a><br>移动端首页 |
+| <a href="handbook/public/screenshots/storefront/home.png"><img src="handbook/public/screenshots/storefront/home.png" width="440" alt="商城首页"></a><br>商城首页 | <a href="handbook/public/screenshots/storefront/login.png"><img src="handbook/public/screenshots/storefront/login.png" width="440" alt="用户登录"></a><br>用户登录 |
+| <a href="handbook/public/screenshots/storefront/me-api-compat.png"><img src="handbook/public/screenshots/storefront/me-api-compat.png" width="440" alt="兼容 API 设置"></a><br>兼容 API 设置 | <a href="handbook/public/screenshots/storefront/me-api.png"><img src="handbook/public/screenshots/storefront/me-api.png" width="440" alt="API 设置"></a><br>API 设置 |
+| <a href="handbook/public/screenshots/storefront/me-orders.png"><img src="handbook/public/screenshots/storefront/me-orders.png" width="440" alt="我的订单"></a><br>我的订单 | <a href="handbook/public/screenshots/storefront/member-level.png"><img src="handbook/public/screenshots/storefront/member-level.png" width="440" alt="会员等级"></a><br>会员等级 |
+| <a href="handbook/public/screenshots/storefront/order-detail.png"><img src="handbook/public/screenshots/storefront/order-detail.png" width="440" alt="订单详情"></a><br>订单详情 | <a href="handbook/public/screenshots/storefront/order-refunds.png"><img src="handbook/public/screenshots/storefront/order-refunds.png" width="440" alt="订单退款"></a><br>订单退款 |
+| <a href="handbook/public/screenshots/storefront/payment.png"><img src="handbook/public/screenshots/storefront/payment.png" width="440" alt="订单支付"></a><br>订单支付 | <a href="handbook/public/screenshots/storefront/product-detail.png"><img src="handbook/public/screenshots/storefront/product-detail.png" width="440" alt="商品详情"></a><br>商品详情 |
+| <a href="handbook/public/screenshots/storefront/products.png"><img src="handbook/public/screenshots/storefront/products.png" width="440" alt="商品列表"></a><br>商品列表 | <a href="handbook/public/screenshots/storefront/register.png"><img src="handbook/public/screenshots/storefront/register.png" width="440" alt="用户注册"></a><br>用户注册 |
+| <a href="handbook/public/screenshots/storefront/security-2fa.png"><img src="handbook/public/screenshots/storefront/security-2fa.png" width="440" alt="两步验证"></a><br>两步验证 | <a href="handbook/public/screenshots/storefront/wallet.png"><img src="handbook/public/screenshots/storefront/wallet.png" width="440" alt="用户钱包"></a><br>用户钱包 |
+
+</details>
+
+### 管理后台
+
+|  |  |
+|---|---|
+| <a href="handbook/public/screenshots/admin/dashboard.png"><img src="handbook/public/screenshots/admin/dashboard.png" width="440" alt="仪表盘"></a><br>仪表盘 | <a href="handbook/public/screenshots/admin/products.png"><img src="handbook/public/screenshots/admin/products.png" width="440" alt="商品管理"></a><br>商品管理 |
+
+<details>
+<summary>查看全部管理后台页面截图（47 张）</summary>
+
+|  |  |
+|---|---|
+| <a href="handbook/public/screenshots/admin/affiliate-settings.png"><img src="handbook/public/screenshots/admin/affiliate-settings.png" width="440" alt="分销设置"></a><br>分销设置 | <a href="handbook/public/screenshots/admin/affiliate-withdraws.png"><img src="handbook/public/screenshots/admin/affiliate-withdraws.png" width="440" alt="分销提现"></a><br>分销提现 |
+| <a href="handbook/public/screenshots/admin/api-credentials.png"><img src="handbook/public/screenshots/admin/api-credentials.png" width="440" alt="API 凭证"></a><br>API 凭证 | <a href="handbook/public/screenshots/admin/authz-audit.png"><img src="handbook/public/screenshots/admin/authz-audit.png" width="440" alt="权限审计"></a><br>权限审计 |
+| <a href="handbook/public/screenshots/admin/authz.png"><img src="handbook/public/screenshots/admin/authz.png" width="440" alt="权限管理"></a><br>权限管理 | <a href="handbook/public/screenshots/admin/banners.png"><img src="handbook/public/screenshots/admin/banners.png" width="440" alt="轮播图管理"></a><br>轮播图管理 |
+| <a href="handbook/public/screenshots/admin/card-secret-import.png"><img src="handbook/public/screenshots/admin/card-secret-import.png" width="440" alt="导入卡密"></a><br>导入卡密 | <a href="handbook/public/screenshots/admin/card-secrets.png"><img src="handbook/public/screenshots/admin/card-secrets.png" width="440" alt="卡密管理"></a><br>卡密管理 |
+| <a href="handbook/public/screenshots/admin/categories.png"><img src="handbook/public/screenshots/admin/categories.png" width="440" alt="分类管理"></a><br>分类管理 | <a href="handbook/public/screenshots/admin/compliance.png"><img src="handbook/public/screenshots/admin/compliance.png" width="440" alt="合规设置"></a><br>合规设置 |
+| <a href="handbook/public/screenshots/admin/coupons.png"><img src="handbook/public/screenshots/admin/coupons.png" width="440" alt="优惠券"></a><br>优惠券 | <a href="handbook/public/screenshots/admin/dashboard.png"><img src="handbook/public/screenshots/admin/dashboard.png" width="440" alt="仪表盘"></a><br>仪表盘 |
+| <a href="handbook/public/screenshots/admin/gift-cards.png"><img src="handbook/public/screenshots/admin/gift-cards.png" width="440" alt="礼品卡管理"></a><br>礼品卡管理 | <a href="handbook/public/screenshots/admin/login.png"><img src="handbook/public/screenshots/admin/login.png" width="440" alt="管理员登录"></a><br>管理员登录 |
+| <a href="handbook/public/screenshots/admin/media.png"><img src="handbook/public/screenshots/admin/media.png" width="440" alt="媒体库"></a><br>媒体库 | <a href="handbook/public/screenshots/admin/member-levels.png"><img src="handbook/public/screenshots/admin/member-levels.png" width="440" alt="会员等级管理"></a><br>会员等级管理 |
+| <a href="handbook/public/screenshots/admin/notifications.png"><img src="handbook/public/screenshots/admin/notifications.png" width="440" alt="通知管理"></a><br>通知管理 | <a href="handbook/public/screenshots/admin/order-detail.png"><img src="handbook/public/screenshots/admin/order-detail.png" width="440" alt="订单详情"></a><br>订单详情 |
+| <a href="handbook/public/screenshots/admin/order-refunds.png"><img src="handbook/public/screenshots/admin/order-refunds.png" width="440" alt="订单退款"></a><br>订单退款 | <a href="handbook/public/screenshots/admin/orders.png"><img src="handbook/public/screenshots/admin/orders.png" width="440" alt="订单管理"></a><br>订单管理 |
+| <a href="handbook/public/screenshots/admin/payment-channel-edit.png"><img src="handbook/public/screenshots/admin/payment-channel-edit.png" width="440" alt="编辑支付渠道"></a><br>编辑支付渠道 | <a href="handbook/public/screenshots/admin/payment-channels.png"><img src="handbook/public/screenshots/admin/payment-channels.png" width="440" alt="支付渠道"></a><br>支付渠道 |
+| <a href="handbook/public/screenshots/admin/payments.png"><img src="handbook/public/screenshots/admin/payments.png" width="440" alt="支付记录"></a><br>支付记录 | <a href="handbook/public/screenshots/admin/posts.png"><img src="handbook/public/screenshots/admin/posts.png" width="440" alt="文章管理"></a><br>文章管理 |
+| <a href="handbook/public/screenshots/admin/procurement-orders.png"><img src="handbook/public/screenshots/admin/procurement-orders.png" width="440" alt="采购订单"></a><br>采购订单 | <a href="handbook/public/screenshots/admin/product-edit.png"><img src="handbook/public/screenshots/admin/product-edit.png" width="440" alt="编辑商品"></a><br>编辑商品 |
+| <a href="handbook/public/screenshots/admin/product-mappings.png"><img src="handbook/public/screenshots/admin/product-mappings.png" width="440" alt="商品映射"></a><br>商品映射 | <a href="handbook/public/screenshots/admin/products.png"><img src="handbook/public/screenshots/admin/products.png" width="440" alt="商品管理"></a><br>商品管理 |
+| <a href="handbook/public/screenshots/admin/promotions.png"><img src="handbook/public/screenshots/admin/promotions.png" width="440" alt="促销活动"></a><br>促销活动 | <a href="handbook/public/screenshots/admin/reconciliation.png"><img src="handbook/public/screenshots/admin/reconciliation.png" width="440" alt="支付对账"></a><br>支付对账 |
+| <a href="handbook/public/screenshots/admin/reseller-operations.png"><img src="handbook/public/screenshots/admin/reseller-operations.png" width="440" alt="分站运营"></a><br>分站运营 | <a href="handbook/public/screenshots/admin/reseller-profiles.png"><img src="handbook/public/screenshots/admin/reseller-profiles.png" width="440" alt="分站资料"></a><br>分站资料 |
+| <a href="handbook/public/screenshots/admin/reseller-site-configs.png"><img src="handbook/public/screenshots/admin/reseller-site-configs.png" width="440" alt="分站配置"></a><br>分站配置 | <a href="handbook/public/screenshots/admin/reseller-withdraws.png"><img src="handbook/public/screenshots/admin/reseller-withdraws.png" width="440" alt="分站提现"></a><br>分站提现 |
+| <a href="handbook/public/screenshots/admin/risk-control.png"><img src="handbook/public/screenshots/admin/risk-control.png" width="440" alt="风险控制"></a><br>风险控制 | <a href="handbook/public/screenshots/admin/security.png"><img src="handbook/public/screenshots/admin/security.png" width="440" alt="安全设置"></a><br>安全设置 |
+| <a href="handbook/public/screenshots/admin/settings-basic.png"><img src="handbook/public/screenshots/admin/settings-basic.png" width="440" alt="基础设置"></a><br>基础设置 | <a href="handbook/public/screenshots/admin/settings-theme.png"><img src="handbook/public/screenshots/admin/settings-theme.png" width="440" alt="主题设置"></a><br>主题设置 |
+| <a href="handbook/public/screenshots/admin/site-connection-edit.png"><img src="handbook/public/screenshots/admin/site-connection-edit.png" width="440" alt="编辑站点连接"></a><br>编辑站点连接 | <a href="handbook/public/screenshots/admin/site-connections.png"><img src="handbook/public/screenshots/admin/site-connections.png" width="440" alt="站点连接"></a><br>站点连接 |
+| <a href="handbook/public/screenshots/admin/telegram-bot.png"><img src="handbook/public/screenshots/admin/telegram-bot.png" width="440" alt="Telegram 机器人"></a><br>Telegram 机器人 | <a href="handbook/public/screenshots/admin/user-detail.png"><img src="handbook/public/screenshots/admin/user-detail.png" width="440" alt="用户详情"></a><br>用户详情 |
+| <a href="handbook/public/screenshots/admin/user-login-logs.png"><img src="handbook/public/screenshots/admin/user-login-logs.png" width="440" alt="登录日志"></a><br>登录日志 | <a href="handbook/public/screenshots/admin/users.png"><img src="handbook/public/screenshots/admin/users.png" width="440" alt="用户管理"></a><br>用户管理 |
+| <a href="handbook/public/screenshots/admin/wallet-config.png"><img src="handbook/public/screenshots/admin/wallet-config.png" width="440" alt="钱包设置"></a><br>钱包设置 | <a href="handbook/public/screenshots/admin/wallet-recharges.png"><img src="handbook/public/screenshots/admin/wallet-recharges.png" width="440" alt="钱包充值"></a><br>钱包充值 |
+| <a href="handbook/public/screenshots/admin/wholesale.png"><img src="handbook/public/screenshots/admin/wholesale.png" width="440" alt="批发设置"></a><br>批发设置 |  |
+
+</details>
+
 ## 推荐：Release 单文件部署
 
 Linux Release 是一个已经内嵌用户前台、管理后台、API 和后台任务的可执行文件。无需安装 Node.js、Rust，也无需上传 `dist` 或克隆整个仓库。
