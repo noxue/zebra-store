@@ -7,8 +7,11 @@ use serde::Serialize;
 use zs_domain::order::model::{Order, OrderItem, RefundRecord, keys};
 use zs_domain::order::ports::{RefundDone, RefundFilter, RefundRequest};
 use zs_domain::order::refund::parse_refund_amount;
+use zs_domain::payment::gateway::{GatewayRefundInput, GatewayRefundResult};
+use zs_domain::payment::model::AdminPaymentFilter;
+use zs_domain::payment::types::PaymentStatus;
 use zs_domain::{Error, Id, Result};
-use zs_shared::page::Page;
+use zs_shared::page::{Page, PageRequest};
 
 use super::OrderService;
 
@@ -30,7 +33,82 @@ pub struct AdminRefundItem {
     pub refund_type_label: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct OriginalRefundResult {
+    pub gateway: GatewayRefundResult,
+    pub completed: Option<RefundDone>,
+}
+
 impl OrderService {
+    /// Requests an original-route refund through the successful payment's provider. The local
+    /// refund is applied only when the provider already reports a final success.
+    pub async fn original_refund(
+        &self,
+        order_id: Id,
+        raw_amount: &str,
+        remark: &str,
+        fee_refunded: bool,
+        client_ip: &str,
+    ) -> Result<OriginalRefundResult> {
+        let amount = parse_refund_amount(raw_amount)?;
+        let (payments, _) = self
+            .deps
+            .payment_records
+            .list_admin(&AdminPaymentFilter {
+                page: PageRequest {
+                    page: 1,
+                    page_size: 100,
+                },
+                order_id,
+                status: PaymentStatus::Success.as_str().into(),
+                skip_count: true,
+                ..AdminPaymentFilter::default()
+            })
+            .await?;
+        let payment = payments
+            .into_iter()
+            .find(|payment| payment.status == PaymentStatus::Success)
+            .ok_or_else(|| Error::bad_request("error.payment_not_found"))?;
+        let channel = self
+            .deps
+            .payment_channels
+            .get(payment.channel_id)
+            .await?
+            .ok_or_else(|| Error::bad_request("error.payment_channel_not_found"))?;
+        let gateway = self
+            .deps
+            .registry
+            .lookup(&channel.provider_type, &channel.channel_type)
+            .ok_or_else(|| Error::bad_request("error.payment_provider_not_supported"))?;
+        let refund_no = format!("R{}{}", order_id, self.deps.clock.now().timestamp_millis());
+        let gateway_result = gateway
+            .refund_payment(
+                &channel.config_json,
+                &GatewayRefundInput {
+                    provider_ref: payment.provider_ref,
+                    refund_no,
+                    amount,
+                    notify_url: String::new(),
+                    remark: remark.to_owned(),
+                    client_ip: client_ip.to_owned(),
+                },
+            )
+            .await
+            .map_err(Error::from)?;
+        let completed = if gateway_result.status == Some(PaymentStatus::Success) {
+            Some(
+                self.apply_refund(order_id, raw_amount, remark, false, fee_refunded)
+                    .await?,
+            )
+        } else {
+            None
+        };
+        Ok(OriginalRefundResult {
+            gateway: gateway_result,
+            completed,
+        })
+    }
+
     async fn apply_refund(
         &self,
         order_id: Id,

@@ -6,7 +6,7 @@
 import type { AdminPaymentChannel } from '@/api/types'
 import { resolveOkpayChannelTypeFromConfig } from '@/utils/paymentChannelDisplay'
 
-export const PROVIDER_TYPES = ['official', 'dujiaopay', 'epay', 'bepusdt', 'epusdt', 'okpay', 'tokenpay'] as const
+export const PROVIDER_TYPES = ['official', 'huifu', 'dujiaopay', 'epay', 'bepusdt', 'epusdt', 'okpay', 'tokenpay'] as const
 export type ProviderType = (typeof PROVIDER_TYPES)[number]
 
 export interface KeyOption {
@@ -22,6 +22,10 @@ export const EPAY_CHANNEL_OPTIONS: KeyOption[] = [
   { value: 'wechat', labelKey: ct('wechat') },
   { value: 'alipay', labelKey: ct('alipay') },
   { value: 'qqpay', labelKey: ct('qqpay') },
+]
+export const HUIFU_CHANNEL_OPTIONS: KeyOption[] = [
+  { value: 'wechat', labelKey: ct('wechat') },
+  { value: 'alipay', labelKey: ct('alipay') },
 ]
 export const OFFICIAL_CHANNEL_OPTIONS: KeyOption[] = [
   { value: 'paypal', labelKey: ct('paypal') },
@@ -45,6 +49,8 @@ export const DUJIAOPAY_DEFAULT_TOKEN_ID = 'tron-usdt'
 
 export const channelOptionsFor = (provider: string): KeyOption[] => {
   switch (provider) {
+    case 'huifu':
+      return HUIFU_CHANNEL_OPTIONS
     case 'epay':
       return EPAY_CHANNEL_OPTIONS
     case 'official':
@@ -74,6 +80,7 @@ const QR_REDIRECT = ['qr', 'redirect']
 export const interactionModesFor = (provider: string, channelType: string, orderModes: OrderModes): string[] => {
   if (provider === 'bepusdt') return orderModes.bepusdt === 'cashier' ? ['redirect'] : QR_REDIRECT
   if (provider === 'epusdt') return ['redirect']
+  if (provider === 'huifu') return ['redirect']
   if (provider === 'dujiaopay') return orderModes.dujiaopay === 'cashier' ? ['redirect'] : QR_REDIRECT
   if (provider === 'official') {
     if (channelType === 'paypal' || channelType === 'stripe') return ['redirect']
@@ -94,6 +101,7 @@ export const isDujiaopayTokenId = (value: string) => /^[a-z0-9]+(?:-[a-z0-9]+)+$
 export const channelTypeForProvider = (provider: string, current: string, dujiaopayOrderMode: string): string => {
   switch (provider) {
     case 'epay':
+    case 'huifu':
     case 'official':
     case 'okpay': {
       const allowed = channelOptionsFor(provider).map((o) => o.value)
@@ -235,6 +243,19 @@ export interface DujiaopayConfig {
   success_url: string
   cancel_url: string
 }
+export interface HuifuConfig {
+  api_base_url: string
+  sys_id: string
+  product_id: string
+  huifu_id: string
+  merchant_private_key: string
+  huifu_public_key: string
+  skill_source: string
+  project_id: string
+  project_title: string
+  notify_url: string
+  return_url: string
+}
 
 export interface ProviderConfigs {
   epay: EpayConfig
@@ -247,6 +268,7 @@ export interface ProviderConfigs {
   tokenpay: TokenpayConfig
   okpay: OkpayConfig
   dujiaopay: DujiaopayConfig
+  huifu: HuifuConfig
 }
 export type ConfigSection = keyof ProviderConfigs
 
@@ -257,6 +279,7 @@ const STRIPE_API = 'https://api.stripe.com'
 const ALIPAY_GATEWAY = 'https://openapi.alipay.com/gateway.do'
 const OKPAY_GATEWAY = 'https://api.okaypay.me/shop'
 const DUJIAOPAY_API = 'https://www.dujiaopay.com'
+const HUIFU_API = 'https://api.huifu.com'
 
 /** Values used for a fresh "create" dialog (original reset*Config functions). */
 export const defaultConfigs = (): ProviderConfigs => ({
@@ -373,6 +396,19 @@ export const defaultConfigs = (): ProviderConfigs => ({
     fiat_currency: 'CNY',
     success_url: DEFAULT_RETURN_URL,
     cancel_url: DEFAULT_RETURN_URL,
+  },
+  huifu: {
+    api_base_url: HUIFU_API,
+    sys_id: '',
+    product_id: '',
+    huifu_id: '',
+    merchant_private_key: '',
+    huifu_public_key: '',
+    skill_source: 'hfps/1.3.5',
+    project_id: '',
+    project_title: 'Zebra Store',
+    notify_url: DEFAULT_NOTIFY_URL,
+    return_url: DEFAULT_RETURN_URL,
   },
 })
 
@@ -510,6 +546,19 @@ export const applyConfigs = (raw: Raw): ProviderConfigs => {
       success_url: str(raw, 'success_url'),
       cancel_url: str(raw, 'cancel_url'),
     },
+    huifu: {
+      api_base_url: str(raw, 'api_base_url', HUIFU_API),
+      sys_id: str(raw, 'sys_id'),
+      product_id: str(raw, 'product_id'),
+      huifu_id: str(raw, 'huifu_id'),
+      merchant_private_key: str(raw, 'merchant_private_key'),
+      huifu_public_key: str(raw, 'huifu_public_key'),
+      skill_source: str(raw, 'skill_source', 'hfps/1.3.5'),
+      project_id: str(raw, 'project_id'),
+      project_title: str(raw, 'project_title', 'Zebra Store'),
+      notify_url: str(raw, 'notify_url', DEFAULT_NOTIFY_URL),
+      return_url: str(raw, 'return_url', DEFAULT_RETURN_URL),
+    },
   }
 }
 
@@ -518,7 +567,7 @@ export const configSectionFor = (provider: string, channelType: string): ConfigS
   if (provider === 'official') {
     return channelType === 'paypal' || channelType === 'stripe' || channelType === 'alipay' || channelType === 'wechat' ? channelType : null
   }
-  return provider === 'epay' || provider === 'bepusdt' || provider === 'epusdt' || provider === 'tokenpay' || provider === 'okpay' || provider === 'dujiaopay'
+  return provider === 'epay' || provider === 'huifu' || provider === 'bepusdt' || provider === 'epusdt' || provider === 'tokenpay' || provider === 'okpay' || provider === 'dujiaopay'
     ? provider
     : null
 }
@@ -659,6 +708,21 @@ export const buildDujiaopayConfig = (c: DujiaopayConfig, channelType: string): R
   }
   return out
 }
+
+export const buildHuifuConfig = (c: HuifuConfig): Raw =>
+  pickNonEmpty(c, [
+    'api_base_url',
+    'sys_id',
+    'product_id',
+    'huifu_id',
+    'merchant_private_key',
+    'huifu_public_key',
+    'skill_source',
+    'project_id',
+    'project_title',
+    'notify_url',
+    'return_url',
+  ])
 
 // ---------------------------------------------------------------------------------------------
 // Order-mode side effects (original order_mode watchers). They mutate the given config.
@@ -822,6 +886,9 @@ export const buildConfigJson = (form: ChannelForm, configs: ProviderConfigs): { 
         ...withoutKeys(config, [...(configs.epay.epay_version === 'v1' ? ['private_key', 'platform_public_key'] : ['merchant_key']), ...fx]),
         ...buildEpayConfig(configs.epay),
       }
+      break
+    case 'huifu':
+      config = { ...config, ...buildHuifuConfig(configs.huifu) }
       break
     case 'paypal':
       config = { ...withoutKeys(config, fx), ...buildPaypalConfig(configs.paypal) }

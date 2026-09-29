@@ -143,6 +143,53 @@ pub struct GatewayQueryResult {
     pub payload: Map<String, Value>,
 }
 
+/// Input for an original-route refund.
+#[derive(Debug, Clone, Default)]
+pub struct GatewayRefundInput {
+    pub provider_ref: String,
+    pub refund_no: String,
+    pub amount: Amount,
+    pub notify_url: String,
+    pub remark: String,
+    pub client_ip: String,
+}
+
+/// Result of a refund request. `status = Pending` means the request was accepted and must be
+/// confirmed by a signed notification or an active refund query.
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+pub struct GatewayRefundResult {
+    pub provider_ref: String,
+    pub status: Option<PaymentStatus>,
+    pub payload: Map<String, Value>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct GatewayTradeBillFile {
+    pub file_date: String,
+    pub file_id: String,
+    pub file_name: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct GatewayTradeBillTask {
+    pub data_date: String,
+    pub task_stat: String,
+    pub task_start_time: String,
+    pub task_end_time: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct GatewayTradeBillQuery {
+    pub files: Vec<GatewayTradeBillFile>,
+    pub tasks: Vec<GatewayTradeBillTask>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct GatewayTradeBillDownload {
+    pub file_name: String,
+    pub body: Vec<u8>,
+}
+
 /// A verified callback/webhook, normalized (`GatewayCallbackResult`).
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct GatewayCallbackResult {
@@ -175,6 +222,7 @@ pub struct GatewayCapabilities {
     pub webhook: bool,
     pub callback: bool,
     pub security_test: bool,
+    pub trade_bills: bool,
 }
 
 /// A payment provider adapter.
@@ -201,6 +249,39 @@ pub trait PaymentGateway: Send + Sync + std::fmt::Debug {
         _config: &ChannelConfig,
         _provider_ref: &str,
     ) -> Result<GatewayQueryResult, GatewayError> {
+        Err(GatewayError::Unsupported)
+    }
+
+    async fn refund_payment(
+        &self,
+        _config: &ChannelConfig,
+        _input: &GatewayRefundInput,
+    ) -> Result<GatewayRefundResult, GatewayError> {
+        Err(GatewayError::Unsupported)
+    }
+
+    async fn query_refund(
+        &self,
+        _config: &ChannelConfig,
+        _provider_ref: &str,
+    ) -> Result<GatewayRefundResult, GatewayError> {
+        Err(GatewayError::Unsupported)
+    }
+
+    async fn query_trade_bill(
+        &self,
+        _config: &ChannelConfig,
+        _file_date: &str,
+    ) -> Result<GatewayTradeBillQuery, GatewayError> {
+        Err(GatewayError::Unsupported)
+    }
+
+    async fn download_trade_bill(
+        &self,
+        _config: &ChannelConfig,
+        _file_date: &str,
+        _file_id: &str,
+    ) -> Result<GatewayTradeBillDownload, GatewayError> {
         Err(GatewayError::Unsupported)
     }
 

@@ -8,7 +8,10 @@ use zs_domain::payment::channel::{
     check_channel_rules, merge_config, redact_channel,
 };
 use zs_domain::payment::errors::keys;
-use zs_domain::payment::gateway::{GatewayError, GatewayRegistry, GatewaySecurityTestResult};
+use zs_domain::payment::gateway::{
+    GatewayError, GatewayRegistry, GatewaySecurityTestResult, GatewayTradeBillDownload,
+    GatewayTradeBillQuery,
+};
 use zs_domain::payment::types::{channel_type, provider};
 use zs_domain::{Error, Id, Result};
 use zs_shared::money::Amount;
@@ -250,6 +253,52 @@ impl ChannelService {
             "payment_channel_security_test_success"
         );
         Ok(result)
+    }
+
+    async fn trade_bill_gateway(
+        &self,
+        id: Id,
+    ) -> Result<(
+        PaymentChannel,
+        Arc<dyn zs_domain::payment::gateway::PaymentGateway>,
+    )> {
+        let channel = self.load(id, keys::CHANNEL_FETCH_FAILED).await?;
+        if channel.provider() != provider::HUIFU {
+            return Err(Error::bad_request(keys::PROVIDER_NOT_SUPPORTED));
+        }
+        let gateway = self
+            .registry
+            .lookup(&channel.provider_type, &channel.channel_type)
+            .filter(|gateway| gateway.capabilities().trade_bills)
+            .ok_or_else(|| Error::bad_request(keys::PROVIDER_NOT_SUPPORTED))?;
+        Ok((channel, gateway))
+    }
+
+    pub async fn query_trade_bill(&self, id: Id, file_date: &str) -> Result<GatewayTradeBillQuery> {
+        let (channel, gateway) = self.trade_bill_gateway(id).await?;
+        gateway
+            .query_trade_bill(&channel.config_json, file_date)
+            .await
+            .map_err(|error| {
+                tracing::warn!(channel_id = id, %error, "payment_trade_bill_query_failed");
+                Error::bad_request(keys::CHANNEL_INVALID)
+            })
+    }
+
+    pub async fn download_trade_bill(
+        &self,
+        id: Id,
+        file_date: &str,
+        file_id: &str,
+    ) -> Result<GatewayTradeBillDownload> {
+        let (channel, gateway) = self.trade_bill_gateway(id).await?;
+        gateway
+            .download_trade_bill(&channel.config_json, file_date, file_id)
+            .await
+            .map_err(|error| {
+                tracing::warn!(channel_id = id, %error, "payment_trade_bill_download_failed");
+                Error::bad_request(keys::CHANNEL_INVALID)
+            })
     }
 }
 

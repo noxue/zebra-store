@@ -701,6 +701,24 @@ export interface AdminProcurementOrder {
 }
 
 // --- Reconciliation ---
+export interface AdminTradeBillFile {
+  file_date: string
+  file_id: string
+  file_name: string
+}
+
+export interface AdminTradeBillTask {
+  data_date: string
+  task_stat: string
+  task_start_time: string
+  task_end_time: string
+}
+
+export interface AdminTradeBillQuery {
+  files: AdminTradeBillFile[]
+  tasks: AdminTradeBillTask[]
+}
+
 export interface AdminReconciliationJob {
   id: number
   connection_id: number

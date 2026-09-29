@@ -1,7 +1,7 @@
-import { defineComponent, onMounted, watch } from 'vue'
+import { defineComponent, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Plus, RefreshCw, Save } from 'lucide-vue-next'
+import { FileDown, Plus, RefreshCw, Save } from 'lucide-vue-next'
 import { Badge, Button, Card, DataTable, FilterBar, IdCell, ListPagination, PageHeader, Select, Switch, type DataTableColumn } from '@/components/ui'
 import type { AdminPaymentChannel } from '@/api/types'
 import { getImageUrl } from '@/utils/image'
@@ -9,6 +9,7 @@ import { PROVIDER_TYPES } from './paymentChannelRules'
 import { CHANNEL_FILTER_TYPES, channelTypeLabel, formatFeeRate, interactionModeLabel, providerTypeLabel, resolveChannelTypeDisplay } from './paymentLabels'
 import { usePaymentChannels } from './usePaymentChannels'
 import { PaymentChannelModal } from './components/PaymentChannelModal'
+import { HuifuTradeBillDialog } from './components/HuifuTradeBillDialog'
 
 export default defineComponent({
   name: 'PaymentChannelsView',
@@ -17,6 +18,13 @@ export default defineComponent({
     const route = useRoute()
     const p = usePaymentChannels()
     const { filters, list, feeConfig } = p
+    const tradeBillOpen = ref(false)
+    const tradeBillChannel = ref<AdminPaymentChannel | null>(null)
+
+    const openTradeBill = (channel: AdminPaymentChannel) => {
+      tradeBillChannel.value = channel
+      tradeBillOpen.value = true
+    }
 
     onMounted(() => {
       void list.fetchData(1)
@@ -82,6 +90,12 @@ export default defineComponent({
         align: 'right',
         render: (r) => (
           <div class="flex flex-wrap justify-end gap-2">
+            {r.provider_type === 'huifu' && (
+              <Button size="sm" onClick={() => openTradeBill(r)}>
+                <FileDown class="h-4 w-4" />
+                {t('admin.paymentChannels.tradeBill.action')}
+              </Button>
+            )}
             <Button size="sm" onClick={() => p.openEdit(r.id)}>
               {t('admin.common.edit')}
             </Button>
@@ -159,6 +173,7 @@ export default defineComponent({
         </div>
 
         <PaymentChannelModal v-model={p.showModal.value} channelId={p.editingId.value} onSuccess={p.onModalSuccess} />
+        <HuifuTradeBillDialog v-model={tradeBillOpen.value} channel={tradeBillChannel.value} />
       </div>
     )
   },

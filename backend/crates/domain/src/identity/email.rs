@@ -7,6 +7,8 @@ use crate::{Error, Result};
 const PLACEHOLDER_PREFIX: &str = "telegram_";
 /// Domain of the placeholder emails generated for Telegram-only accounts.
 const PLACEHOLDER_DOMAIN: &str = "@login.local";
+/// Domain reserved for anonymous browser identities used by guest checkout.
+const GUEST_BROWSER_DOMAIN: &str = "@uuid.com";
 
 /// Error key for malformed email addresses.
 pub const KEY_EMAIL_INVALID: &str = "error.email_invalid";
@@ -48,12 +50,27 @@ pub fn normalize(email: &str) -> Result<String> {
     Ok(normalized)
 }
 
-/// True for the system-generated Telegram placeholder addresses.
+fn is_uuid_v4(value: &str) -> bool {
+    if value.len() != 36 {
+        return false;
+    }
+    value.bytes().enumerate().all(|(index, byte)| match index {
+        8 | 13 | 18 | 23 => byte == b'-',
+        14 => byte == b'4',
+        19 => matches!(byte, b'8' | b'9' | b'a' | b'b'),
+        _ => byte.is_ascii_hexdigit(),
+    })
+}
+
+/// True for system-generated identities that must never receive e-mail.
 pub fn is_placeholder(email: &str) -> bool {
     let normalized = email.trim().to_lowercase();
-    !normalized.is_empty()
+    (!normalized.is_empty()
         && normalized.starts_with(PLACEHOLDER_PREFIX)
-        && normalized.ends_with(PLACEHOLDER_DOMAIN)
+        && normalized.ends_with(PLACEHOLDER_DOMAIN))
+        || normalized
+            .strip_suffix(GUEST_BROWSER_DOMAIN)
+            .is_some_and(is_uuid_v4)
 }
 
 /// Normalises an address typed by a user (registration, email change): Telegram
@@ -107,6 +124,12 @@ mod tests {
         assert_eq!(normalize("bad").unwrap_err().key(), KEY_EMAIL_INVALID);
         // Lesson 393079aa: Telegram placeholder addresses cannot be registered.
         assert!(is_placeholder("Telegram_123@login.local"));
+        assert!(is_placeholder(
+            "550e8400-e29b-41d4-a716-446655440000@uuid.com"
+        ));
+        assert!(!is_placeholder(
+            "550e8400-e29b-11d4-a716-446655440000@uuid.com"
+        ));
         assert_eq!(
             normalize_user_supplied("telegram_123@login.local")
                 .unwrap_err()

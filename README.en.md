@@ -7,6 +7,11 @@ Zebra Store is a self-hosted digital-goods commerce platform. Its backend uses *
 - Repository: [github.com/noxue/zebra-store](https://github.com/noxue/zebra-store)
 - User guide: [zebra-store-docs.noxue.com](https://zebra-store-docs.noxue.com)
 - Downloads: [GitHub Releases](https://github.com/noxue/zebra-store/releases)
+- Huifu SDK: [huifu-pay](https://github.com/noxue/huifu-pay) ([`huifu-pay` on crates.io](https://crates.io/crates/huifu-pay))
+
+Zebra Store supports hosted Alipay and WeChat H5/PC collection through Huifu, including payment creation, RSA-verified notifications, active queries, original-route refunds, and trade-bill downloads. See the [Huifu setup guide](https://zebra-store-docs.noxue.com/payment/huifu).
+
+Guest checkout can leave both email and order password empty. The storefront persists a UUID browser identity in `localStorage`, so orders remain available after a refresh or reopening the site. If the buyer enters an email and password, those credentials are also saved and restored for later lookup.
 
 ## Screenshots
 

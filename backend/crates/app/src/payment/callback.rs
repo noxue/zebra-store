@@ -40,6 +40,7 @@ pub mod replies {
     pub const OKPAY_FAIL: &str = r#"{"status":"fail"}"#;
     pub const WECHAT_SUCCESS: &str = r#"{"code":"SUCCESS","message":"成功"}"#;
     pub const WECHAT_FAIL: &str = r#"{"code":"FAIL","message":"失败"}"#;
+    pub const HUIFU_FAIL: &str = "fail";
 }
 
 /// Content type of plain-text replies (gin `c.String`).
@@ -266,6 +267,9 @@ impl CallbackService {
         }
         let form = parse_callback_form(req);
         if let Some(form) = &form {
+            if let Some(reply) = self.try_huifu(req, form).await {
+                return reply;
+            }
             if let Some(reply) = self.try_alipay(req, form).await {
                 return reply;
             }
@@ -292,6 +296,50 @@ impl CallbackService {
         );
         self.alert(req, alert).await;
         CallbackReply::not_found()
+    }
+
+    async fn try_huifu(&self, req: &CallbackRequest, form: &FormMap) -> Option<CallbackReply> {
+        let sign = form_raw(form, "sign");
+        let resp_data = form_raw(form, "resp_data");
+        if sign.trim().is_empty() || resp_data.trim().is_empty() {
+            return None;
+        }
+        let data = serde_json::from_str::<Map<String, Value>>(&resp_data).ok()?;
+        let order_no = data
+            .get("req_seq_id")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .trim()
+            .to_owned();
+        let merchant = data
+            .get("huifu_id")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        if order_no.is_empty() || merchant.trim().is_empty() {
+            return None;
+        }
+        let Some(payment) = self.find_by_gateway_order_no(&order_no).await else {
+            tracing::warn!(%order_no, "huifu_callback_payment_not_found");
+            return Some(CallbackReply::text(replies::HUIFU_FAIL));
+        };
+        let Some(channel) = self.channel_of(&payment).await else {
+            return Some(CallbackReply::text(replies::HUIFU_FAIL));
+        };
+        if channel.provider() != provider::HUIFU {
+            return None;
+        }
+        Some(match self.handle_sync_callback(&channel, form, &[]).await {
+            Ok(_) => CallbackReply::text(&format!("RECV_ORD_ID_{order_no}")),
+            Err(error) => {
+                tracing::warn!(payment_id = payment.id, %order_no, %error, "huifu_callback_handle_failed");
+                let alert =
+                    PaymentAlert::new("huifu_callback_handle_failed", "error", &error.to_string())
+                        .with("payment_id", payment.id.to_string())
+                        .with("provider", provider::HUIFU);
+                self.alert(req, alert).await;
+                CallbackReply::text(replies::HUIFU_FAIL)
+            }
+        })
     }
 
     fn query_channel_id(req: &CallbackRequest) -> std::result::Result<Id, ()> {

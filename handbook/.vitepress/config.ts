@@ -136,6 +136,7 @@ const sidebar: DefaultTheme.Sidebar = {
         { text: '易支付 epay', link: '/payment/epay' },
         { text: '支付宝官方', link: '/payment/alipay' },
         { text: '微信支付官方', link: '/payment/wechat' },
+        { text: '汇付（支付宝 / 微信）', link: '/payment/huifu' },
         { text: 'PayPal', link: '/payment/paypal' },
         { text: 'Stripe', link: '/payment/stripe' },
         { text: '加密货币网关', link: '/payment/crypto' },

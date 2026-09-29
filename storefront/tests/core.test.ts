@@ -5,7 +5,16 @@ import { buildUrl } from '@/api/client'
 import { mergeMessages } from '@/i18n'
 import { clampCartQuantity, useCartStore, type CartItem } from '@/stores/cart'
 import { cartItemAvailableStock, cartItemPurchaseLimit, cartItemPurchaseMin } from '@/utils/cartStock'
-import { clearGuestOrderAuth, loadGuestOrderAuth, saveGuestOrderAuth } from '@/utils/guestOrderAuth'
+import {
+  clearGuestOrderAuth,
+  createGeneratedGuestOrderAuth,
+  ensureGuestOrderAuth,
+  isGeneratedGuestOrderAuth,
+  loadGuestOrderAuth,
+  loadGuestOrderDraft,
+  saveGuestOrderAuth,
+  saveGuestOrderDraft,
+} from '@/utils/guestOrderAuth'
 import { localizedText } from '@/utils/localized'
 import { addAmounts, amountToCents, centsToAmount, formatMoney, multiplyAmount } from '@/utils/money'
 import {
@@ -75,16 +84,26 @@ describe('guest order auth storage', () => {
     sessionStorage.clear()
     localStorage.clear()
   })
-  it('saves to sessionStorage only', () => {
+  it('persists credentials in localStorage across browser sessions', () => {
     saveGuestOrderAuth({ email: 'a@b.c', order_password: 'x' })
-    expect(JSON.parse(sessionStorage.getItem('guest_order_auth') || '{}')).toEqual({ email: 'a@b.c', order_password: 'x' })
-    expect(localStorage.getItem('guest_order_auth')).toBeNull()
+    expect(JSON.parse(localStorage.getItem('guest_order_auth') || '{}')).toEqual({ email: 'a@b.c', order_password: 'x' })
+    expect(sessionStorage.getItem('guest_order_auth')).toBeNull()
   })
-  it('migrates legacy localStorage credentials', () => {
-    localStorage.setItem('guest_order_auth', JSON.stringify({ email: 'old@x.y', order_password: 'p' }))
-    expect(loadGuestOrderAuth()).toEqual({ email: 'old@x.y', order_password: 'p' })
-    expect(localStorage.getItem('guest_order_auth')).toBeNull()
-    expect(sessionStorage.getItem('guest_order_auth')).not.toBeNull()
+  it('creates and reuses a uuid browser identity', () => {
+    const generated = ensureGuestOrderAuth()
+    expect(isGeneratedGuestOrderAuth(generated)).toBe(true)
+    expect(loadGuestOrderAuth()).toEqual(generated)
+    expect(ensureGuestOrderAuth()).toEqual(generated)
+  })
+  it('recognizes only matching uuid email and password pairs', () => {
+    const generated = createGeneratedGuestOrderAuth()
+    expect(isGeneratedGuestOrderAuth(generated)).toBe(true)
+    expect(isGeneratedGuestOrderAuth({ ...generated, order_password: 'different' })).toBe(false)
+  })
+  it('persists an incomplete checkout draft for refresh recovery', () => {
+    saveGuestOrderDraft({ email: 'buyer@example.com', order_password: '' })
+    expect(loadGuestOrderDraft()).toEqual({ email: 'buyer@example.com', order_password: '' })
+    expect(JSON.parse(localStorage.getItem('guest_order_auth_draft') || '{}')).toEqual({ email: 'buyer@example.com', order_password: '' })
   })
 })
 

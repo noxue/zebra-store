@@ -11,6 +11,7 @@ pub mod provider {
     pub const EPUSDT: &str = "epusdt";
     pub const BEPUSDT: &str = "bepusdt";
     pub const DUJIAOPAY: &str = "dujiaopay";
+    pub const HUIFU: &str = "huifu";
     pub const OKPAY: &str = "okpay";
     pub const TOKENPAY: &str = "tokenpay";
     pub const WALLET: &str = "wallet";

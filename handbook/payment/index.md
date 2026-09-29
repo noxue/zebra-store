@@ -19,7 +19,7 @@
 | 字段 | 说明 |
 |---|---|
 | 名称、图标 | 显示在结算页，例如“支付宝” |
-| 支付提供方 | 易支付、官方（支付宝 / 微信 / PayPal / Stripe）、BEpusdt、epusdt、OKPay、TokenPay、DujiaoPay |
+| 支付提供方 | 汇付、易支付、官方（支付宝 / 微信 / PayPal / Stripe）、BEpusdt、epusdt、OKPay、TokenPay、DujiaoPay |
 | 渠道类型 | 例如 `alipay`、`wechat`、`usdt-trc20` |
 | 交互方式 | **二维码**（页面上显示二维码）、**跳转**（跳到支付平台页面）、**手机网页**、**电脑网页** |
 | 费率 / 固定手续费 | 用于计算手续费；开启“买家承担手续费”时加到应付金额上 |
@@ -35,7 +35,7 @@
 
 | 提供方 | 回调地址 |
 |---|---|
-| 易支付、支付宝官方、微信官方、OKPay、TokenPay、epusdt、BEpusdt | `https://你的域名/api/v1/payments/callback` |
+| 汇付、易支付、支付宝官方、微信官方、OKPay、TokenPay、epusdt、BEpusdt | `https://你的域名/api/v1/payments/callback` |
 | PayPal | `https://你的域名/api/v1/payments/webhook/paypal?channel_id=渠道ID` |
 | Stripe | `https://你的域名/api/v1/payments/webhook/stripe?channel_id=渠道ID` |
 | DujiaoPay | `https://你的域名/api/v1/payments/webhook/dujiaopay?channel_id=渠道ID` |

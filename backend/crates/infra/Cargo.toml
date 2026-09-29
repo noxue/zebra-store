@@ -10,6 +10,7 @@ zs-shared.workspace = true
 zs-domain.workspace = true
 zs-app.workspace = true
 zs-migration.workspace = true
+huifu-pay.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

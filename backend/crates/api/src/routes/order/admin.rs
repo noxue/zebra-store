@@ -30,6 +30,7 @@ pub(super) fn routes() -> Routes {
         .patch("/orders/{id}", update_status)
         .post("/orders/{id}/refund-to-wallet", refund_to_wallet)
         .post("/orders/{id}/manual-refund", manual_refund)
+        .post("/orders/{id}/original-refund", original_refund)
         .get("/orders/{id}/fulfillment/download", download_fulfillment)
         .get("/order-refunds", list_refunds)
         .get("/order-refunds/{id}", refund_detail)
@@ -171,6 +172,30 @@ async fn manual_refund(
         )
         .await?;
     ok(json!({"order": done.order, "refund_record": done.record}))
+}
+
+async fn original_refund(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+    Bind(req): Bind<RefundBody>,
+) -> ApiResult<Data<Value>> {
+    let result = s
+        .svc
+        .order
+        .service
+        .original_refund(
+            order_id(&id)?,
+            &amount_text(&req.amount)?,
+            &req.remark,
+            req.payment_fee_refunded,
+            "",
+        )
+        .await?;
+    ok(json!({
+        "gateway": result.gateway,
+        "order": result.completed.as_ref().map(|done| &done.order),
+        "refund_record": result.completed.as_ref().map(|done| &done.record),
+    }))
 }
 
 async fn download_fulfillment(

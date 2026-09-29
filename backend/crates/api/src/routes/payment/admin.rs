@@ -33,6 +33,11 @@ pub(super) fn routes() -> Routes {
             "/payment-channels/{id}/wechatpay-public-key-test",
             test_wechatpay_public_key,
         )
+        .get("/payment-channels/{id}/trade-bill", query_trade_bill)
+        .get(
+            "/payment-channels/{id}/trade-bill/download",
+            download_trade_bill,
+        )
         .put("/payment-channels/{id}", update_channel)
         .delete("/payment-channels/{id}", delete_channel)
         .get("/payments", list_payments)
@@ -220,6 +225,73 @@ async fn test_wechatpay_public_key(
 ) -> ApiResult<Data<GatewaySecurityTestResult>> {
     let id = parse_id(&id, keys::CHANNEL_INVALID)?;
     ok(s.svc.payment.channels.test_security(id).await?)
+}
+
+fn bill_date(q: &HashMap<String, String>) -> Result<String, ApiError> {
+    let date = text(q, "file_date");
+    if date.len() != 8 || !date.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(Error::invalid().into());
+    }
+    Ok(date)
+}
+
+async fn query_trade_bill(
+    State(s): State<AppState>,
+    _: ComplianceAcked,
+    Path(id): Path<String>,
+    Query(q): Params,
+) -> ApiResult<Data<zs_domain::payment::gateway::GatewayTradeBillQuery>> {
+    let result = s
+        .svc
+        .payment
+        .channels
+        .query_trade_bill(parse_id(&id, keys::CHANNEL_INVALID)?, &bill_date(&q)?)
+        .await?;
+    ok(result)
+}
+
+async fn download_trade_bill(
+    State(s): State<AppState>,
+    _: ComplianceAcked,
+    Path(id): Path<String>,
+    Query(q): Params,
+) -> ApiResult<Response> {
+    let file_id = text(&q, "file_id");
+    if file_id.is_empty() {
+        return Err(Error::invalid().into());
+    }
+    let result = s
+        .svc
+        .payment
+        .channels
+        .download_trade_bill(
+            parse_id(&id, keys::CHANNEL_INVALID)?,
+            &bill_date(&q)?,
+            &file_id,
+        )
+        .await?;
+    let filename: String = result
+        .file_name
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || matches!(ch, '.' | '-' | '_') {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    Ok((
+        [
+            (header::CONTENT_TYPE, "application/octet-stream".to_owned()),
+            (
+                header::CONTENT_DISPOSITION,
+                format!("attachment; filename=\"{filename}\""),
+            ),
+        ],
+        result.body,
+    )
+        .into_response())
 }
 
 fn payment_filter(

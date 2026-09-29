@@ -23,7 +23,7 @@
 | 字段 | 说明 |
 |---|---|
 | 名称、图标 | 显示在结算页 |
-| 支付提供方 | 易支付（epay）、官方（支付宝 / 微信 / PayPal / Stripe）、BEpusdt、epusdt、OKPay、TokenPay、DujiaoPay |
+| 支付提供方 | 汇付、易支付（epay）、官方（支付宝 / 微信 / PayPal / Stripe）、BEpusdt、epusdt、OKPay、TokenPay、DujiaoPay |
 | 渠道类型 | 例如 alipay、wechat、usdt-trc20，可选项取决于提供方 |
 | 交互方式 | 二维码 / 跳转 / 手机网页（wap）/ 电脑网页（page），可选项取决于提供方 |
 | 费率、固定手续费 | 例如 0.6% + 0 |
@@ -37,6 +37,8 @@
 **提供方配置**：每种支付平台要填的商户号、密钥等各不相同，逐个说明见 [支付渠道配置](/payment/)。
 
 微信支付渠道有 **测试公钥** 按钮，用来检查平台公钥配置是否正确。
+
+汇付渠道有 **交易账单** 按钮，可查询并下载支付宝、微信收款的 `TRADE_BILL`。文件生成日期通常填写交易日期的次日，完整说明见[汇付支付](/payment/huifu#下载交易对账单)。
 
 ## 支付记录
 
@@ -54,7 +56,7 @@
 
 | 用途 | 默认路径 |
 |---|---|
-| 通用支付回调（易支付、支付宝、微信、OKPay、TokenPay、epusdt、BEpusdt） | `/api/v1/payments/callback` |
+| 通用支付回调（汇付、易支付、支付宝、微信、OKPay、TokenPay、epusdt、BEpusdt） | `/api/v1/payments/callback` |
 | DujiaoPay | `/api/v1/payments/webhook/dujiaopay` |
 | PayPal | `/api/v1/payments/webhook/paypal` |
 | Stripe | `/api/v1/payments/webhook/stripe` |

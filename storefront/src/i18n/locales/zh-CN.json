@@ -1113,12 +1113,12 @@
     "modeTitle": "购买方式",
     "guestPurchase": "游客购买",
     "memberPurchase": "登录会员购买",
-    "guestEmailPlaceholder": "邮箱（用于查询订单）",
-    "guestPasswordPlaceholder": "订单密码",
+    "guestEmailPlaceholder": "邮箱（选填，用于查询订单）",
+    "guestPasswordPlaceholder": "订单密码（选填）",
     "guestInstructions": {
-      "title": "填写说明：",
-      "email": "邮箱：请填写一个可接收邮件的邮箱，您在付款后我们可通过该邮箱向您发送商品信息并可通过该邮箱联系您",
-      "password": "订单密码：请自行设置一个复杂密码并妥善保管，该密码用于您在购买之后，通过“游客查单”菜单，查询您所购买的商品"
+      "title": "游客身份会保存在当前浏览器：",
+      "email": "邮箱和订单密码均可不填，系统会为此浏览器生成专属身份，刷新页面后仍可查询订单。",
+      "password": "如需跨设备查单，请同时填写邮箱和订单密码；系统会在本机自动保存并回填。"
     },
     "manualFormTitle": "交付信息填写",
     "manualFormTip": "人工交付信息按商品收集：同一商品购买多个 SKU 时仅需填写一次。",
@@ -1156,6 +1156,7 @@
     "errors": {
       "emptyCart": "购物车为空",
       "missingGuest": "请输入邮箱与订单密码",
+      "incompleteGuest": "邮箱与订单密码请同时填写，或两项都留空",
       "guestPasswordTooShort": "订单密码至少 6 位",
       "loginOrGuest": "请先登录或使用游客购买",
       "submitFailed": "提交失败，请稍后重试",

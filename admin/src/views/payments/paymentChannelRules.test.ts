@@ -26,6 +26,7 @@ const form = (patch: Partial<ChannelForm>): ChannelForm => ({ ...defaultChannelF
 describe('channel type options', () => {
   it('maps providers to their channel types', () => {
     expect(channelOptionsFor('epay').map((o) => o.value)).toEqual(['wechat', 'alipay', 'qqpay'])
+    expect(channelOptionsFor('huifu').map((o) => o.value)).toEqual(['wechat', 'alipay'])
     expect(channelOptionsFor('official').map((o) => o.value)).toEqual(['paypal', 'stripe', 'alipay', 'wechat'])
     expect(channelOptionsFor('bepusdt').map((o) => o.value)).toEqual(['usdt-trc20', 'usdc-trc20', 'trx'])
     expect(channelOptionsFor('okpay').map((o) => o.value)).toEqual(['usdt', 'trx'])
@@ -40,6 +41,8 @@ describe('channel type options', () => {
 
   it('resets channel_type when switching provider', () => {
     expect(channelTypeForProvider('epay', 'paypal', 'transaction')).toBe('wechat')
+    expect(channelTypeForProvider('huifu', 'qqpay', 'transaction')).toBe('wechat')
+    expect(channelTypeForProvider('huifu', 'alipay', 'transaction')).toBe('alipay')
     expect(channelTypeForProvider('epay', 'alipay', 'transaction')).toBe('alipay')
     expect(channelTypeForProvider('official', 'alipay', 'transaction')).toBe('alipay')
     expect(channelTypeForProvider('official', 'qqpay', 'transaction')).toBe('paypal')
@@ -61,6 +64,7 @@ describe('channel type options', () => {
 describe('interaction modes', () => {
   it('depends on provider, channel and order mode', () => {
     expect(interactionModesFor('epay', 'alipay', tx)).toEqual(['qr', 'redirect'])
+    expect(interactionModesFor('huifu', 'alipay', tx)).toEqual(['redirect'])
     expect(interactionModesFor('bepusdt', 'bepusdt', tx)).toEqual(['qr', 'redirect'])
     expect(interactionModesFor('bepusdt', 'bepusdt', { ...tx, bepusdt: 'cashier' })).toEqual(['redirect'])
     expect(interactionModesFor('epusdt', 'epusdt', tx)).toEqual(['redirect'])
@@ -81,6 +85,7 @@ describe('interaction modes', () => {
 describe('config sections', () => {
   it('selects the dedicated form', () => {
     expect(configSectionFor('epay', 'wechat')).toBe('epay')
+    expect(configSectionFor('huifu', 'wechat')).toBe('huifu')
     expect(configSectionFor('official', 'stripe')).toBe('stripe')
     expect(configSectionFor('official', 'wechat')).toBe('wechat')
     expect(configSectionFor('dujiaopay', 'tron-usdt')).toBe('dujiaopay')

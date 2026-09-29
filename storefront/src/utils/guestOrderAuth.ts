@@ -4,96 +4,122 @@ export interface GuestOrderAuth {
 }
 
 const GUEST_ORDER_AUTH_KEY = 'guest_order_auth'
-const EMPTY_GUEST_ORDER_AUTH: GuestOrderAuth = {
-  email: '',
-  order_password: '',
-}
-
-type GuestOrderAuthStorage = 'sessionStorage' | 'localStorage'
+const GUEST_ORDER_DRAFT_KEY = 'guest_order_auth_draft'
+const GENERATED_EMAIL_SUFFIX = '@uuid.com'
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const EMPTY_GUEST_ORDER_AUTH: GuestOrderAuth = { email: '', order_password: '' }
 
 let volatileGuestOrderAuth: GuestOrderAuth | null = null
+let volatileGuestOrderDraft: GuestOrderAuth | null = null
 
 const normalizeGuestOrderAuth = (auth: Partial<GuestOrderAuth>): GuestOrderAuth => ({
-  email: typeof auth.email === 'string' ? auth.email : '',
+  email: typeof auth.email === 'string' ? auth.email.trim() : '',
   order_password: typeof auth.order_password === 'string' ? auth.order_password : '',
 })
 
-const cloneGuestOrderAuth = (auth: GuestOrderAuth): GuestOrderAuth => ({ ...auth })
+const clone = (auth: GuestOrderAuth): GuestOrderAuth => ({ ...auth })
 
-const parseGuestOrderAuth = (raw: string | null): GuestOrderAuth | null => {
+const parse = (raw: string | null): GuestOrderAuth | null => {
   if (!raw) return null
   try {
-    const parsed = JSON.parse(raw) as Partial<GuestOrderAuth>
-    return normalizeGuestOrderAuth(parsed)
+    return normalizeGuestOrderAuth(JSON.parse(raw) as Partial<GuestOrderAuth>)
   } catch {
     return null
   }
 }
 
-const readStorage = (storageName: GuestOrderAuthStorage, key: string): string | null => {
+const read = (key: string): string | null => {
   try {
-    return window[storageName].getItem(key)
+    return window.localStorage.getItem(key)
   } catch {
     return null
   }
 }
 
-const writeStorage = (storageName: GuestOrderAuthStorage, key: string, value: string) => {
+const write = (key: string, value: GuestOrderAuth) => {
   try {
-    window[storageName].setItem(key, value)
+    window.localStorage.setItem(key, JSON.stringify(value))
   } catch {
-    // 浏览器禁用存储时由当前页面内存状态继续承接。
+    // 浏览器禁用存储时，当前页面仍使用内存中的身份。
   }
 }
 
-const removeStorage = (storageName: GuestOrderAuthStorage, key: string) => {
+const remove = (key: string) => {
   try {
-    window[storageName].removeItem(key)
+    window.localStorage.removeItem(key)
   } catch {
-    // 浏览器禁用存储时只保留当前页面内存状态。
+    // 浏览器禁用存储时只清理内存状态。
   }
 }
 
-// loadGuestOrderAuth 优先读取当前标签页的 sessionStorage，并执行一次旧版
-// localStorage -> sessionStorage 迁移。迁移后立即删除长期存储中的游客凭据。
+const randomUuid = (): string => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID()
+  const bytes = new Uint8Array(16)
+  crypto.getRandomValues(bytes)
+  bytes[6] = (bytes[6] & 0x0f) | 0x40
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
+
+export const isGeneratedGuestOrderAuth = (auth: GuestOrderAuth): boolean => {
+  const email = auth.email.toLowerCase()
+  if (!email.endsWith(GENERATED_EMAIL_SUFFIX)) return false
+  const uuid = email.slice(0, -GENERATED_EMAIL_SUFFIX.length)
+  return UUID_PATTERN.test(uuid) && auth.order_password.toLowerCase() === uuid
+}
+
+export const createGeneratedGuestOrderAuth = (): GuestOrderAuth => {
+  const uuid = randomUuid()
+  return { email: `${uuid}${GENERATED_EMAIL_SUFFIX}`, order_password: uuid }
+}
+
 export const loadGuestOrderAuth = (): GuestOrderAuth => {
-  if (typeof window === 'undefined') {
-    return cloneGuestOrderAuth(EMPTY_GUEST_ORDER_AUTH)
-  }
-  if (volatileGuestOrderAuth) {
-    return cloneGuestOrderAuth(volatileGuestOrderAuth)
-  }
+  if (typeof window === 'undefined') return clone(EMPTY_GUEST_ORDER_AUTH)
+  if (!volatileGuestOrderAuth) volatileGuestOrderAuth = parse(read(GUEST_ORDER_AUTH_KEY))
+  return clone(volatileGuestOrderAuth || EMPTY_GUEST_ORDER_AUTH)
+}
 
-  const sessionRaw = readStorage('sessionStorage', GUEST_ORDER_AUTH_KEY)
-  const legacyRaw = readStorage('localStorage', GUEST_ORDER_AUTH_KEY)
-  const sessionAuth = parseGuestOrderAuth(sessionRaw)
-  const legacyAuth = parseGuestOrderAuth(legacyRaw)
-  const parsed = sessionAuth || legacyAuth
-
-  if (parsed) {
-    volatileGuestOrderAuth = cloneGuestOrderAuth(parsed)
-  }
-  if (!sessionAuth && legacyAuth) {
-    writeStorage('sessionStorage', GUEST_ORDER_AUTH_KEY, JSON.stringify(legacyAuth))
-  }
-  if (legacyRaw !== null) {
-    removeStorage('localStorage', GUEST_ORDER_AUTH_KEY)
-  }
-  return cloneGuestOrderAuth(volatileGuestOrderAuth || EMPTY_GUEST_ORDER_AUTH)
+export const ensureGuestOrderAuth = (): GuestOrderAuth => {
+  const current = loadGuestOrderAuth()
+  if (current.email && current.order_password) return current
+  const generated = createGeneratedGuestOrderAuth()
+  saveGuestOrderAuth(generated)
+  return generated
 }
 
 export const saveGuestOrderAuth = (auth: GuestOrderAuth) => {
-  if (typeof window === 'undefined') return
   const normalized = normalizeGuestOrderAuth(auth)
-  volatileGuestOrderAuth = cloneGuestOrderAuth(normalized)
-  writeStorage('sessionStorage', GUEST_ORDER_AUTH_KEY, JSON.stringify(normalized))
-  // 不回退到 localStorage，避免把游客订单凭据重新变成长生命周期数据。
-  removeStorage('localStorage', GUEST_ORDER_AUTH_KEY)
+  volatileGuestOrderAuth = clone(normalized)
+  if (typeof window !== 'undefined') write(GUEST_ORDER_AUTH_KEY, normalized)
+}
+
+export const loadGuestOrderDraft = (): GuestOrderAuth => {
+  if (typeof window === 'undefined') return clone(EMPTY_GUEST_ORDER_AUTH)
+  if (!volatileGuestOrderDraft) volatileGuestOrderDraft = parse(read(GUEST_ORDER_DRAFT_KEY))
+  return clone(volatileGuestOrderDraft || EMPTY_GUEST_ORDER_AUTH)
+}
+
+export const saveGuestOrderDraft = (auth: GuestOrderAuth) => {
+  const normalized = normalizeGuestOrderAuth(auth)
+  volatileGuestOrderDraft = clone(normalized)
+  if (typeof window !== 'undefined') write(GUEST_ORDER_DRAFT_KEY, normalized)
+}
+
+export const clearGuestOrderDraft = () => {
+  volatileGuestOrderDraft = null
+  if (typeof window !== 'undefined') remove(GUEST_ORDER_DRAFT_KEY)
 }
 
 export const clearGuestOrderAuth = () => {
   volatileGuestOrderAuth = null
+  volatileGuestOrderDraft = null
   if (typeof window === 'undefined') return
-  removeStorage('sessionStorage', GUEST_ORDER_AUTH_KEY)
-  removeStorage('localStorage', GUEST_ORDER_AUTH_KEY)
+  remove(GUEST_ORDER_AUTH_KEY)
+  remove(GUEST_ORDER_DRAFT_KEY)
+  try {
+    window.sessionStorage.removeItem(GUEST_ORDER_AUTH_KEY)
+  } catch {
+    // 兼容清理旧版 sessionStorage 数据。
+  }
 }

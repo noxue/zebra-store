@@ -31,6 +31,8 @@ use crate::db::repo::marketing::promotion::SeaPromotionRepo;
 use crate::db::repo::order::SeaOrderStore;
 use crate::db::repo::order::cart::SeaCartRepo;
 use crate::db::repo::order::read::SeaOrderRepo;
+use crate::db::repo::payment::channel::SeaChannelRepo;
+use crate::db::repo::payment::records::SeaPaymentRepo;
 use crate::db::repo::reseller::SeaResellerStore;
 use crate::identity::mail::SmtpMailer;
 use crate::order::mail::SmtpOrderMailer;
@@ -109,6 +111,8 @@ fn base_service(
         repo: Arc::new(SeaOrderRepo::new(db.clone())),
         store: store.clone(),
         payments: store.clone(),
+        payment_records: Arc::new(SeaPaymentRepo::new(db.clone())),
+        payment_channels: Arc::new(SeaChannelRepo::new(db.clone())),
         wallet: store,
         cart: Arc::new(SeaCartRepo::new(db.clone())),
         catalog: Arc::new(SeaCatalogOrdering::new(db.clone())),

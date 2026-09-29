@@ -74,6 +74,7 @@ import type {
   AdminTelegramBotRuntimeStatus,
   AdminTelegramBroadcast,
   AdminTelegramBroadcastUser,
+  AdminTradeBillQuery,
   AdminUpdateGiftCardPayload,
   AdminUpdateRefundPaymentFeePayload,
   AdminUser,
@@ -253,6 +254,10 @@ export const adminAPI = {
   deletePaymentChannel: (id: Id) => api.delete<JsonObject>(`/admin/payment-channels/${id}`),
   testWechatPayPublicKey: (id: Id) =>
     api.post<AdminGatewaySecurityTestResult>(`/admin/payment-channels/${id}/wechatpay-public-key-test`, {}),
+  queryTradeBill: (id: Id, fileDate: string) =>
+    api.get<AdminTradeBillQuery>(`/admin/payment-channels/${id}/trade-bill`, { params: { file_date: fileDate } }),
+  downloadTradeBill: (id: Id, fileDate: string, fileId: string) =>
+    api.getBlob(`/admin/payment-channels/${id}/trade-bill/download`, { params: { file_date: fileDate, file_id: fileId }, timeout: 60_000 }),
 
   // ---- users / wallet ----
   getUsers: (params?: QueryParams) => api.get<AdminUser[]>('/admin/users', { params }),

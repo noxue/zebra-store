@@ -1160,12 +1160,12 @@
     "modeTitle": "Purchase Mode",
     "guestPurchase": "Guest checkout",
     "memberPurchase": "Login to buy",
-    "guestEmailPlaceholder": "Email (for order lookup)",
-    "guestPasswordPlaceholder": "Order password",
+    "guestEmailPlaceholder": "Email (optional, for order lookup)",
+    "guestPasswordPlaceholder": "Order password (optional)",
     "guestInstructions": {
-      "title": "Fill Instructions:",
-      "email": "Email: Please provide an email address that can receive emails. After payment, we could send product information and contact you through this email.",
-      "password": "Order Password: Please set a complex password and keep it safe. This password is used for you to query your purchased products through the \"Guest Order Lookup\" menu after purchase."
+      "title": "Your guest identity is saved in this browser:",
+      "email": "You may leave both fields empty. The store creates a browser identity so the order remains available after a refresh.",
+      "password": "For lookup on another device, enter both an email and an order password. This browser saves and restores them automatically."
     },
     "manualFormTitle": "Required information",
     "manualFormTip": "Manual-delivery information is collected per product. If multiple SKUs of the same product are purchased, fill it once only.",
@@ -1203,6 +1203,7 @@
     "errors": {
       "emptyCart": "Your cart is empty",
       "missingGuest": "Please enter email and order password",
+      "incompleteGuest": "Enter both email and order password, or leave both empty",
       "guestPasswordTooShort": "Order password must be at least 6 characters",
       "loginOrGuest": "Please login or use guest checkout",
       "submitFailed": "Submit failed, please try again",

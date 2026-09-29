@@ -766,6 +766,16 @@
       },
       {
         "subject": "",
+        "object": "/admin/payment-channels/:id/trade-bill",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/payment-channels/:id/trade-bill/download",
+        "action": "GET"
+      },
+      {
+        "subject": "",
         "object": "/admin/orders",
         "action": "GET"
       },
@@ -787,6 +797,11 @@
       {
         "subject": "",
         "object": "/admin/orders/:id/manual-refund",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/orders/:id/original-refund",
         "action": "POST"
       },
       {

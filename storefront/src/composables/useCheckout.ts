@@ -19,7 +19,16 @@ import {
   checkoutItemStockHint,
 } from '@/utils/checkoutStock'
 import { debounce } from '@/utils/debounce'
-import { saveGuestOrderAuth } from '@/utils/guestOrderAuth'
+import {
+  clearGuestOrderDraft,
+  ensureGuestOrderAuth,
+  isGeneratedGuestOrderAuth,
+  loadGuestOrderAuth,
+  loadGuestOrderDraft,
+  saveGuestOrderAuth,
+  saveGuestOrderDraft,
+  type GuestOrderAuth,
+} from '@/utils/guestOrderAuth'
 import { getImageUrl } from '@/utils/image'
 import {
   buildManualFormDataPayload,
@@ -88,6 +97,7 @@ export function useCheckout() {
   const checkoutMode = ref<'guest' | 'member'>('guest')
   const guestEmail = ref('')
   const guestPassword = ref('')
+  const browserGuestAuth = ref<GuestOrderAuth>({ email: '', order_password: '' })
   const submitAttempted = ref(false)
   const manualFormData = ref<ManualFormValues>({})
 
@@ -95,8 +105,17 @@ export function useCheckout() {
   const walletOnlyPayment = computed(() => !!appStore.config?.wallet_only_payment)
   const showBalanceOption = computed(() => auth.isAuthenticated)
   const isGuestCheckout = computed(() => !auth.isAuthenticated && checkoutMode.value === 'guest')
-  const guestEmailValid = computed(() => !isGuestCheckout.value || isValidEmail(guestEmail.value))
-  const guestPasswordValid = computed(() => guestPassword.value.trim().length >= GUEST_PASSWORD_MIN_LENGTH)
+  const guestInputEmpty = computed(() => !guestEmail.value.trim() && !guestPassword.value.trim())
+  const guestInputComplete = computed(() => Boolean(guestEmail.value.trim() && guestPassword.value.trim()))
+  const guestEmailValid = computed(() => !guestEmail.value.trim() || isValidEmail(guestEmail.value))
+  const guestPasswordValid = computed(() => !guestPassword.value.trim() || guestPassword.value.trim().length >= GUEST_PASSWORD_MIN_LENGTH)
+  const guestCredentials = computed<GuestOrderAuth | null>(() => {
+    if (guestInputEmpty.value) {
+      return browserGuestAuth.value.email && browserGuestAuth.value.order_password ? browserGuestAuth.value : null
+    }
+    if (!guestInputComplete.value || !guestEmailValid.value || !guestPasswordValid.value) return null
+    return { email: guestEmail.value.trim(), order_password: guestPassword.value }
+  })
 
   // ------------------------------------------------------------ amounts
   const totalAmount = computed(() =>
@@ -195,7 +214,7 @@ export function useCheckout() {
     if (requiresOnlineChannel.value && selectedChannelAmountHint.value) return false
     if (auth.isAuthenticated) return true
     if (checkoutMode.value !== 'guest') return false
-    if (!guestEmail.value.trim() || !guestPassword.value.trim() || !guestEmailValid.value || !guestPasswordValid.value) return false
+    if (!guestCredentials.value) return false
     return captcha.isComplete()
   })
 
@@ -212,7 +231,7 @@ export function useCheckout() {
     if (requiresOnlineChannel.value && selectedChannelAmountHint.value) return selectedChannelAmountHint.value
     if (auth.isAuthenticated) return ''
     if (checkoutMode.value !== 'guest') return t('checkout.errors.loginOrGuest')
-    if (!guestEmail.value.trim() || !guestPassword.value.trim()) return t('checkout.errors.missingGuest')
+    if (!guestInputEmpty.value && !guestInputComplete.value) return t('checkout.errors.incompleteGuest')
     if (!guestEmailValid.value) return t('error.email_invalid')
     if (!guestPasswordValid.value) return t('checkout.errors.guestPasswordTooShort')
     if (!captcha.isComplete()) return t('auth.common.captchaRequired')
@@ -271,7 +290,7 @@ export function useCheckout() {
 
   const loadPreview = async () => {
     if (syncingStock.value || cartItems.value.length === 0) return clearPreview()
-    if (isGuestCheckout.value && (!guestEmail.value.trim() || !guestPassword.value.trim() || !guestEmailValid.value)) return clearPreview()
+    if (isGuestCheckout.value && !guestCredentials.value) return clearPreview()
     if (cartItems.value.some(checkoutItemStockExceeded) || cartItems.value.some(checkoutItemMinNotMet)) return clearPreview()
     const id = ++previewRequestId
     previewLoading.value = true
@@ -280,7 +299,7 @@ export function useCheckout() {
       const payload = buildOrderPayload()
       const res = auth.isAuthenticated
         ? await userOrderAPI.preview(payload)
-        : await guestOrderAPI.preview({ ...payload, email: guestEmail.value.trim(), order_password: guestPassword.value })
+        : await guestOrderAPI.preview({ ...payload, ...guestCredentials.value! })
       if (id !== previewRequestId) return
       preview.value = res.data
       if (auth.isAuthenticated) debouncedLoadChannels()
@@ -326,13 +345,14 @@ export function useCheckout() {
         const res = await userOrderAPI.createAndPay(payload)
         orderNo = String(res.data?.order_no || res.data?.order?.order_no || '')
       } else {
+        const credentials = guestCredentials.value!
         const res = await guestOrderAPI.createAndPay({
           ...payload,
-          email: guestEmail.value.trim(),
-          order_password: guestPassword.value,
+          ...credentials,
           captcha_payload: captcha.build(),
         })
-        saveGuestOrderAuth({ email: guestEmail.value.trim(), order_password: guestPassword.value })
+        saveGuestOrderAuth(credentials)
+        clearGuestOrderDraft()
         orderNo = String(res.data?.order_no || res.data?.order?.order_no || '')
       }
       if (!orderNo) throw new Error(t('checkout.errors.submitFailed'))
@@ -352,6 +372,17 @@ export function useCheckout() {
     () => [cartItems.value, manualFingerprint.value, normalizedCoupon.value, checkoutMode.value, guestEmail.value, guestPassword.value, auth.isAuthenticated],
     () => debouncedLoadPreview(),
     { deep: true },
+  )
+  watch(
+    () => [guestEmail.value, guestPassword.value] as const,
+    ([email, order_password]) => {
+      saveGuestOrderDraft({ email, order_password })
+      if (email.trim() && order_password.trim().length >= GUEST_PASSWORD_MIN_LENGTH && isValidEmail(email)) {
+        const credentials = { email: email.trim(), order_password }
+        browserGuestAuth.value = credentials
+        saveGuestOrderAuth(credentials)
+      }
+    },
   )
   watch(
     walletOnlyPayment,
@@ -394,6 +425,16 @@ export function useCheckout() {
   }
 
   onMounted(async () => {
+    const saved = loadGuestOrderAuth()
+    browserGuestAuth.value = saved.email && saved.order_password ? saved : ensureGuestOrderAuth()
+    const draft = loadGuestOrderDraft()
+    if (draft.email || draft.order_password) {
+      guestEmail.value = draft.email
+      guestPassword.value = draft.order_password
+    } else if (saved.email && saved.order_password && !isGeneratedGuestOrderAuth(saved)) {
+      guestEmail.value = saved.email
+      guestPassword.value = saved.order_password
+    }
     if (!appStore.config) await appStore.loadConfig()
     if (!isBuyNowMode.value && !syncingStock.value) {
       syncingStock.value = true

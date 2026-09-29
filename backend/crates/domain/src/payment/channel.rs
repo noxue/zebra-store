@@ -200,6 +200,9 @@ pub fn check_channel_rules(
         if !mode_ok {
             return invalid;
         }
+        if provider_type == provider::HUIFU && mode != "redirect" {
+            return invalid;
+        }
         // PAY-44: BEpusdt cashier orders cannot be rendered as a QR code.
         if provider_type == provider::BEPUSDT
             && mode == "qr"

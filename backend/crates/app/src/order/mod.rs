@@ -32,7 +32,9 @@ use zs_domain::notify::ports::Notifier;
 use zs_domain::order::ports::{
     AffiliateHooks, CartRepo, OrderPaymentStore, OrderRepo, OrderStore, OrderWallet,
 };
+use zs_domain::payment::channel::ChannelRepo;
 use zs_domain::payment::gateway::GatewayRegistry;
+use zs_domain::payment::model::PaymentRepo;
 use zs_domain::queue::JobQueue;
 use zs_domain::settings::schema::risk::OrderRiskSetting;
 use zs_domain::settings::schema::site::{
@@ -71,6 +73,8 @@ pub struct OrderDeps {
     pub repo: Arc<dyn OrderRepo>,
     pub store: Arc<dyn OrderStore>,
     pub payments: Arc<dyn OrderPaymentStore>,
+    pub payment_records: Arc<dyn PaymentRepo>,
+    pub payment_channels: Arc<dyn ChannelRepo>,
     pub wallet: Arc<dyn OrderWallet>,
     pub cart: Arc<dyn CartRepo>,
     pub catalog: Arc<dyn CatalogOrdering>,

@@ -1,0 +1,460 @@
+//! Huifu hosted Alipay/WeChat payments, signed notifications and original-route refunds.
+
+use std::sync::Arc;
+
+use async_trait::async_trait;
+use chrono::{FixedOffset, Offset, Utc};
+use huifu_pay::{
+    Client, Config as SdkConfig, Error as SdkError, HttpRequest as SdkRequest,
+    HttpResponse as SdkResponse, PaymentQueryRequest, PreorderRequest, RefundQueryRequest,
+    RefundRequest, TradeBillQueryRequest, Transport,
+};
+use serde::Deserialize;
+use serde_json::Value;
+use zs_domain::payment::channel::ChannelConfig;
+use zs_domain::payment::form::{FormMap, form_raw};
+use zs_domain::payment::gateway::{
+    GatewayCallbackResult, GatewayCapabilities, GatewayCreateInput, GatewayCreateResult,
+    GatewayError, GatewayQueryResult, GatewayRefundInput, GatewayRefundResult,
+    GatewayTradeBillDownload, GatewayTradeBillFile, GatewayTradeBillQuery, GatewayTradeBillTask,
+    PaymentGateway,
+};
+use zs_domain::payment::returns::append_query_params;
+use zs_domain::payment::types::{InteractionMode, PaymentStatus, channel_type};
+
+use super::common::{GatewayEnv, callback_amount, parse_config};
+use super::http::{HttpRequest, HttpTransport};
+
+const DEFAULT_API: &str = huifu_pay::DEFAULT_BASE_URL;
+const DEFAULT_SOURCE: &str = huifu_pay::DEFAULT_SKILL_SOURCE;
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct Config {
+    pub api_base_url: String,
+    pub sys_id: String,
+    pub product_id: String,
+    pub huifu_id: String,
+    pub merchant_private_key: String,
+    pub huifu_public_key: String,
+    pub skill_source: String,
+    pub project_id: String,
+    pub project_title: String,
+    pub notify_url: String,
+    pub return_url: String,
+}
+
+impl Config {
+    fn parse(raw: &ChannelConfig) -> Result<Self, GatewayError> {
+        let mut c: Self = parse_config(raw, "huifu")?;
+        if c.api_base_url.trim().is_empty() {
+            c.api_base_url = DEFAULT_API.into();
+        }
+        if c.skill_source.trim().is_empty() {
+            c.skill_source = DEFAULT_SOURCE.into();
+        }
+        if c.project_title.trim().is_empty() {
+            c.project_title = "Zebra Store".into();
+        }
+        c.validate()?;
+        Ok(c)
+    }
+
+    fn validate(&self) -> Result<(), GatewayError> {
+        for (name, value) in [
+            ("sys_id", &self.sys_id),
+            ("product_id", &self.product_id),
+            ("huifu_id", &self.huifu_id),
+            ("merchant_private_key", &self.merchant_private_key),
+            ("huifu_public_key", &self.huifu_public_key),
+            ("project_id", &self.project_id),
+            ("notify_url", &self.notify_url),
+            ("return_url", &self.return_url),
+        ] {
+            if value.trim().is_empty() {
+                return Err(GatewayError::config(format!(
+                    "huifu config invalid: {name} is required"
+                )));
+            }
+        }
+        self.sdk().map(|_| ())
+    }
+
+    fn sdk(&self) -> Result<SdkConfig, GatewayError> {
+        let c = SdkConfig {
+            base_url: self.api_base_url.trim().to_owned(),
+            sys_id: self.sys_id.trim().to_owned(),
+            product_id: self.product_id.trim().to_owned(),
+            huifu_id: self.huifu_id.trim().to_owned(),
+            merchant_private_key: self.merchant_private_key.trim().to_owned(),
+            huifu_public_key: self.huifu_public_key.trim().to_owned(),
+            skill_source: self.skill_source.trim().to_owned(),
+        };
+        c.validate().map_err(map_error)?;
+        Ok(c)
+    }
+}
+
+#[derive(Debug)]
+struct InfraTransport(Arc<dyn HttpTransport>);
+
+#[async_trait]
+impl Transport for InfraTransport {
+    async fn post(&self, request: SdkRequest) -> Result<SdkResponse, SdkError> {
+        let mut outbound = HttpRequest::new("POST", request.url).body(request.body);
+        outbound.headers = request.headers;
+        let response = self.0.send(outbound).await.map_err(SdkError::Transport)?;
+        Ok(SdkResponse {
+            status: response.status,
+            body: response.body,
+        })
+    }
+
+    async fn get(&self, request: SdkRequest) -> Result<SdkResponse, SdkError> {
+        let mut outbound = HttpRequest::new("GET", request.url);
+        outbound.headers = request.headers;
+        let response = self.0.send(outbound).await.map_err(SdkError::Transport)?;
+        Ok(SdkResponse {
+            status: response.status,
+            body: response.body,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct HuifuGateway {
+    env: GatewayEnv,
+}
+
+impl HuifuGateway {
+    pub fn new(env: GatewayEnv) -> Self {
+        Self { env }
+    }
+
+    fn client(&self, raw: &ChannelConfig) -> Result<(Config, Client), GatewayError> {
+        let config = Config::parse(raw)?;
+        let client = Client::with_transport(
+            config.sdk()?,
+            Arc::new(InfraTransport(self.env.http.clone())),
+        )
+        .map_err(map_error)?;
+        Ok((config, client))
+    }
+
+    fn date(&self) -> String {
+        let offset = FixedOffset::east_opt(8 * 3600).unwrap_or_else(|| Utc.fix());
+        self.env
+            .clock
+            .now()
+            .with_timezone(&offset)
+            .format("%Y%m%d")
+            .to_string()
+    }
+
+    fn query_no(&self, prefix: &str) -> String {
+        format!("{prefix}{}", self.env.random_hex(12))
+    }
+}
+
+fn locator(date: &str, sequence: &str) -> String {
+    format!("{}:{}", date.trim(), sequence.trim())
+}
+
+fn split_locator(value: &str) -> Result<(&str, &str), GatewayError> {
+    let (date, sequence) = value
+        .trim()
+        .split_once(':')
+        .ok_or_else(|| GatewayError::response("huifu provider reference is invalid"))?;
+    if date.len() != 8 || sequence.is_empty() {
+        return Err(GatewayError::response(
+            "huifu provider reference is invalid",
+        ));
+    }
+    Ok((date, sequence))
+}
+
+fn map_status(raw: &str) -> Option<PaymentStatus> {
+    match raw.trim().to_ascii_uppercase().as_str() {
+        "P" | "I" => Some(PaymentStatus::Pending),
+        "S" => Some(PaymentStatus::Success),
+        "F" => Some(PaymentStatus::Failed),
+        _ => None,
+    }
+}
+
+fn map_error(error: SdkError) -> GatewayError {
+    match error {
+        SdkError::Config(e) | SdkError::Request(e) => GatewayError::config(e),
+        SdkError::Signature => GatewayError::signature("huifu RSA-SHA256 verification failed"),
+        SdkError::Response(e) => GatewayError::response(e),
+        SdkError::Transport(e) => GatewayError::request(e),
+        SdkError::Http(status) => GatewayError::request(format!("huifu HTTP {status}")),
+    }
+}
+
+fn require_accepted(response: &huifu_pay::ApiResponse) -> Result<(), GatewayError> {
+    if response.accepted() {
+        return Ok(());
+    }
+    Err(GatewayError::response(format!(
+        "huifu rejected request: {} {}",
+        response.string("resp_code"),
+        response.string("resp_desc")
+    )))
+}
+
+#[async_trait]
+impl PaymentGateway for HuifuGateway {
+    fn key(&self) -> &'static str {
+        "huifu:"
+    }
+
+    fn capabilities(&self) -> GatewayCapabilities {
+        GatewayCapabilities {
+            query: true,
+            callback: true,
+            trade_bills: true,
+            ..GatewayCapabilities::default()
+        }
+    }
+
+    fn validate_config(&self, config: &ChannelConfig, channel: &str) -> Result<(), GatewayError> {
+        if !matches!(channel.trim(), channel_type::ALIPAY | channel_type::WECHAT) {
+            return Err(GatewayError::UnsupportedChannel(channel.to_owned()));
+        }
+        Config::parse(config).map(|_| ())
+    }
+
+    async fn create_payment(
+        &self,
+        raw: &ChannelConfig,
+        input: &GatewayCreateInput,
+    ) -> Result<GatewayCreateResult, GatewayError> {
+        if input.interaction_mode != Some(InteractionMode::Redirect) {
+            return Err(GatewayError::UnsupportedChannel(
+                "huifu requires redirect interaction mode".into(),
+            ));
+        }
+        let trans_type = match input.channel_type.trim() {
+            channel_type::ALIPAY => "A_NATIVE",
+            channel_type::WECHAT => "T_JSAPI",
+            other => return Err(GatewayError::UnsupportedChannel(other.to_owned())),
+        };
+        let (config, client) = self.client(raw)?;
+        let date = self.date();
+        let notify_url = if input.notify_url.trim().is_empty() {
+            config.notify_url.clone()
+        } else {
+            input.notify_url.trim().to_owned()
+        };
+        let return_url = if input.return_url.trim().is_empty() {
+            config.return_url.clone()
+        } else {
+            append_query_params(&input.return_url, &input.return_url_query)
+        };
+        let response = client
+            .preorder(&PreorderRequest {
+                req_date: date.clone(),
+                req_seq_id: input.order_no.clone(),
+                trans_amt: input.amount.to_string(),
+                goods_desc: input.subject.clone(),
+                notify_url,
+                callback_url: return_url,
+                project_id: config.project_id,
+                project_title: config.project_title,
+                request_type: "P".into(),
+                trans_type: trans_type.into(),
+                time_expire: String::new(),
+            })
+            .await
+            .map_err(map_error)?;
+        require_accepted(&response)?;
+        let mut payload = response.data.clone();
+        payload.insert("req_date".into(), Value::String(date.clone()));
+        payload.insert("req_seq_id".into(), Value::String(input.order_no.clone()));
+        Ok(GatewayCreateResult {
+            provider_ref: locator(&date, &input.order_no),
+            redirect_url: response.string("jump_url"),
+            payload,
+            display_channel_type: input.channel_type.clone(),
+            ..GatewayCreateResult::default()
+        })
+    }
+
+    async fn query_payment(
+        &self,
+        raw: &ChannelConfig,
+        provider_ref: &str,
+    ) -> Result<GatewayQueryResult, GatewayError> {
+        let (_, client) = self.client(raw)?;
+        let (org_date, org_sequence) = split_locator(provider_ref)?;
+        let response = client
+            .query_payment(&PaymentQueryRequest {
+                req_date: self.date(),
+                req_seq_id: self.query_no("ZSQ"),
+                org_req_date: org_date.into(),
+                org_req_seq_id: org_sequence.into(),
+            })
+            .await
+            .map_err(map_error)?;
+        require_accepted(&response)?;
+        Ok(GatewayQueryResult {
+            provider_ref: provider_ref.into(),
+            status: map_status(&response.string("trans_stat")),
+            amount: callback_amount(&response.string("trans_amt")),
+            currency: "CNY".into(),
+            paid_at: None,
+            payload: response.data,
+        })
+    }
+
+    fn verify_callback(
+        &self,
+        raw: &ChannelConfig,
+        form: &FormMap,
+        _body: &[u8],
+    ) -> Result<GatewayCallbackResult, GatewayError> {
+        let (config, client) = self.client(raw)?;
+        let sign = form_raw(form, "sign");
+        let resp_data = form_raw(form, "resp_data");
+        let notify = client.verify_notify(&sign, &resp_data).map_err(map_error)?;
+        if notify.string("huifu_id") != config.huifu_id.trim() {
+            return Err(GatewayError::AuthFailed(
+                "huifu notification merchant mismatch".into(),
+            ));
+        }
+        let order_no = notify.string("req_seq_id");
+        let req_date = notify.string("req_date");
+        Ok(GatewayCallbackResult {
+            provider_ref: locator(&req_date, &order_no),
+            order_no,
+            status: map_status(&notify.string("trans_stat")),
+            amount: callback_amount(&notify.string("trans_amt")),
+            currency: "CNY".into(),
+            paid_at: None,
+            payload: notify.data,
+        })
+    }
+
+    async fn refund_payment(
+        &self,
+        raw: &ChannelConfig,
+        input: &GatewayRefundInput,
+    ) -> Result<GatewayRefundResult, GatewayError> {
+        let (config, client) = self.client(raw)?;
+        let (org_date, org_sequence) = split_locator(&input.provider_ref)?;
+        let date = self.date();
+        let notify_url = if input.notify_url.trim().is_empty() {
+            config.notify_url
+        } else {
+            input.notify_url.clone()
+        };
+        let response = client
+            .refund(&RefundRequest {
+                req_date: date.clone(),
+                req_seq_id: input.refund_no.clone(),
+                org_req_date: org_date.into(),
+                org_req_seq_id: org_sequence.into(),
+                ord_amt: input.amount.to_string(),
+                notify_url,
+                remark: input.remark.clone(),
+                client_ip: input.client_ip.clone(),
+            })
+            .await
+            .map_err(map_error)?;
+        require_accepted(&response)?;
+        Ok(GatewayRefundResult {
+            provider_ref: locator(&date, &input.refund_no),
+            status: map_status(&response.string("trans_stat")).or(Some(PaymentStatus::Pending)),
+            payload: response.data,
+        })
+    }
+
+    async fn query_refund(
+        &self,
+        raw: &ChannelConfig,
+        provider_ref: &str,
+    ) -> Result<GatewayRefundResult, GatewayError> {
+        let (_, client) = self.client(raw)?;
+        let (org_date, org_sequence) = split_locator(provider_ref)?;
+        let response = client
+            .query_refund(&RefundQueryRequest {
+                req_date: self.date(),
+                req_seq_id: self.query_no("ZSRQ"),
+                org_req_date: org_date.into(),
+                org_req_seq_id: org_sequence.into(),
+            })
+            .await
+            .map_err(map_error)?;
+        require_accepted(&response)?;
+        Ok(GatewayRefundResult {
+            provider_ref: provider_ref.into(),
+            status: map_status(&response.string("trans_stat")),
+            payload: response.data,
+        })
+    }
+
+    async fn query_trade_bill(
+        &self,
+        raw: &ChannelConfig,
+        file_date: &str,
+    ) -> Result<GatewayTradeBillQuery, GatewayError> {
+        let (_, client) = self.client(raw)?;
+        let result = client
+            .query_trade_bill(&TradeBillQueryRequest {
+                req_date: self.date(),
+                req_seq_id: self.query_no("ZSBQ"),
+                file_date: file_date.trim().to_owned(),
+            })
+            .await
+            .map_err(map_error)?;
+        Ok(GatewayTradeBillQuery {
+            files: result
+                .files
+                .into_iter()
+                .map(|file| GatewayTradeBillFile {
+                    file_date: file.file_date,
+                    file_id: file.file_id,
+                    file_name: file.file_name,
+                })
+                .collect(),
+            tasks: result
+                .tasks
+                .into_iter()
+                .map(|task| GatewayTradeBillTask {
+                    data_date: task.data_date,
+                    task_stat: task.task_stat,
+                    task_start_time: task.task_start_time,
+                    task_end_time: task.task_end_time,
+                })
+                .collect(),
+        })
+    }
+
+    async fn download_trade_bill(
+        &self,
+        raw: &ChannelConfig,
+        file_date: &str,
+        file_id: &str,
+    ) -> Result<GatewayTradeBillDownload, GatewayError> {
+        let (_, client) = self.client(raw)?;
+        let result = client
+            .query_trade_bill(&TradeBillQueryRequest {
+                req_date: self.date(),
+                req_seq_id: self.query_no("ZSBQ"),
+                file_date: file_date.trim().to_owned(),
+            })
+            .await
+            .map_err(map_error)?;
+        let file = result
+            .files
+            .iter()
+            .find(|file| file.file_id == file_id.trim())
+            .ok_or_else(|| GatewayError::response("huifu trade bill file not found"))?;
+        let body = client.download_trade_bill(file).await.map_err(map_error)?;
+        Ok(GatewayTradeBillDownload {
+            file_name: file.file_name.clone(),
+            body,
+        })
+    }
+}

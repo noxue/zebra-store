@@ -13,7 +13,7 @@ import i18n, { detectLocale, setI18nLocale } from '@/i18n'
 import { useAppStore } from '@/stores/app'
 import { useCartStore, type CartItem } from '@/stores/cart'
 import { checkoutItemAvailableStock, checkoutItemStockExceeded } from '@/utils/checkoutStock'
-import { clearGuestOrderAuth, loadGuestOrderAuth } from '@/utils/guestOrderAuth'
+import { clearGuestOrderAuth, isGeneratedGuestOrderAuth, loadGuestOrderAuth } from '@/utils/guestOrderAuth'
 import { localizedText } from '@/utils/localized'
 
 const route = vi.hoisted(() => ({ query: {} as Record<string, string>, params: { order_no: 'DJ1' }, fullPath: '/checkout' }))
@@ -42,6 +42,14 @@ afterEach(() => {
 })
 
 describe('FE-02 / FE-19 cart refresh and checkout', () => {
+  it('creates a persistent browser identity while leaving optional guest fields empty', async () => {
+    const page = harness(useCheckout)
+    await flushPromises()
+    expect(page.guestEmail.value).toBe('')
+    expect(page.guestPassword.value).toBe('')
+    const stored = JSON.parse(localStorage.getItem('guest_order_auth') || '{}')
+    expect(isGeneratedGuestOrderAuth(stored)).toBe(true)
+  })
   it('refreshes the persisted price when opening the cart', async () => {
     const cart = useCartStore(); cart.addItem(line(), 5)
     vi.spyOn(productAPI, 'detail').mockResolvedValue(response(product()))

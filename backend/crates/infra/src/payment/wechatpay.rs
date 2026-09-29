@@ -768,6 +768,7 @@ impl PaymentGateway for WechatpayGateway {
             webhook: true,
             callback: false,
             security_test: true,
+            ..GatewayCapabilities::default()
         }
     }
 

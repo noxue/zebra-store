@@ -51,7 +51,7 @@ impl OrderService {
     }
 
     /// Queues a status e-mail when SMTP and order notifications are on and the order has a
-    /// real receiver (Telegram placeholder addresses never get mail).
+    /// real receiver (system-generated placeholder addresses never get mail).
     pub async fn enqueue_status_email(
         &self,
         order_id: Id,

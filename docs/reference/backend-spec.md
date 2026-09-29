@@ -551,6 +551,8 @@ All four paths can be replaced by admin-set custom paths (settings key `callback
 | GET / POST | `/payment-channels` | List / create |
 | GET / PUT / DELETE | `/payment-channels/:id` | Read / update / delete |
 | POST | `/payment-channels/:id/wechatpay-public-key-test` | Test WeChat Pay key |
+| GET | `/payment-channels/:id/trade-bill?file_date=yyyyMMdd` | Query Huifu `TRADE_BILL` generation and files |
+| GET | `/payment-channels/:id/trade-bill/download?file_date=yyyyMMdd&file_id=...` | Re-query, verify and download one Huifu trade-bill file |
 | GET | `/payments`, `/payments/export`, `/payments/:id` | Payment records |
 
 **Users and wallet**
@@ -813,6 +815,7 @@ All four paths can be replaced by admin-set custom paths (settings key `callback
 | `official` + `paypal` | PayPal | client_id/secret, base_url, webhook_id, target_currency, exchange_rate… | `/payments/webhook/paypal?channel_id=` |
 | `official` + `stripe` | Stripe | secret_key, publishable_key, webhook_secret, payment_method_types… | `/payments/webhook/stripe?channel_id=` |
 | `epay` | wechat, alipay, qqpay (易支付 / "epay"-protocol gateways) | gateway_url, epay_version, merchant_id/key or RSA keys, sign_type, api_path | shared endpoint; matched by `pid` + `out_trade_no` + `trade_status`; reply `success`/`fail` |
+| `huifu` | alipay, wechat (hosted H5/PC) | sys_id, product_id, huifu_id, merchant RSA private key, Huifu RSA public key, hosted project | shared endpoint; RSA-SHA256 verified `resp_data`; dynamic `RECV_ORD_ID_*` reply |
 | `epusdt` | USDT (GMPay) | gateway_url, pid, secret_key, order_mode, token, network, currency | shared endpoint; reply `ok` |
 | `bepusdt` | USDT, TRX, USDC | gateway_url, auth_token, trade_type, order_mode, fiat, address | shared endpoint; reply `success` |
 | `tokenpay` | crypto | gateway_url, notify_secret, currency, base_currency | shared endpoint; reply `ok` |

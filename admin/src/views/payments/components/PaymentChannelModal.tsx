@@ -10,6 +10,7 @@ import { BepusdtConfigForm } from './BepusdtConfigForm'
 import { DujiaopayConfigForm } from './DujiaopayConfigForm'
 import { EpayConfigForm } from './EpayConfigForm'
 import { EpusdtConfigForm } from './EpusdtConfigForm'
+import { HuifuConfigForm } from './HuifuConfigForm'
 import { OkpayConfigForm } from './OkpayConfigForm'
 import { PaypalConfigForm } from './PaypalConfigForm'
 import { StripeConfigForm } from './StripeConfigForm'
@@ -92,6 +93,8 @@ export const PaymentChannelModal = defineComponent({
           return <OkpayConfigForm config={configs.okpay} />
         case 'dujiaopay':
           return <DujiaopayConfigForm config={configs.dujiaopay} v-model:channelType={form.channel_type} />
+        case 'huifu':
+          return <HuifuConfigForm config={configs.huifu} />
         default:
           return null
       }

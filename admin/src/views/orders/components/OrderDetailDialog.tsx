@@ -28,7 +28,7 @@ import {
 } from '../orderUtils'
 import { useOrderDetail } from '../useOrderDetail'
 
-const PROVIDER_TYPES = ['official', 'epay', 'bepusdt', 'epusdt', 'tokenpay', 'wallet']
+const PROVIDER_TYPES = ['official', 'huifu', 'epay', 'bepusdt', 'epusdt', 'tokenpay', 'wallet']
 const CHANNEL_TYPE_KEYS: Record<string, string> = {
   wechat: 'wechat',
   alipay: 'alipay',

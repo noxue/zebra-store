@@ -201,7 +201,8 @@ pub fn check_currency(channel: &PaymentChannel, currency: &str) -> Result<(), El
     if !is_currency_code(&normalized) {
         return Err(EligibilityError::CurrencyMismatch);
     }
-    let cny_only = channel.provider() == provider::OFFICIAL
+    let cny_only = (channel.provider() == provider::OFFICIAL
+        || channel.provider() == provider::HUIFU)
         && matches!(
             channel.channel().as_str(),
             channel_type::WECHAT | channel_type::ALIPAY
