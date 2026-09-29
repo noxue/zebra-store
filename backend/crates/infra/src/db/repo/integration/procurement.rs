@@ -97,6 +97,7 @@ impl SeaProcurementRepo {
             .collect();
         for o in &mut orders {
             o.held_delivery = held.remove(&o.id);
+            o.has_held_delivery = o.held_delivery.is_some();
         }
         Ok(orders)
     }
@@ -143,6 +144,7 @@ pub(crate) fn to_domain(m: procurement_orders::Model) -> ProcurementOrder {
         parent_order_no: String::new(),
         upstream_refund_records: Vec::new(),
         upstream_refunded_amount: String::new(),
+        has_held_delivery: false,
         held_delivery: None,
     }
 }
@@ -375,6 +377,20 @@ impl ProcurementRepo for SeaProcurementRepo {
             .filter(procurement_orders::Column::DeletedAt.is_null())
             .filter(procurement_orders::Column::Status.eq(ProcurementStatus::Accepted.as_str()))
             .order_by_asc(procurement_orders::Column::UpdatedAt)
+            .limit(limit)
+            .all(&self.db)
+            .await
+            .dom()?;
+        self.with_deliveries(rows.into_iter().map(to_domain).collect())
+            .await
+    }
+
+    async fn list_accepted_after(&self, after_id: Id, limit: u64) -> Result<Vec<ProcurementOrder>> {
+        let rows = procurement_orders::Entity::find()
+            .filter(procurement_orders::Column::DeletedAt.is_null())
+            .filter(procurement_orders::Column::Status.eq(ProcurementStatus::Accepted.as_str()))
+            .filter(procurement_orders::Column::Id.gt(after_id))
+            .order_by_asc(procurement_orders::Column::Id)
             .limit(limit)
             .all(&self.db)
             .await

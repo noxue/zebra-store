@@ -1,6 +1,7 @@
 //! Integration repositories: credentials, connections, mappings (+ catalog writes of
 //! import / sync), procurement, downstream refs, reconciliation and read projections.
 
+pub mod card_converter;
 pub mod connection;
 pub mod credential;
 pub mod downstream;

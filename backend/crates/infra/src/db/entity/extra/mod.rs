@@ -3,6 +3,9 @@
 pub mod api_compat_keys;
 pub mod api_credential_rotations;
 pub mod api_request_nonces;
+pub mod card_converter_bindings;
+pub mod card_converter_events;
+pub mod card_converters;
 pub mod casbin_rule;
 pub mod integration_connection_states;
 pub mod integration_processed_events;

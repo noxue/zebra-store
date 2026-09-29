@@ -20,7 +20,7 @@ async fn sync_creates_all_tables_idempotently() {
         ))
         .await
         .unwrap();
-    // 60 original tables + casbin_rule + jobs + 10 integration / zebra-store tables
-    // + api_compat_keys (provider-compat facades) + procurement_deliveries
-    assert_eq!(rows.len(), 74, "tables: {rows:?}");
+    // 60 original tables + casbin_rule + jobs + integration / zebra-store extras,
+    // including converter profiles, bindings and event history.
+    assert_eq!(rows.len(), 77, "tables: {rows:?}");
 }

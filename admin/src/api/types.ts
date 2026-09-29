@@ -673,6 +673,42 @@ export interface AdminProductMapping {
   [key: string]: unknown
 }
 
+export interface AdminCardConverterType {
+  id: string
+  name: string
+  description: string
+  fields?: Array<{ key: string; label: string; required: boolean; kind: string; description?: string; options?: string[] }>
+}
+
+export interface AdminCardConverter {
+  id: number
+  name: string
+  base_url: string
+  enabled: boolean
+  token_configured: boolean
+  types: AdminCardConverterType[]
+  health: string
+  consecutive_failures: number
+  last_checked_at?: string | null
+  last_error: string
+}
+
+export interface AdminCardConverterBinding {
+  id: number
+  product_id: number
+  sku_id: number
+  converter_id: number
+  type_id: string
+  fields: string[]
+  extra_template: Record<string, unknown>
+}
+
+export interface AdminCardConverterPending {
+  local: number
+  upstream: number
+  total: number
+}
+
 // --- ProcurementOrder ---
 export interface AdminProcurementOrder {
   id: number

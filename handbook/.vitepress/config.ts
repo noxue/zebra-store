@@ -113,6 +113,8 @@ const sidebar: DefaultTheme.Sidebar = {
         { text: 'Zebra Store 协议', link: '/integration/zebra-store' },
         { text: '异次元发卡 acg-faka', link: '/integration/acg-faka' },
         { text: '萌次元 mcy-shop', link: '/integration/mcy' },
+        { text: '卡密转换器开发与配置', link: '/integration/card-converters' },
+        { text: '卡密转换器协议 v1（English）', link: '/integration/card-converter-protocol.en' },
         { text: '采购单与故障处理', link: '/integration/procurement' },
       ],
     },

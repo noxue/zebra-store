@@ -15,6 +15,7 @@
 //! - [`provide`]: compat keys and rules of the provider-compat facades (acg-faka, mcy).
 
 pub mod adapter;
+pub mod card_converter;
 pub mod connection;
 pub mod credential;
 pub mod downstream;

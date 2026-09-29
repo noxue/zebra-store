@@ -803,6 +803,12 @@ const messages = {
       alerts: {
         title: '異常告警',
         empty: '暫無異常告警',
+        converterUnhealthy: '轉換器「{name}」異常',
+        converterProbeFailed: '健康探測失敗',
+        affectedProducts: '影響商品 {count} 個',
+        converterPending: '有 {count} 個訂單等待卡密轉換',
+        converterPendingLocal: '本地庫存訂單：{count} 個，查看訂單',
+        converterPendingUpstream: '上游採購訂單：{count} 個，查看採購單',
       },
       alertTypes: {
         out_of_stock_products: '售罄商品數',

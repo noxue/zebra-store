@@ -147,6 +147,7 @@ export default defineComponent({
                   {t('procurement.actions.retry')}
                 </Button>
               )}
+              {o.has_held_delivery && <Button size="xs" variant="primary" loading={p.retryingDeliveryId.value === o.id} onClick={() => p.retryDelivery(o)}>{t('procurement.actions.retryDelivery')}</Button>}
               {canCancelProcurement(o.status) && (
                 <Button size="xs" variant="ghost" loading={p.cancelingId.value === o.id} onClick={() => p.cancel(o)}>
                   {t('procurement.actions.cancel')}
@@ -364,6 +365,7 @@ export default defineComponent({
               {t('procurement.actions.retry')}
             </Button>
           )}
+          {d.has_held_delivery && <Button variant="primary" loading={p.retryingDeliveryId.value === d.id} onClick={() => p.retryDelivery(d)}>{t('procurement.actions.retryDelivery')}</Button>}
           {canCancelProcurement(d.status) && (
             <Button variant="danger" loading={p.cancelingId.value === d.id} onClick={() => p.cancel(d)}>
               {t('procurement.actions.cancelOrder')}

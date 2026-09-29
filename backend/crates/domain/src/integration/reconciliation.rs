@@ -324,6 +324,7 @@ mod tests {
             parent_order_no: String::new(),
             upstream_refund_records: Vec::new(),
             upstream_refunded_amount: String::new(),
+            has_held_delivery: false,
             held_delivery: None,
         }
     }

@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use serde_json::Value;
 use zs_app::content::media::{MediaService, UploadPolicy, UploadService};
 use zs_app::identity::rate_limit::{RateLimiter, RateRule};
+use zs_app::integration::card_converter::CardConverterService;
 use zs_app::integration::connection::ConnectionService;
 use zs_app::integration::credential::CredentialService;
 use zs_app::integration::downstream::{CallbackJob, DownstreamService};
@@ -32,6 +33,7 @@ use zs_domain::queue::{JobHandler, kinds};
 use super::WireCtx;
 use crate::content::files::LocalFileStore;
 use crate::db::repo::content::banner::SeaMediaRepo;
+use crate::db::repo::integration::card_converter::SeaCardConverterRepo;
 use crate::db::repo::integration::connection::SeaConnectionRepo;
 use crate::db::repo::integration::credential::SeaCredentialRepo;
 use crate::db::repo::integration::downstream::SeaOrderRefRepo;
@@ -42,6 +44,7 @@ use crate::db::repo::integration::reconciliation::SeaReconciliationRepo;
 use crate::db::repo::integration::supplier::SeaSupplierCatalog;
 use crate::db::repo::integration::zs::{SeaSnapshotSource, SeaZsStore};
 use crate::integration::acg_faka::AcgFakaAdapter;
+use crate::integration::card_converter::HttpCardConverter;
 use crate::integration::client::{DujiaoNextAdapter, HttpConnector};
 use crate::integration::http::AddressPolicy;
 use crate::integration::mcy_openapi::McyShopAdapter;
@@ -54,6 +57,8 @@ use crate::queue::JobRegistry;
 const SYNC_STOCK_TICK: Duration = Duration::from_secs(60);
 /// Periodic re-check of accepted purchase orders (original 30 min).
 const SYNC_ACCEPTED_INTERVAL: Duration = Duration::from_secs(30 * 60);
+/// Bounded health sweep of enabled third-party card converters.
+const CARD_CONVERTER_HEALTH_INTERVAL: Duration = Duration::from_secs(60);
 
 /// `/upstream/*` limit: 60 requests / 60 s per `IP|API key`, 30 s block (UPS-10).
 const API_RATE_RULE: RateRule = RateRule {
@@ -140,6 +145,16 @@ pub fn build(ctx: &WireCtx) -> IntegrationServices {
 pub fn build_with(ctx: &WireCtx, adapters: &Adapters) -> IntegrationServices {
     let db = &ctx.db;
     let clock = ctx.clock.clone();
+    let converter_repo = Arc::new(SeaCardConverterRepo::new(db.clone()));
+    let card_converters = CardConverterService::new(
+        converter_repo,
+        Arc::new(HttpCardConverter::new(adapters.address_policy)),
+        ctx.cipher.clone(),
+        clock.clone(),
+        Arc::new(zs_app::notify::center::QueueNotifier::new(
+            ctx.queue.clone(),
+        )),
+    );
     let credential_repo: Arc<dyn CredentialRepo> = Arc::new(SeaCredentialRepo::new(db.clone()));
     let mapping_repo: Arc<dyn MappingRepo> = Arc::new(SeaMappingRepo::new(db.clone()));
     let procurement_repo: Arc<dyn ProcurementRepo> = Arc::new(SeaProcurementRepo::new(db.clone()));
@@ -205,10 +220,9 @@ pub fn build_with(ctx: &WireCtx, adapters: &Adapters) -> IntegrationServices {
         ctx.queue.clone(),
         clock.clone(),
     );
-    let lifecycle = adapters
-        .lifecycle
-        .clone()
-        .unwrap_or_else(|| super::order::integration_ports(ctx));
+    let lifecycle = adapters.lifecycle.clone().unwrap_or_else(|| {
+        super::order::integration_ports_with_converter(ctx, card_converters.clone())
+    });
     let procurement = ProcurementService::new(
         procurement_repo.clone(),
         orders,
@@ -226,10 +240,9 @@ pub fn build_with(ctx: &WireCtx, adapters: &Adapters) -> IntegrationServices {
         ctx.queue.clone(),
         clock.clone(),
     );
-    let ordering = adapters
-        .ordering
-        .clone()
-        .unwrap_or_else(|| super::order::integration_ports(ctx));
+    let ordering = adapters.ordering.clone().unwrap_or_else(|| {
+        super::order::integration_ports_with_converter(ctx, card_converters.clone())
+    });
     let catalog = SeaSupplierCatalog::new(db.clone(), ctx.settings.clone());
     let supplier = SupplierService::new(
         Arc::new(catalog.clone()),
@@ -264,8 +277,11 @@ pub fn build_with(ctx: &WireCtx, adapters: &Adapters) -> IntegrationServices {
         downstream: downstream.clone(),
         mappings: mappings.clone(),
         zs: zs.clone(),
+        card_converters: card_converters.clone(),
+        settings: ctx.settings.clone(),
     });
     IntegrationServices {
+        card_converters,
         credentials,
         connections,
         mappings,
@@ -375,6 +391,26 @@ impl JobHandler for ReconciliationJob {
     }
 }
 
+struct CardConverterHealthJob {
+    card_converters: zs_app::integration::card_converter::CardConverterService,
+    procurement: ProcurementService,
+    orders: zs_app::order::OrderService,
+}
+
+#[async_trait]
+impl JobHandler for CardConverterHealthJob {
+    async fn handle(&self, _payload: Value) -> Result<()> {
+        let recovered = self.card_converters.health_tick().await?;
+        for converter_id in recovered {
+            self.procurement
+                .retry_held_for_converter(converter_id, &self.card_converters)
+                .await?;
+        }
+        self.orders.retry_pending_conversions().await?;
+        Ok(())
+    }
+}
+
 /// Registers the `integration` job handlers and periodic jobs.
 pub fn jobs(_ctx: &WireCtx, services: &zs_app::Services, registry: &mut JobRegistry) {
     let s = &services.integration;
@@ -417,5 +453,17 @@ pub fn jobs(_ctx: &WireCtx, services: &zs_app::Services, registry: &mut JobRegis
         .handle(
             kinds::ZS_DELIVER_EVENT,
             Arc::new(ZsDeliverJob(s.zs.clone())),
+        )
+        .handle(
+            kinds::CARD_CONVERTER_HEALTH_TICK,
+            Arc::new(CardConverterHealthJob {
+                card_converters: s.card_converters.clone(),
+                procurement: s.procurement.clone(),
+                orders: services.order.service.clone(),
+            }),
+        )
+        .every(
+            kinds::CARD_CONVERTER_HEALTH_TICK,
+            CARD_CONVERTER_HEALTH_INTERVAL,
         );
 }

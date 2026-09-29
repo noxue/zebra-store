@@ -21,6 +21,7 @@ import {
   Lock,
   Newspaper,
   Package,
+  RefreshCw,
   ReceiptText,
   ScrollText,
   Send,
@@ -162,6 +163,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { labelKey: 'admin.navItems.siteConnections', to: '/site-connections', icon: Link, permission: 'GET:/admin/site-connections' },
       { labelKey: 'admin.navItems.productMappings', to: '/product-mappings', icon: Boxes, permission: 'GET:/admin/product-mappings' },
+      { labelKey: 'admin.navItems.cardConverters', to: '/card-converters', icon: RefreshCw, permission: 'GET:/admin/card-converters' },
       { labelKey: 'admin.navItems.procurementOrders', to: '/procurement-orders', icon: Truck, permission: 'GET:/admin/procurement-orders' },
       { labelKey: 'admin.navItems.reconciliation', to: '/reconciliation', icon: ClipboardCheck, permission: 'GET:/admin/reconciliation/jobs' },
       { labelKey: 'admin.navItems.apiCredentials', to: '/api-credentials', icon: KeyRound, permission: 'GET:/admin/api-credentials' },

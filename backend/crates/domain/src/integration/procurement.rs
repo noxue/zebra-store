@@ -395,6 +395,8 @@ pub struct ProcurementOrder {
     pub upstream_refund_records: Vec<JsonMap>,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub upstream_refunded_amount: String,
+    /// Indicates an internal raw delivery is waiting to be finalized.
+    pub has_held_delivery: bool,
     /// Delivery the supplier handed over with the order call, persisted until it is
     /// applied (see [`ProcurementChange::held_delivery`]). Never serialized.
     #[serde(skip)]
@@ -481,6 +483,9 @@ pub trait ProcurementRepo: Send + Sync {
     /// Counts per status with the filter minus its status (UPS-22).
     async fn stats(&self, filter: &ProcurementFilter) -> Result<Vec<(String, u64)>>;
     async fn list_accepted(&self, limit: u64) -> Result<Vec<ProcurementOrder>>;
+    /// Cursor scan of accepted orders for recovery sweeps, so a batch of stuck old
+    /// orders cannot starve later held deliveries.
+    async fn list_accepted_after(&self, after_id: Id, limit: u64) -> Result<Vec<ProcurementOrder>>;
     async fn list_by_connection_between(
         &self,
         connection_id: Id,

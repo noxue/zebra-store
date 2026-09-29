@@ -3,6 +3,7 @@
 //! protocol adapters, product mappings + sync, procurement, inbound supplier events,
 //! downstream callbacks and reconciliation.
 
+pub mod card_converter;
 pub mod connection;
 pub mod credential;
 pub mod downstream;
@@ -25,6 +26,7 @@ use crate::identity::rate_limit::RateLimiter;
 /// Services of the `integration` group.
 #[derive(Clone)]
 pub struct IntegrationServices {
+    pub card_converters: card_converter::CardConverterService,
     pub credentials: credential::CredentialService,
     pub connections: connection::ConnectionService,
     pub mappings: mapping::MappingService,
@@ -54,12 +56,20 @@ impl std::fmt::Debug for IntegrationServices {
 
 /// [`IntegrationOrderEvents`] backed by the procurement, downstream, mapping and
 /// zebra-store event services.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct OrderEvents {
     pub procurement: procurement::ProcurementService,
     pub downstream: downstream::DownstreamService,
     pub mappings: mapping::MappingService,
     pub zs: zs_supplier::ZsSupplier,
+    pub card_converters: card_converter::CardConverterService,
+    pub settings: Arc<dyn zs_domain::settings::SettingsStore>,
+}
+
+impl std::fmt::Debug for OrderEvents {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("OrderEvents")
+    }
 }
 
 impl OrderEvents {
@@ -72,6 +82,43 @@ impl OrderEvents {
 
 #[async_trait]
 impl IntegrationOrderEvents for OrderEvents {
+    async fn requires_converter(&self, order: &zs_domain::order::model::Order) -> Result<bool> {
+        self.card_converters.has_binding(order).await
+    }
+
+    async fn convert_delivery(
+        &self,
+        order: &zs_domain::order::model::Order,
+        delivery: &zs_domain::integration::hooks::UpstreamDelivery,
+    ) -> Result<zs_domain::integration::hooks::UpstreamDelivery> {
+        let site_config = self
+            .settings
+            .get(zs_domain::settings::keys::SITE_CONFIG)
+            .await?
+            .unwrap_or_default();
+        let brand = site_config.get("brand").cloned().unwrap_or_default();
+        let domain = if order.reseller_domain.trim().is_empty() {
+            brand
+                .get("site_url")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default()
+                .to_owned()
+        } else {
+            order.reseller_domain.clone()
+        };
+        let name = brand
+            .get("site_name")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default();
+        self.card_converters
+            .convert_delivery(
+                order,
+                delivery,
+                serde_json::json!({"domain":domain,"name":name}),
+            )
+            .await
+    }
+
     async fn order_paid(&self, order_id: Id) -> Result<()> {
         let created = self.procurement.create_for_order(order_id).await;
         self.downstream.enqueue_for_order(order_id).await;

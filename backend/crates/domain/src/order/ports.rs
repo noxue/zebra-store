@@ -91,6 +91,8 @@ pub struct UserBrief {
 #[async_trait]
 pub trait OrderRepo: Send + Sync {
     async fn get(&self, id: Id) -> Result<Option<Order>>;
+    /// Local auto fulfillments awaiting external card conversion after a retryable failure.
+    async fn pending_auto_fulfillment_ids(&self) -> Result<Vec<Id>>;
     /// A parent order by number for its owner within the scope.
     async fn find_parent(
         &self,
@@ -280,6 +282,18 @@ pub trait OrderStore: Send + Sync {
     /// Auto delivery of a paid child order (DLV-09): reserved (else available) secrets
     /// become used, the fulfillment row is written and the order becomes `completed`.
     async fn auto_fulfill(&self, order_id: Id, now: DateTime<Utc>) -> Result<Fulfillment>;
+
+    /// Reserves and marks the cards used, but leaves the order `fulfilling` with an
+    /// empty pending fulfillment. Returns the raw content only to the internal caller.
+    async fn prepare_auto_fulfill(&self, order_id: Id, now: DateTime<Utc>) -> Result<String>;
+
+    /// Publishes a fully converted payload and transitions `fulfilling → completed`.
+    async fn finalize_auto_fulfill(
+        &self,
+        order_id: Id,
+        payload: &str,
+        now: DateTime<Utc>,
+    ) -> Result<Fulfillment>;
 
     /// Manual delivery of a paid/fulfilling order: fulfillment row + `delivered`.
     async fn manual_fulfill(

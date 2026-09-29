@@ -804,6 +804,12 @@ const messages = {
       alerts: {
         title: 'Alerts',
         empty: 'No alerts',
+        converterUnhealthy: 'Converter “{name}” is unhealthy',
+        converterProbeFailed: 'Health check failed',
+        affectedProducts: '{count} affected products',
+        converterPending: '{count} orders are waiting for card conversion',
+        converterPendingLocal: 'Local stock orders: {count}, view orders',
+        converterPendingUpstream: 'Upstream procurement orders: {count}, view procurement',
       },
       alertTypes: {
         out_of_stock_products: 'Out of stock products',

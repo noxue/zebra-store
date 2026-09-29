@@ -90,6 +90,24 @@ pub(crate) fn build_client(policy: AddressPolicy, timeout: Duration) -> reqwest:
     })
 }
 
+/// Builds a bounded client that never follows redirects (used for card conversion).
+pub(crate) fn build_no_redirect_client(
+    policy: AddressPolicy,
+    timeout: Duration,
+) -> reqwest::Client {
+    let mut builder = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .connect_timeout(CONNECT_TIMEOUT)
+        .timeout(timeout);
+    if policy == AddressPolicy::PublicOnly {
+        builder = builder.dns_resolver(Arc::new(PublicResolver));
+    }
+    builder.build().unwrap_or_else(|error| {
+        tracing::error!(%error, "no-redirect http client build failed");
+        reqwest::Client::new()
+    })
+}
+
 /// Validates scheme / host and literal addresses before any I/O; returns the URL.
 pub(crate) fn check_url(policy: AddressPolicy, raw: &str) -> Result<reqwest::Url, String> {
     let url = reqwest::Url::parse(raw.trim()).map_err(|_| "invalid url".to_owned())?;

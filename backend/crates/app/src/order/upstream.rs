@@ -26,10 +26,11 @@ use zs_domain::{Error, ErrorKind, Id, Result};
 use super::OrderService;
 use super::checkout::{CheckoutRequest, ItemRequest};
 use super::payment::PayRequest;
+use crate::integration::card_converter::CardConverterService;
 
 /// The order group's implementation of the integration ports.
 #[derive(Debug, Clone)]
-pub struct OrderIntegrationPorts(pub OrderService);
+pub struct OrderIntegrationPorts(pub OrderService, pub Option<CardConverterService>);
 
 /// Maps a checkout error to the protocol's error codes (`mapOrderError`).
 fn place_error(e: Error) -> UpstreamOrderError {
@@ -107,6 +108,47 @@ fn refund_json(idx: usize, r: &zs_domain::order::model::RefundRecord) -> JsonMap
 }
 
 impl OrderIntegrationPorts {
+    async fn convert_delivery(
+        &self,
+        order: &Order,
+        delivery: &UpstreamDelivery,
+    ) -> Result<UpstreamDelivery> {
+        if let Some(integration) = &self.0.deps.integration {
+            return integration.convert_delivery(order, delivery).await;
+        }
+        let Some(converters) = &self.1 else {
+            return Ok(delivery.clone());
+        };
+        let config = self
+            .0
+            .deps
+            .settings
+            .get(zs_domain::settings::keys::SITE_CONFIG)
+            .await?
+            .unwrap_or_default();
+        let brand = config.get("brand").cloned().unwrap_or_default();
+        let domain = if order.reseller_domain.trim().is_empty() {
+            brand
+                .get("site_url")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned()
+        } else {
+            order.reseller_domain.clone()
+        };
+        let name = brand
+            .get("site_name")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        converters
+            .convert_delivery(
+                order,
+                delivery,
+                serde_json::json!({"domain":domain,"name":name}),
+            )
+            .await
+    }
+
     /// A root order of the buyer (`GetOrderByUser`).
     async fn owned(&self, user_id: Id, order_id: Id) -> Result<Option<Order>> {
         if user_id <= 0 || order_id <= 0 {
@@ -486,11 +528,19 @@ impl ProcurementLifecycle for OrderIntegrationPorts {
     }
 
     async fn deliver_upstream(&self, order_id: Id, delivery: &UpstreamDelivery) -> Result<()> {
+        let order = self
+            .0
+            .deps
+            .repo
+            .get(order_id)
+            .await?
+            .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
+        let converted = self.convert_delivery(&order, delivery).await?;
         let done = self
             .0
             .deps
             .store
-            .upstream_deliver(order_id, delivery, self.0.deps.clock.now())
+            .upstream_deliver(order_id, &converted, self.0.deps.clock.now())
             .await?;
         if let Some((notify_id, status)) = done.and_then(|d| d.notify) {
             self.0.enqueue_status_email(notify_id, status, None).await;

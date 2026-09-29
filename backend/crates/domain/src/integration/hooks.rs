@@ -10,6 +10,7 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 
 use crate::catalog::product::JsonMap;
+use crate::order::model::Order;
 use crate::{Id, Result};
 
 /// A supplier delivery to copy into the local order's fulfillment.
@@ -68,6 +69,23 @@ pub enum FailureRefund {
 /// order group from its payment / status-change workflows).
 #[async_trait]
 pub trait IntegrationOrderEvents: Send + Sync {
+    /// Whether any item in this order has a converter binding.
+    async fn requires_converter(&self, order: &Order) -> Result<bool> {
+        let _ = order;
+        Ok(false)
+    }
+
+    /// Converts a supplier delivery before it is persisted or exposed to a buyer.
+    /// Implementations without converter support retain the original delivery.
+    async fn convert_delivery(
+        &self,
+        order: &Order,
+        delivery: &UpstreamDelivery,
+    ) -> Result<UpstreamDelivery> {
+        let _ = order;
+        Ok(delivery.clone())
+    }
+
     /// A paid order (parent with children or single): creates one purchase order per
     /// order with upstream items (idempotent) and notifies the downstream buyer.
     async fn order_paid(&self, order_id: Id) -> Result<()>;

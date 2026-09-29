@@ -1,11 +1,25 @@
 //! Guest checkout end to end: create-and-pay → signed gateway callback → auto delivery job
 //! → guest detail / download; duplicate and late callbacks; underpaid callbacks.
 
+#![expect(
+    clippy::unwrap_used,
+    reason = "integration test fixtures use unwrap for concise assertions"
+)]
+
 mod order_common;
 
+use axum::extract::State;
 use axum::http::StatusCode;
+use axum::response::IntoResponse;
+use axum::routing::{get, post};
+use axum::{Json, Router};
 use order_common::{Auth, OrderApp};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde_json::{Value, json};
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, AtomicUsize, Ordering},
+};
 use zs_domain::queue::kinds;
 
 const EMAIL: &str = "Buyer@Example.com";
@@ -175,6 +189,203 @@ async fn guest_checkout_callback_auto_delivery_and_download() {
         .call("GET", "/api/v1/guest/orders", None, &guest())
         .await;
     assert_eq!(res["data"].as_array().unwrap().len(), 1, "{res}");
+}
+
+#[derive(Default)]
+struct ConverterMock {
+    fail: AtomicBool,
+    exchanges: AtomicUsize,
+    keys: std::sync::Mutex<Vec<String>>,
+}
+
+async fn converter_health() -> Json<Value> {
+    Json(json!({"ok": true}))
+}
+
+async fn converter_types() -> Json<Value> {
+    Json(json!({"protocol_version":"1","types":[{"id":"account","name":"Account"}]}))
+}
+
+async fn converter_exchange(
+    State(mock): State<Arc<ConverterMock>>,
+    Json(request): Json<Value>,
+) -> axum::response::Response {
+    mock.exchanges.fetch_add(1, Ordering::SeqCst);
+    mock.keys
+        .lock()
+        .unwrap()
+        .push(request["idempotency_key"].as_str().unwrap().to_owned());
+    if mock.fail.load(Ordering::SeqCst) {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({"error":{"code":"temporarily_unavailable"}})),
+        )
+            .into_response();
+    }
+    let items = request["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| {
+            json!({
+                "index": item["index"],
+                "card": format!("SYSTEM-{}", item["upstream_card"].as_str().unwrap()),
+            })
+        })
+        .collect::<Vec<_>>();
+    (
+        StatusCode::OK,
+        Json(json!({"protocol_version":"1","items":items})),
+    )
+        .into_response()
+}
+
+/// A failed conversion holds the exact stock cards and retry resumes only conversion.
+#[tokio::test]
+async fn local_card_converter_retry_does_not_consume_stock_twice() {
+    use sea_orm::{ActiveModelTrait, Set};
+    use zs_domain::integration::card_converter::Binding;
+
+    let mock = Arc::new(ConverterMock {
+        fail: AtomicBool::new(true),
+        ..Default::default()
+    });
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let router = Router::new()
+        .route("/health", get(converter_health))
+        .route("/integration/v1/types", get(converter_types))
+        .route("/integration/v1/exchanges", post(converter_exchange))
+        .with_state(mock.clone());
+    tokio::spawn(async move {
+        axum::serve(listener, router).await.unwrap();
+    });
+
+    let app = OrderApp::with_local_converter().await;
+    let (product, sku) = app.product("converted", json!({})).await;
+    app.secrets(product, sku, 3).await;
+    let now = chrono::Utc::now();
+    let token_enc = app
+        .ctx
+        .cipher
+        .encrypt("test-converter-token-with-sufficient-length")
+        .unwrap();
+    let converter = zs_infra::db::entity::extra::card_converters::ActiveModel {
+        name: Set("test converter".into()),
+        base_url: Set(format!("http://{address}")),
+        token_enc: Set(token_enc),
+        enabled: Set(true),
+        health: Set("unknown".into()),
+        consecutive_failures: Set(0),
+        last_checked_at: Set(None),
+        last_error: Set(String::new()),
+        created_at: Set(now),
+        updated_at: Set(now),
+        ..Default::default()
+    }
+    .insert(&app.db)
+    .await
+    .unwrap();
+    let converter_id = converter.id;
+    app.services
+        .integration
+        .card_converters
+        .refresh_types(converter_id)
+        .await
+        .unwrap();
+    app.services
+        .integration
+        .card_converters
+        .save_binding(Binding {
+            id: 0,
+            product_id: product,
+            sku_id: sku,
+            converter_id,
+            type_id: "account".into(),
+            fields: Vec::new(),
+            extra_template: json!({}),
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        })
+        .await
+        .unwrap();
+
+    let channel = app.epay_channel().await;
+    let order = create_and_pay(&app, product, sku, 2, channel).await;
+    let order_no = order["order_no"].as_str().unwrap().to_owned();
+    let payment_id = order["payment_id"].as_i64().unwrap();
+    assert_eq!(app.epay_callback(payment_id, "20.00").await, "success");
+    let child = app
+        .children(app.order_by_no(&order_no).await.id)
+        .await
+        .remove(0);
+
+    assert!(
+        app.services
+            .order
+            .service
+            .auto_fulfill(child.id)
+            .await
+            .is_err()
+    );
+    let held = app.order(child.id).await;
+    assert_eq!(held.status, "fulfilling");
+    assert_eq!(app.secrets_with(product, "used").await, 2);
+    assert_eq!(app.secrets_with(product, "available").await, 1);
+    assert_eq!(mock.exchanges.load(Ordering::SeqCst), 1);
+
+    mock.fail.store(false, Ordering::SeqCst);
+    app.services
+        .order
+        .service
+        .retry_pending_conversions()
+        .await
+        .unwrap();
+    let final_order = app.order(child.id).await;
+    assert_eq!(final_order.status, "completed");
+    let fulfillment = zs_infra::db::entity::fulfillments::Entity::find()
+        .filter(zs_infra::db::entity::fulfillments::Column::OrderId.eq(child.id))
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        fulfillment.payload,
+        format!("SYSTEM-CARD-{product}-0\nSYSTEM-CARD-{product}-1")
+    );
+    let item = zs_infra::db::entity::order_items::Entity::find()
+        .filter(zs_infra::db::entity::order_items::Column::OrderId.eq(child.id))
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(mock.exchanges.load(Ordering::SeqCst), 2);
+    assert_eq!(
+        *mock.keys.lock().unwrap(),
+        vec![format!("zebra-order-{}-item-{}", child.id, item.id); 2]
+    );
+    assert_eq!(app.secrets_with(product, "used").await, 2);
+
+    let manual_order = create_and_pay(&app, product, sku, 1, channel).await;
+    let manual_no = manual_order["order_no"].as_str().unwrap().to_owned();
+    let manual_payment_id = manual_order["payment_id"].as_i64().unwrap();
+    assert_eq!(
+        app.epay_callback(manual_payment_id, "10.00").await,
+        "success"
+    );
+    let manual_child = app
+        .children(app.order_by_no(&manual_no).await.id)
+        .await
+        .remove(0);
+    let manual = app
+        .services
+        .order
+        .service
+        .manual_fulfill(manual_child.id, 1, "MANUAL-RAW-CARD", &Default::default())
+        .await
+        .unwrap();
+    assert_eq!(manual.payload, "SYSTEM-MANUAL-RAW-CARD");
+    assert_eq!(mock.exchanges.load(Ordering::SeqCst), 3);
 }
 
 /// PAY-02: a success notification that does not cover the order leaves it unpaid

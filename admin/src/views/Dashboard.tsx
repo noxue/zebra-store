@@ -286,13 +286,29 @@ export default defineComponent({
     const renderAlertsAndActions = () => {
       const alerts = d.overview.value?.alerts ?? []
       const inv = d.inventoryAlerts.value
+      const converterAlerts = d.cardConverterAlerts.value
+      const pendingConverters = d.cardConverterPending.value
+      const canViewOrders = auth.hasPermission('GET:/admin/orders')
+      const canViewProcurement = auth.hasPermission('GET:/admin/procurement-orders')
       return (
         <div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
           <Card title={t('admin.dashboard.alerts.title')}>
-            {alerts.length === 0 && inv.length === 0 ? (
+            {alerts.length === 0 && inv.length === 0 && converterAlerts.length === 0 && pendingConverters.total === 0 ? (
               <EmptyState title={t('admin.dashboard.alerts.empty')} mood="happy" size={72} />
             ) : (
               <div class="space-y-3">
+                {pendingConverters.total > 0 && (
+                  <div class="rounded-zs-sm border border-warning/40 bg-warning-soft px-3 py-2 text-sm text-warning-text">
+                    <div class="mb-2 flex items-center justify-between gap-3">
+                      <span class="font-semibold">{t('admin.dashboard.alerts.converterPending', { count: pendingConverters.total })}</span>
+                      <Badge tone="warning">{pendingConverters.total}</Badge>
+                    </div>
+                    <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                      {canViewOrders && <RouterLink class="underline underline-offset-2" to="/orders">{t('admin.dashboard.alerts.converterPendingLocal', { count: pendingConverters.local })}</RouterLink>}
+                      {canViewProcurement && <RouterLink class="underline underline-offset-2" to="/procurement-orders">{t('admin.dashboard.alerts.converterPendingUpstream', { count: pendingConverters.upstream })}</RouterLink>}
+                    </div>
+                  </div>
+                )}
                 {alerts.map((a) => (
                   <div
                     key={a.type}
@@ -309,6 +325,23 @@ export default defineComponent({
                     <span class="zs-num font-semibold">{a.value}</span>
                   </div>
                 ))}
+                {converterAlerts.map((converter) => {
+                  const products = new Set(d.cardConverterBindings.value.filter((binding) => binding.converter_id === converter.id).map((binding) => binding.product_id))
+                  return (
+                    <RouterLink
+                      key={`converter-${converter.id}`}
+                      to="/card-converters"
+                      class="block rounded-zs-sm border border-danger/40 bg-danger-soft px-3 py-2 text-sm text-danger-text transition-colors hover:border-danger"
+                    >
+                      <div class="flex items-center justify-between gap-3">
+                        <span class="font-semibold">{t('admin.dashboard.alerts.converterUnhealthy', { name: converter.name })}</span>
+                        <Badge tone="danger">{t('admin.dashboard.alerts.affectedProducts', { count: products.size })}</Badge>
+                      </div>
+                      <p class="mt-1 text-xs">{converter.last_error || t('admin.dashboard.alerts.converterProbeFailed')}</p>
+                      {converter.last_checked_at && <p class="mt-1 text-[11px] opacity-75">{converter.last_checked_at}</p>}
+                    </RouterLink>
+                  )
+                })}
                 {inv.length > 0 && (
                   <div class="space-y-2">
                     <p class="text-xs text-muted">{t('admin.dashboard.inventoryAlerts.title')}</p>

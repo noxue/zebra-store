@@ -4,6 +4,11 @@ import type { ExtraMessages } from '../index'
 const messages: ExtraMessages = {
   'zh-CN': {
     procurement: {
+      actions: {
+        retryDelivery: '重试卡密转换',
+        retryDeliveryConfirm: '仅重试已成功采购的交付转换，不会再次向上游下单。确认重试采购单 #{id}？',
+        retryDeliverySuccess: '交付转换已重试',
+      },
       status: {
         manual_review: '待人工核对',
       },
@@ -81,6 +86,7 @@ const messages: ExtraMessages = {
       }
     },
     admin: {
+      navItems: { cardConverters: '卡密转换器' },
       zebraIntegration: {
         invalidUrl: '请输入有效的 URL（需包含 http:// 或 https://）',
         from: '开始',
@@ -90,6 +96,11 @@ const messages: ExtraMessages = {
   },
   'zh-TW': {
     procurement: {
+      actions: {
+        retryDelivery: '重試卡密轉換',
+        retryDeliveryConfirm: '僅重試已成功採購的交付轉換，不會再次向上游下單。確認重試採購單 #{id}？',
+        retryDeliverySuccess: '交付轉換已重試',
+      },
       status: {
         manual_review: '待人工核對',
       },
@@ -167,6 +178,7 @@ const messages: ExtraMessages = {
       }
     },
     admin: {
+      navItems: { cardConverters: '卡密轉換器' },
       zebraIntegration: {
         invalidUrl: '請輸入有效的 URL（需包含 http:// 或 https://）',
         from: '開始',
@@ -176,6 +188,11 @@ const messages: ExtraMessages = {
   },
   'en-US': {
     procurement: {
+      actions: {
+        retryDelivery: 'Retry card conversion',
+        retryDeliveryConfirm: 'Retry conversion of the already purchased delivery only. This will not place another upstream order. Retry procurement order #{id}?',
+        retryDeliverySuccess: 'Delivery conversion retry submitted',
+      },
       status: {
         manual_review: 'Manual review',
       },
@@ -253,6 +270,7 @@ const messages: ExtraMessages = {
       }
     },
     admin: {
+      navItems: { cardConverters: 'Card converters' },
       zebraIntegration: {
         invalidUrl: 'Please enter a valid URL (including http:// or https://)',
         from: 'From',

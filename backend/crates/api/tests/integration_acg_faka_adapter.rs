@@ -12,7 +12,10 @@
 mod integration_common;
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicBool, AtomicUsize, Ordering},
+};
 use std::time::Duration;
 
 use axum::Router;
@@ -20,7 +23,7 @@ use axum::body::{Body, Bytes};
 use axum::extract::State;
 use axum::http::{Uri, header};
 use axum::response::{IntoResponse, Response};
-use axum::routing::post;
+use axum::routing::{get, post};
 use chrono::Utc;
 use integration_common::{IntApp, data, seed_item, seed_order_row};
 use md5::{Digest, Md5};
@@ -446,7 +449,12 @@ struct Site {
 }
 
 async fn site() -> Site {
-    let cfg = integration_common::config();
+    site_with_private_converter(false).await
+}
+
+async fn site_with_private_converter(allow_private: bool) -> Site {
+    let mut cfg = integration_common::config();
+    cfg.integration.allow_private_addresses = allow_private;
     let db = zs_infra::db::connect(&cfg.database).await.unwrap();
     zs_infra::db::sync_schema(&db).await.unwrap();
     let ctx = WireCtx::new(&db, &cfg);
@@ -612,6 +620,50 @@ fn trades(mock: &Mock) -> Vec<Vec<(String, String)>> {
 
 fn field(fields: &[(String, String)], key: &str) -> String {
     flat(fields, key)
+}
+
+#[derive(Default)]
+struct ConverterMock {
+    fail: AtomicBool,
+    exchanges: AtomicUsize,
+}
+
+async fn converter_health() -> axum::Json<Value> {
+    axum::Json(json!({"ok": true}))
+}
+
+async fn converter_types() -> axum::Json<Value> {
+    axum::Json(json!({"protocol_version":"1","types":[{"id":"account","name":"Account"}]}))
+}
+
+async fn converter_exchange(
+    State(mock): State<Arc<ConverterMock>>,
+    axum::Json(request): axum::Json<Value>,
+) -> Response {
+    mock.exchanges.fetch_add(1, Ordering::SeqCst);
+    if mock.fail.load(Ordering::SeqCst) {
+        return (
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            axum::Json(json!({"error":{"code":"temporarily_unavailable"}})),
+        )
+            .into_response();
+    }
+    let items = request["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| {
+            json!({
+                "index": item["index"],
+                "card": format!("SYSTEM-{}", item["upstream_card"].as_str().unwrap()),
+            })
+        })
+        .collect::<Vec<_>>();
+    (
+        axum::http::StatusCode::OK,
+        axum::Json(json!({"protocol_version":"1","items":items})),
+    )
+        .into_response()
 }
 
 // ---------------------------------------------------------------------------
@@ -943,6 +995,147 @@ async fn acg_faka_end_to_end() {
         .unwrap()
         .unwrap();
     assert_eq!(mapping.upstream_status, "active");
+}
+
+/// A supplier trade that succeeds before conversion fails remains held and is
+/// resumed after converter recovery without a second supplier trade.
+#[tokio::test]
+async fn purchased_delivery_recovery_never_rebuys_upstream_cards() {
+    let (supplier_base, supplier_mock) = start_mock().await;
+    let converter_mock = Arc::new(ConverterMock {
+        fail: AtomicBool::new(true),
+        ..Default::default()
+    });
+    let converter_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let converter_address = converter_listener.local_addr().unwrap();
+    let converter_router = Router::new()
+        .route("/health", get(converter_health))
+        .route("/integration/v1/types", get(converter_types))
+        .route("/integration/v1/exchanges", post(converter_exchange))
+        .with_state(converter_mock.clone());
+    tokio::spawn(async move {
+        axum::serve(converter_listener, converter_router)
+            .await
+            .unwrap();
+    });
+
+    let buyer = site_with_private_converter(true).await;
+    let conn = buyer.connect(&supplier_base).await;
+    buyer
+        .app
+        .services
+        .integration
+        .mappings
+        .sync_connection_now(conn)
+        .await
+        .unwrap();
+    let product = buyer.import(conn, 13).await;
+    let sku = buyer.skus(product).await.into_iter().next().unwrap();
+    let now = Utc::now();
+    let token_enc = buyer
+        .ctx
+        .cipher
+        .encrypt("test-converter-token-with-sufficient-length")
+        .unwrap();
+    let converter = zs_infra::db::entity::extra::card_converters::ActiveModel {
+        name: Set("recovery converter".into()),
+        base_url: Set(format!("http://{converter_address}")),
+        token_enc: Set(token_enc),
+        enabled: Set(true),
+        health: Set("unknown".into()),
+        consecutive_failures: Set(0),
+        last_checked_at: Set(None),
+        last_error: Set(String::new()),
+        created_at: Set(now),
+        updated_at: Set(now),
+        ..Default::default()
+    }
+    .insert(&buyer.app.db)
+    .await
+    .unwrap();
+    buyer
+        .app
+        .services
+        .integration
+        .card_converters
+        .refresh_types(converter.id)
+        .await
+        .unwrap();
+    buyer
+        .app
+        .services
+        .integration
+        .card_converters
+        .save_binding(zs_domain::integration::card_converter::Binding {
+            id: 0,
+            product_id: product,
+            sku_id: sku.id,
+            converter_id: converter.id,
+            type_id: "account".into(),
+            fields: Vec::new(),
+            extra_template: json!({}),
+            created_at: now,
+            updated_at: now,
+        })
+        .await
+        .unwrap();
+
+    let procurement_id = buyer.procure("CONVERT-RECOVERY", product, sku.id, 2).await;
+    let held = buyer
+        .app
+        .services
+        .integration
+        .procurement
+        .get(procurement_id)
+        .await
+        .unwrap();
+    assert_eq!(
+        converter_mock.exchanges.load(Ordering::SeqCst),
+        1,
+        "converter exchange must fail once"
+    );
+    assert_eq!(held.status.as_str(), "accepted");
+    assert!(held.has_held_delivery);
+    assert_eq!(trades(&supplier_mock).len(), 1);
+    assert_eq!(converter_mock.exchanges.load(Ordering::SeqCst), 1);
+    let local_order = orders::Entity::find_by_id(held.local_order_id)
+        .one(&buyer.app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(local_order.status, "fulfilling");
+
+    converter_mock.fail.store(false, Ordering::SeqCst);
+    buyer
+        .app
+        .services
+        .integration
+        .procurement
+        .poll(procurement_id)
+        .await
+        .unwrap();
+    let completed = buyer
+        .app
+        .services
+        .integration
+        .procurement
+        .get(procurement_id)
+        .await
+        .unwrap();
+    assert_eq!(completed.status.as_str(), "fulfilled");
+    assert_eq!(
+        trades(&supplier_mock).len(),
+        1,
+        "recovery must not call upstream trade again"
+    );
+    assert_eq!(converter_mock.exchanges.load(Ordering::SeqCst), 2);
+    let delivery = fulfillments::Entity::find()
+        .filter(fulfillments::Column::OrderId.eq(held.local_order_id))
+        .one(&buyer.app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(delivery.payload, "SYSTEM-P1\nSYSTEM-P2");
 }
 
 #[tokio::test]

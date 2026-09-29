@@ -29,6 +29,7 @@ pub mod kinds {
     pub const UPSTREAM_SYNC_CONNECTION: &str = "upstream:sync_connection";
     pub const ZS_CATALOG_SNAPSHOT: &str = "zs:catalog_snapshot";
     pub const ZS_DELIVER_EVENT: &str = "zs:deliver_event";
+    pub const CARD_CONVERTER_HEALTH_TICK: &str = "card_converter:health_tick";
 }
 
 /// A job to enqueue.

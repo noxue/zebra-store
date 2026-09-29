@@ -3,6 +3,7 @@
 //! upstream API served under `/api/v1/upstream`.
 
 mod admin;
+mod card_converter;
 mod credential;
 mod mapping;
 mod procurement;
@@ -32,7 +33,8 @@ pub fn routes() -> RouteSet {
             .merge(admin::connections())
             .merge(mapping::admin())
             .merge(procurement::admin())
-            .merge(reconciliation::admin()),
+            .merge(reconciliation::admin())
+            .merge(card_converter::admin()),
         upstream: upstream::routes(),
         user_open: zs::routes(),
         root: provide::root(),

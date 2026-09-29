@@ -1,5 +1,6 @@
 //! Delivery use cases (`fulfillment/application/service.go`).
 
+use zs_domain::integration::hooks::UpstreamDelivery;
 use zs_domain::notify::channel::bot_events;
 use zs_domain::order::delivery::{delivery_payload, normalize_delivery_data};
 use zs_domain::order::model::{Fulfillment, JsonMap, OrderStatus, keys};
@@ -8,6 +9,21 @@ use zs_domain::{Error, ErrorKind, Id, Result};
 use super::OrderService;
 
 impl OrderService {
+    /// Replays pending local conversions after process restart or converter recovery.
+    /// The reserved cards and pending fulfillment make the attempt idempotent.
+    pub async fn retry_pending_conversions(&self) -> Result<()> {
+        for order_id in self.deps.repo.pending_auto_fulfillment_ids().await? {
+            if let Err(error) = self.auto_fulfill(order_id).await {
+                tracing::warn!(%error, order_id, "card_converter_pending_local_retry_failed");
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn pending_conversion_count(&self) -> Result<usize> {
+        Ok(self.deps.repo.pending_auto_fulfillment_ids().await?.len())
+    }
+
     /// After a child was delivered: recompute the parent, queue the status email of the
     /// parent (never for canceled), notify the bot and the integration group.
     async fn after_delivery(&self, order_id: Id, own_status: OrderStatus) {
@@ -45,12 +61,63 @@ impl OrderService {
         if order_id <= 0 {
             return Ok(());
         }
-        match self
-            .deps
-            .store
-            .auto_fulfill(order_id, self.deps.clock.now())
-            .await
-        {
+        let result: Result<()> = async {
+            let order = self
+                .deps
+                .repo
+                .get(order_id)
+                .await?
+                .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
+            let pending_conversion = order.status == OrderStatus::Fulfilling
+                && order
+                    .fulfillment
+                    .as_ref()
+                    .is_some_and(|f| f.status == "pending" && f.kind == "auto");
+            let has_converter = if let Some(integration) = &self.deps.integration {
+                integration.requires_converter(&order).await?
+            } else {
+                false
+            };
+            if pending_conversion && !has_converter {
+                return Err(Error::internal_msg(
+                    "pending card conversion has no active product binding",
+                ));
+            }
+            if !has_converter {
+                self.deps
+                    .store
+                    .auto_fulfill(order_id, self.deps.clock.now())
+                    .await?;
+                return Ok(());
+            }
+            let raw = self
+                .deps
+                .store
+                .prepare_auto_fulfill(order_id, self.deps.clock.now())
+                .await?;
+            let integration =
+                self.deps.integration.as_ref().ok_or_else(|| {
+                    Error::internal_msg("card converter integration is unavailable")
+                })?;
+            let delivery = zs_domain::integration::hooks::UpstreamDelivery {
+                kind: "auto".to_owned(),
+                status: "delivered".to_owned(),
+                payload: raw,
+                delivery_data: Default::default(),
+                delivered_at: Some(self.deps.clock.now()),
+            };
+            let converted = integration
+                .convert_delivery(&order, &delivery)
+                .await
+                .map_err(|e| e.or_internal("error.card_converter_conversion_failed"))?;
+            self.deps
+                .store
+                .finalize_auto_fulfill(order_id, &converted.payload, self.deps.clock.now())
+                .await?;
+            Ok(())
+        }
+        .await;
+        match result {
             Ok(_) => {
                 self.after_delivery(order_id, OrderStatus::Completed).await;
                 Ok(())
@@ -81,6 +148,24 @@ impl OrderService {
         }
         if payload.is_empty() {
             payload = delivery_payload(&data);
+        }
+        if let Some(integration) = &self.deps.integration
+            && let Some(order) = self.deps.repo.get(order_id).await?
+            && integration.requires_converter(&order).await?
+        {
+            let converted = integration
+                .convert_delivery(
+                    &order,
+                    &UpstreamDelivery {
+                        kind: "auto".to_owned(),
+                        status: "delivered".to_owned(),
+                        payload,
+                        delivery_data: data.clone(),
+                        delivered_at: Some(self.deps.clock.now()),
+                    },
+                )
+                .await?;
+            payload = converted.payload;
         }
         let now = self.deps.clock.now();
         let fulfillment = self

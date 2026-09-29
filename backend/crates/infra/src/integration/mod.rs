@@ -4,6 +4,7 @@
 //! image storage for imported products.
 
 pub mod acg_faka;
+pub mod card_converter;
 pub mod client;
 pub mod http;
 pub mod mcy_openapi;

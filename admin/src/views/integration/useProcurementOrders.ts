@@ -31,6 +31,7 @@ export interface ProcurementRow {
   upstream_payload_line_count?: number
   upstream_refund_records?: unknown
   upstream_refunded_amount?: Money
+  has_held_delivery?: boolean
   created_at: string
   updated_at: string
   connection?: { id?: number; name?: string; exchange_rate?: Money }
@@ -55,6 +56,7 @@ export function useProcurementOrders() {
   const detailLoading = ref(false)
   const retryingId = ref<number | null>(null)
   const cancelingId = ref<number | null>(null)
+  const retryingDeliveryId = ref<number | null>(null)
   const downloading = ref(false)
 
   /** Filters shared by list + stats (stats ignore the status filter). */
@@ -139,6 +141,21 @@ export function useProcurementOrders() {
     }
   }
 
+  const retryDelivery = async (order: ProcurementRow) => {
+    const ok = await confirmAction({ description: t('procurement.actions.retryDeliveryConfirm', { id: order.id }), confirmText: t('procurement.actions.retryDelivery') })
+    if (!ok) return
+    retryingDeliveryId.value = order.id
+    try {
+      await adminAPI.retryProcurementDelivery(order.id)
+      notifySuccess(t('procurement.actions.retryDeliverySuccess'))
+      afterAction(order)
+    } catch {
+      /* already notified */
+    } finally {
+      retryingDeliveryId.value = null
+    }
+  }
+
   const cancel = async (order: ProcurementRow) => {
     const ok = await confirmAction({
       description: t('procurement.actions.cancelConfirm', { id: order.id }),
@@ -194,11 +211,13 @@ export function useProcurementOrders() {
     detail,
     detailLoading,
     retryingId,
+    retryingDeliveryId,
     cancelingId,
     downloading,
     refundRecords,
     openDetail,
     retry,
+    retryDelivery,
     cancel,
     downloadPayload,
     init,

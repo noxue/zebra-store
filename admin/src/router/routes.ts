@@ -64,6 +64,7 @@ export const adminChildRoutes: RouteRecordRaw[] = [
   // integration
   { path: 'site-connections', name: 'site-connections', component: () => import('@/views/integration/SiteConnections'), meta: { permission: 'GET:/admin/site-connections' } },
   { path: 'product-mappings', name: 'product-mappings', component: () => import('@/views/integration/ProductMappings'), meta: { permission: 'GET:/admin/product-mappings' } },
+  { path: 'card-converters', name: 'card-converters', component: () => import('@/views/integration/CardConverters'), meta: { permission: 'GET:/admin/card-converters' } },
   { path: 'procurement-orders', name: 'procurement-orders', component: () => import('@/views/integration/ProcurementOrders'), meta: { permission: 'GET:/admin/procurement-orders' } },
   { path: 'reconciliation', name: 'reconciliation', component: () => import('@/views/integration/Reconciliation'), meta: { permission: 'GET:/admin/reconciliation/jobs', compliance: true } },
   { path: 'api-credentials', name: 'api-credentials', component: () => import('@/views/integration/ApiCredentials'), meta: { permission: 'GET:/admin/api-credentials' } },

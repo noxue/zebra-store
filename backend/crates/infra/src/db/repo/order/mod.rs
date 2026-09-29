@@ -226,6 +226,23 @@ impl OrderStore for SeaOrderStore {
         in_txn!(self, |txn| fulfill::auto_in(&txn, order_id, now).await)
     }
 
+    async fn prepare_auto_fulfill(&self, order_id: Id, now: DateTime<Utc>) -> Result<String> {
+        in_txn!(self, |txn| fulfill::prepare_auto_in(&txn, order_id, now)
+            .await)
+    }
+
+    async fn finalize_auto_fulfill(
+        &self,
+        order_id: Id,
+        payload: &str,
+        now: DateTime<Utc>,
+    ) -> Result<Fulfillment> {
+        in_txn!(self, |txn| fulfill::finalize_auto_in(
+            &txn, order_id, payload, now
+        )
+        .await)
+    }
+
     async fn manual_fulfill(
         &self,
         order_id: Id,

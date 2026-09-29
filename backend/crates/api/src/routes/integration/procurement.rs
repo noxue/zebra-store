@@ -27,6 +27,7 @@ pub(super) fn admin() -> Routes {
             download,
         )
         .post("/procurement-orders/{id}/retry", retry)
+        .post("/procurement-orders/{id}/retry-delivery", retry_delivery)
         .post("/procurement-orders/{id}/cancel", cancel)
 }
 
@@ -102,6 +103,15 @@ async fn download(State(s): State<AppState>, PathId(id): PathId) -> Result<Respo
 async fn retry(State(s): State<AppState>, PathId(id): PathId) -> ApiResult<Data<Value>> {
     s.svc.integration.procurement.retry(id).await?;
     ok(json!({"ok": true}))
+}
+
+async fn retry_delivery(State(s): State<AppState>, PathId(id): PathId) -> ApiResult<Data<Value>> {
+    s.svc
+        .integration
+        .procurement
+        .retry_held_delivery(id)
+        .await?;
+    ok(json!({"retried": true, "purchase_resubmitted": false}))
 }
 
 /// LQA-I3: the response says how the buyer was refunded (`refund_type` `wallet` /

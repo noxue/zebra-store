@@ -1,17 +1,22 @@
 import { computed, reactive, ref } from 'vue'
 import i18n from '@/i18n'
 import { adminAPI } from '@/api/admin'
-import type { AdminDashboardInventoryAlert, DashboardOverview, DashboardRankings, DashboardTrends } from '@/api/types'
+import type { AdminCardConverter, AdminCardConverterBinding, AdminCardConverterPending, AdminDashboardInventoryAlert, DashboardOverview, DashboardRankings, DashboardTrends } from '@/api/types'
+import { useAdminAuthStore } from '@/stores/auth'
 import { buildDashboardQuery, defaultCustomRange, type DashboardFilters, type DashboardRange } from './dashboardUtils'
 
 export function useDashboard() {
   const t = i18n.global.t
+  const auth = useAdminAuthStore()
   const loading = ref(false)
   const error = ref('')
   const overview = ref<DashboardOverview | null>(null)
   const trends = ref<DashboardTrends | null>(null)
   const rankings = ref<DashboardRankings | null>(null)
   const inventoryAlerts = ref<AdminDashboardInventoryAlert[]>([])
+  const cardConverterAlerts = ref<AdminCardConverter[]>([])
+  const cardConverterBindings = ref<AdminCardConverterBinding[]>([])
+  const cardConverterPending = ref<AdminCardConverterPending>({ local: 0, upstream: 0, total: 0 })
   const filters = reactive<DashboardFilters>({ range: '7d', from: '', to: '' })
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
 
@@ -39,16 +44,22 @@ export function useDashboard() {
       return
     }
     loading.value = true
-    const [o, tr, r, a] = await Promise.allSettled([
+    const [o, tr, r, a, c, b, p] = await Promise.allSettled([
       adminAPI.getDashboardOverview(params),
       adminAPI.getDashboardTrends(params),
       adminAPI.getDashboardRankings(params),
       adminAPI.getDashboardInventoryAlerts(),
+      auth.hasPermission('GET:/admin/card-converters') ? adminAPI.getCardConverters() : Promise.resolve({ data: [] as AdminCardConverter[] }),
+      auth.hasPermission('GET:/admin/card-converter-bindings') ? adminAPI.getCardConverterBindings() : Promise.resolve({ data: [] as AdminCardConverterBinding[] }),
+      auth.hasPermission('GET:/admin/card-converters') ? adminAPI.getCardConverterPending() : Promise.resolve({ data: { local: 0, upstream: 0, total: 0 } as AdminCardConverterPending }),
     ])
     overview.value = o.status === 'fulfilled' ? o.value.data : null
     trends.value = tr.status === 'fulfilled' ? tr.value.data : null
     rankings.value = r.status === 'fulfilled' ? r.value.data : null
     inventoryAlerts.value = a.status === 'fulfilled' ? (a.value.data ?? []) : []
+    cardConverterAlerts.value = c.status === 'fulfilled' ? (c.value.data ?? []).filter((converter) => converter.enabled && converter.health === 'unhealthy') : []
+    cardConverterBindings.value = b.status === 'fulfilled' ? (b.value.data ?? []) : []
+    cardConverterPending.value = p.status === 'fulfilled' ? p.value.data : { local: 0, upstream: 0, total: 0 }
     if (o.status === 'rejected') error.value = t('admin.dashboard.errors.fetchFailed')
     loading.value = false
   }
@@ -60,5 +71,5 @@ export function useDashboard() {
     void load()
   }
 
-  return { loading, error, overview, trends, rankings, inventoryAlerts, filters, points, maxOrder, maxPayment, funnelSteps, maxFunnel, load, setRange }
+  return { loading, error, overview, trends, rankings, inventoryAlerts, cardConverterAlerts, cardConverterBindings, cardConverterPending, filters, points, maxOrder, maxPayment, funnelSteps, maxFunnel, load, setRange }
 }

@@ -127,6 +127,113 @@ impl ProcurementService {
         self.clock.now()
     }
 
+    /// Resume already-purchased held deliveries after their converter recovers.
+    /// This only retries the conversion/delivery transition; it never submits a purchase.
+    pub async fn retry_held_for_converter(
+        &self,
+        converter_id: Id,
+        converters: &super::card_converter::CardConverterService,
+    ) -> Result<()> {
+        let mut after_id = 0;
+        loop {
+            let batch = self
+                .repo
+                .list_accepted_after(after_id, SYNC_ACCEPTED_BATCH)
+                .await?;
+            if batch.is_empty() {
+                break;
+            }
+            for p in &batch {
+                after_id = after_id.max(p.id);
+                let Some(delivery) = p.held_delivery.as_ref().filter(|f| !is_unconfirmed(f)) else {
+                    continue;
+                };
+                let Some(local) = self.orders.get(p.local_order_id).await? else {
+                    continue;
+                };
+                let mut items = local.items.clone();
+                for child in &local.children {
+                    items.extend(child.items.clone());
+                }
+                let mut matches = false;
+                for item in items {
+                    if converters
+                        .uses_converter(item.product_id, item.sku_id, converter_id)
+                        .await?
+                    {
+                        matches = true;
+                        break;
+                    }
+                }
+                if matches
+                    && let Err(error) = self
+                        .handle_event(p.id, &UpstreamEvent::Delivered, Some(delivery))
+                        .await
+                {
+                    tracing::warn!(%error, procurement_order_id = p.id, "recovered converter delivery retry failed");
+                }
+            }
+            if batch.len() < usize::try_from(SYNC_ACCEPTED_BATCH).unwrap_or(usize::MAX) {
+                break;
+            }
+        }
+        Ok(())
+    }
+
+    /// Counts purchased deliveries waiting on a configured converter for dashboard triage.
+    pub async fn held_converter_count(
+        &self,
+        converters: &super::card_converter::CardConverterService,
+    ) -> Result<usize> {
+        let mut count = 0_usize;
+        let mut after_id = 0;
+        loop {
+            let batch = self
+                .repo
+                .list_accepted_after(after_id, SYNC_ACCEPTED_BATCH)
+                .await?;
+            if batch.is_empty() {
+                break;
+            }
+            for p in &batch {
+                after_id = after_id.max(p.id);
+                if !p.held_delivery.as_ref().is_some_and(|f| !is_unconfirmed(f)) {
+                    continue;
+                }
+                let Some(local) = self.orders.get(p.local_order_id).await? else {
+                    continue;
+                };
+                let mut items = local.items.clone();
+                for child in &local.children {
+                    items.extend(child.items.clone());
+                }
+                for item in items {
+                    if converters
+                        .has_product_binding(item.product_id, item.sku_id)
+                        .await?
+                    {
+                        count = count.saturating_add(1);
+                        break;
+                    }
+                }
+            }
+            if batch.len() < usize::try_from(SYNC_ACCEPTED_BATCH).unwrap_or(usize::MAX) {
+                break;
+            }
+        }
+        Ok(count)
+    }
+
+    /// Admin recovery of a held supplier delivery. This path never submits a purchase.
+    pub async fn retry_held_delivery(&self, id: Id) -> Result<()> {
+        let order = self.repo.get(id).await?.ok_or_else(not_found)?;
+        let delivery = order
+            .held_delivery
+            .ok_or_else(|| Error::bad_request("error.procurement_delivery_not_held"))?;
+        self.handle_event(id, &UpstreamEvent::Delivered, Some(&delivery))
+            .await
+    }
+
     async fn enqueue(&self, kind: &str, id: Id, at: Option<DateTime<Utc>>, attempts: i32) {
         let job = NewJob::new(
             kind,
@@ -616,8 +723,30 @@ impl ProcurementService {
         let now = self.now();
         match event {
             UpstreamEvent::Delivered => {
+                // Persist the supplier's successful result before any converter call.
+                // If conversion fails or this process restarts, the accepted order is
+                // resumed from held_delivery and the supplier is never purchased again.
+                let held_delivery = fulfillment.cloned().or(p.held_delivery.clone());
+                if held_delivery.is_some() {
+                    let saved = self
+                        .repo
+                        .update(
+                            p.id,
+                            &OPEN_FOR_DELIVERY,
+                            &ProcurementChange {
+                                status: Some(ProcurementStatus::Accepted),
+                                held_delivery: held_delivery.clone(),
+                                ..ProcurementChange::default()
+                            },
+                            now,
+                        )
+                        .await?;
+                    if !saved {
+                        return Ok(());
+                    }
+                }
                 self.lifecycle
-                    .deliver_upstream(p.local_order_id, &delivery_of(fulfillment))
+                    .deliver_upstream(p.local_order_id, &delivery_of(held_delivery.as_ref()))
                     .await?;
                 let change = ProcurementChange {
                     status: Some(ProcurementStatus::Fulfilled),

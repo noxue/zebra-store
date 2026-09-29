@@ -52,6 +52,7 @@ moka = { version = "0.12", features = ["future"] }
 config = { version = "0.15", default-features = false, features = ["yaml"] }
 clap = { version = "4", features = ["derive"] }
 http = "1"
+url = "2"
 regex = "1"
 png = "0.17"
 rsa = { version = "0.9", features = ["sha2"] }

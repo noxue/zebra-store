@@ -107,7 +107,21 @@ impl OrderApp {
 
     /// Same harness with gateways on `transport` (e.g. a slow gateway, PAY-13).
     pub async fn with_transport(transport: Arc<dyn HttpTransport>) -> Self {
-        let cfg = config();
+        Self::with_converter_policy(transport, false).await
+    }
+
+    /// Test harness that allows the configured local card-converter mock.
+    pub async fn with_local_converter() -> Self {
+        Self::with_converter_policy(
+            Arc::new(MockTransport::new(|_| Err("offline".into()))),
+            true,
+        )
+        .await
+    }
+
+    async fn with_converter_policy(transport: Arc<dyn HttpTransport>, allow_private: bool) -> Self {
+        let mut cfg = config();
+        cfg.integration.allow_private_addresses = allow_private;
         let db = zs_infra::db::connect(&cfg.database).await.unwrap();
         zs_infra::db::sync_schema(&db).await.unwrap();
         let ctx = zs_infra::wire::WireCtx::new(&db, &cfg);

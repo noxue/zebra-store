@@ -79,7 +79,19 @@ pub fn integration_ports(ctx: &WireCtx) -> Arc<OrderIntegrationPorts> {
 }
 
 fn ports(ctx: &WireCtx, env: &GatewayEnv) -> Arc<OrderIntegrationPorts> {
-    Arc::new(OrderIntegrationPorts(base_service(ctx, env, None)))
+    Arc::new(OrderIntegrationPorts(base_service(ctx, env, None), None))
+}
+
+/// Integration port with card conversion enabled. The full event graph cannot be
+/// injected here because this port is itself built while the integration graph wires.
+pub fn integration_ports_with_converter(
+    ctx: &WireCtx,
+    converters: zs_app::integration::card_converter::CardConverterService,
+) -> Arc<OrderIntegrationPorts> {
+    Arc::new(OrderIntegrationPorts(
+        base_service(ctx, &default_env(ctx), None),
+        Some(converters),
+    ))
 }
 
 /// The order use cases with gateways on `env` (tests pass a mock transport), wired to

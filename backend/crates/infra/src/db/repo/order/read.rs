@@ -209,6 +209,34 @@ impl OrderRepo for SeaOrderRepo {
         map::load(&self.db, id).await
     }
 
+    async fn pending_auto_fulfillment_ids(&self) -> Result<Vec<Id>> {
+        use crate::db::entity::fulfillments;
+        let pending_ids = fulfillments::Entity::find()
+            .filter(fulfillments::Column::Status.eq("pending"))
+            .filter(fulfillments::Column::Type.eq("auto"))
+            .filter(fulfillments::Column::DeletedAt.is_null())
+            .select_only()
+            .column(fulfillments::Column::OrderId)
+            .into_tuple::<Id>()
+            .all(&self.db)
+            .await
+            .dom()?;
+        if pending_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let rows = orders::Entity::find()
+            .filter(orders::Column::Id.is_in(pending_ids))
+            .filter(orders::Column::Status.eq(OrderStatus::Fulfilling.as_str()))
+            .filter(orders::Column::DeletedAt.is_null())
+            .select_only()
+            .column(orders::Column::Id)
+            .into_tuple::<Id>()
+            .all(&self.db)
+            .await
+            .dom()?;
+        Ok(rows)
+    }
+
     async fn find_parent(
         &self,
         order_no: &str,
