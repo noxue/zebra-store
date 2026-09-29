@@ -9,7 +9,7 @@ Zebra Store 是一个可自行部署的数字商品商城，后端使用 **Rust�
 - 版本下载：[GitHub Releases](https://github.com/noxue/zebra-store/releases)
 - 汇付支付 SDK：[huifu-pay](https://github.com/noxue/huifu-pay)（crates.io：[`huifu-pay`](https://crates.io/crates/huifu-pay)）
 
-Zebra Store 支持通过汇付托管页面进行支付宝、微信 H5 和 PC 收款，包括支付下单、RSA 验签回调、主动查单、原路退款和交易对账单下载。配置方法见[汇付支付文档](https://zebra-store-docs.noxue.com/payment/huifu)。
+Zebra Store 支持通过汇付进行支付宝、微信 H5 和 PC 收款，包括支付下单、RSA 验签回调、主动查单、原路退款和交易对账单下载。默认在 PC 支付页显示完整托管网页的二维码、移动端调起支付，也可切换为整页跳转。配置方法见[汇付支付文档](https://zebra-store-docs.noxue.com/payment/huifu)。
 
 游客下单的邮箱和查询密码可以同时留空；商城会在浏览器 `localStorage` 中保存 UUID 身份，刷新或重新打开页面后仍能查询订单。填写邮箱和密码时也会自动保存并回填，便于继续查单。
 

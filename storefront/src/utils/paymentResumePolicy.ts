@@ -26,6 +26,15 @@ export type PaymentResultTitleKey =
 
 const REDIRECT_PAYMENT_INTERACTION_MODES = new Set(['redirect', 'wap', 'page'])
 const normalizeInteractionMode = (mode: unknown) => String(mode || '').trim().toLowerCase()
+const normalizeProviderType = (provider: unknown) => String(provider || '').trim().toLowerCase()
+
+export const isMobilePaymentDevice = (
+  viewportWidth = typeof window === 'undefined' ? 1024 : window.innerWidth,
+  userAgent = typeof navigator === 'undefined' ? '' : navigator.userAgent,
+  maxTouchPoints = typeof navigator === 'undefined' ? 0 : navigator.maxTouchPoints,
+) => viewportWidth < 768
+  || /Android|iPhone|iPad|iPod|Mobile/i.test(userAgent)
+  || (/Macintosh/i.test(userAgent) && maxTouchPoints > 1)
 
 export const isCustomerSurchargePayment = (payment?: { fee_policy?: unknown } | null) => {
   const policy = String(payment?.fee_policy || '').trim().toLowerCase()
@@ -36,7 +45,10 @@ export const isRedirectPaymentInteractionMode = (mode: unknown) => {
   return REDIRECT_PAYMENT_INTERACTION_MODES.has(normalizeInteractionMode(mode))
 }
 
-export const resolvePaymentPresentationMode = (mode: unknown): PaymentPresentationMode => {
+export const resolvePaymentPresentationMode = (mode: unknown, providerType?: unknown, mobile = false): PaymentPresentationMode => {
+  if (normalizeProviderType(providerType) === 'huifu' && normalizeInteractionMode(mode) === 'qr') {
+    return mobile ? 'redirect' : 'qr'
+  }
   return isRedirectPaymentInteractionMode(mode) ? 'redirect' : 'qr'
 }
 
@@ -93,8 +105,14 @@ export const getCachedPaymentRestorePolicy = (): CachedPaymentRestorePolicy => (
   autoOpenPayLink: false,
 })
 
-export const shouldAutoOpenPaymentLink = (payment?: { interaction_mode?: unknown; pay_url?: unknown; fee_policy?: unknown } | null) => {
+export const shouldAutoOpenPaymentLink = (
+  payment?: { interaction_mode?: unknown; provider_type?: unknown; pay_url?: unknown; fee_policy?: unknown } | null,
+  mobile = isMobilePaymentDevice(),
+) => {
   if (!payment || isCustomerSurchargePayment(payment)) return false
   const payURL = String(payment.pay_url || '').trim()
+  if (normalizeProviderType(payment.provider_type) === 'huifu') {
+    return payURL !== '' && (normalizeInteractionMode(payment.interaction_mode) === 'redirect' || mobile)
+  }
   return isRedirectPaymentInteractionMode(payment.interaction_mode) && payURL !== ''
 }

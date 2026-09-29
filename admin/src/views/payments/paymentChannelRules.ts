@@ -80,7 +80,7 @@ const QR_REDIRECT = ['qr', 'redirect']
 export const interactionModesFor = (provider: string, channelType: string, orderModes: OrderModes): string[] => {
   if (provider === 'bepusdt') return orderModes.bepusdt === 'cashier' ? ['redirect'] : QR_REDIRECT
   if (provider === 'epusdt') return ['redirect']
-  if (provider === 'huifu') return ['redirect']
+  if (provider === 'huifu') return ['qr', 'redirect']
   if (provider === 'dujiaopay') return orderModes.dujiaopay === 'cashier' ? ['redirect'] : QR_REDIRECT
   if (provider === 'official') {
     if (channelType === 'paypal' || channelType === 'stripe') return ['redirect']

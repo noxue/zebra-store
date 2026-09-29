@@ -64,7 +64,7 @@ describe('channel type options', () => {
 describe('interaction modes', () => {
   it('depends on provider, channel and order mode', () => {
     expect(interactionModesFor('epay', 'alipay', tx)).toEqual(['qr', 'redirect'])
-    expect(interactionModesFor('huifu', 'alipay', tx)).toEqual(['redirect'])
+    expect(interactionModesFor('huifu', 'alipay', tx)).toEqual(['qr', 'redirect'])
     expect(interactionModesFor('bepusdt', 'bepusdt', tx)).toEqual(['qr', 'redirect'])
     expect(interactionModesFor('bepusdt', 'bepusdt', { ...tx, bepusdt: 'cashier' })).toEqual(['redirect'])
     expect(interactionModesFor('epusdt', 'epusdt', tx)).toEqual(['redirect'])

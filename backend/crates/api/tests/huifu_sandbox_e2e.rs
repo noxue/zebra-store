@@ -33,7 +33,7 @@ async fn seed_huifu_channel(app: &OrderApp, notify_url: &str, return_url: &str) 
         icon: Set(String::new()),
         provider_type: Set("huifu".into()),
         channel_type: Set("alipay".into()),
-        interaction_mode: Set("redirect".into()),
+        interaction_mode: Set("qr".into()),
         fee_rate: Set(Decimal::ZERO),
         fixed_fee: Set(Decimal::ZERO),
         min_amount: Set(Decimal::ZERO),
@@ -138,11 +138,15 @@ async fn guest_checkout_huifu_notify_and_card_delivery() {
         .await;
     assert_eq!(created["status_code"], 0, "checkout failed: {created}");
     assert_eq!(created["data"]["provider_type"], "huifu");
-    assert_eq!(created["data"]["interaction_mode"], "redirect");
+    assert_eq!(created["data"]["interaction_mode"], "qr");
     assert!(
         created["data"]["pay_url"]
             .as_str()
             .is_some_and(|url| url.starts_with(&env("HUIFU_SANDBOX_CONTROL_URL")))
+    );
+    assert_eq!(
+        created["data"]["qr_code"], created["data"]["pay_url"],
+        "direct-mode desktop QR content must use the signed Huifu hosted URL"
     );
     let order_no = created["data"]["order_no"].as_str().unwrap().to_owned();
     let payment_id = created["data"]["payment_id"].as_i64().unwrap();

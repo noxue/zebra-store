@@ -1,6 +1,6 @@
 import { computed, ref, type Ref } from 'vue'
 import type { PaymentCreateResult } from '@/api/types'
-import { resolvePaymentLinkNavigationTarget, resolvePaymentPresentationMode } from '@/utils/paymentResumePolicy'
+import { isMobilePaymentDevice, resolvePaymentLinkNavigationTarget, resolvePaymentPresentationMode } from '@/utils/paymentResumePolicy'
 import { buildCryptoDetails, qrImageSource } from '@/utils/orderPayment'
 import { isTelegramMiniApp, openTelegramLink } from '@/utils/telegramWebApp'
 
@@ -8,11 +8,12 @@ import { isTelegramMiniApp, openTelegramLink } from '@/utils/telegramWebApp'
  * Shared presentation state of a created payment (QR / pay link / crypto).
  * Used by Payment and RechargeOrderDetail.
  */
-export function usePaymentLink(payment: Ref<PaymentCreateResult | null>) {
+export function usePaymentLink(payment: Ref<PaymentCreateResult | null>, mobile = isMobilePaymentDevice()) {
   const openedPayWindow = ref(false)
   const payLink = computed(() => String(payment.value?.pay_url || '').trim())
   const interactionMode = computed(() => String(payment.value?.interaction_mode || '').trim().toLowerCase())
-  const presentationMode = computed(() => resolvePaymentPresentationMode(interactionMode.value))
+  const providerType = computed(() => String(payment.value?.provider_type || '').trim().toLowerCase())
+  const presentationMode = computed(() => resolvePaymentPresentationMode(interactionMode.value, providerType.value, mobile))
   const qrContent = computed(() => String(payment.value?.qr_code || '').trim())
   /** In QR mode a missing qr_code falls back to encoding the pay link. */
   const qrDisplayContent = computed(() => {

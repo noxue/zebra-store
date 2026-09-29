@@ -11,6 +11,7 @@ import { PAYMENT_RETURN_MARKERS, readQueryFlag, readQueryValue, splitWalletPayme
 import {
   getCachedPaymentRestorePolicy,
   getPaymentResetPolicy,
+  isMobilePaymentDevice,
   resolvePaymentLinkNavigationTarget,
   resolvePaymentPresentationMode,
   shouldAutoOpenPaymentLink,
@@ -29,6 +30,17 @@ describe('FE-01 auto redirect opens in the current tab; wap/page are redirects',
     expect(resolvePaymentPresentationMode('PAGE')).toBe('redirect')
     expect(resolvePaymentPresentationMode('qr')).toBe('qr')
     expect(shouldAutoOpenPaymentLink({ interaction_mode: 'wap', pay_url: 'https://p/x' })).toBe(true)
+  })
+  it('Huifu direct mode stays inline on desktop and opens the hosted page on mobile', () => {
+    const payment = { provider_type: 'huifu', interaction_mode: 'qr', pay_url: 'https://pay.huifu.example/x' }
+    expect(isMobilePaymentDevice(1280, 'Mozilla/5.0')).toBe(false)
+    expect(isMobilePaymentDevice(390, 'Mozilla/5.0 (iPhone)')).toBe(true)
+    expect(isMobilePaymentDevice(1024, 'Mozilla/5.0 (Macintosh)', 5)).toBe(true)
+    expect(resolvePaymentPresentationMode('qr', 'huifu', false)).toBe('qr')
+    expect(resolvePaymentPresentationMode('qr', 'huifu', true)).toBe('redirect')
+    expect(shouldAutoOpenPaymentLink(payment, false)).toBe(false)
+    expect(shouldAutoOpenPaymentLink(payment, true)).toBe(true)
+    expect(shouldAutoOpenPaymentLink({ ...payment, interaction_mode: 'redirect' }, false)).toBe(true)
   })
 })
 

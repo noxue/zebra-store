@@ -230,11 +230,15 @@ impl PaymentGateway for HuifuGateway {
         raw: &ChannelConfig,
         input: &GatewayCreateInput,
     ) -> Result<GatewayCreateResult, GatewayError> {
-        if input.interaction_mode != Some(InteractionMode::Redirect) {
-            return Err(GatewayError::UnsupportedChannel(
-                "huifu requires redirect interaction mode".into(),
-            ));
-        }
+        let direct = match input.interaction_mode {
+            Some(InteractionMode::Qr) => true,
+            Some(InteractionMode::Redirect) => false,
+            _ => {
+                return Err(GatewayError::UnsupportedChannel(
+                    "huifu supports qr and redirect interaction modes".into(),
+                ));
+            }
+        };
         let trans_type = match input.channel_type.trim() {
             channel_type::ALIPAY => "A_NATIVE",
             channel_type::WECHAT => "T_JSAPI",
@@ -269,12 +273,22 @@ impl PaymentGateway for HuifuGateway {
             .await
             .map_err(map_error)?;
         require_accepted(&response)?;
+        let jump_url = response.string("jump_url");
+        if jump_url.trim().is_empty() {
+            return Err(GatewayError::response(
+                "huifu response invalid: jump_url is empty",
+            ));
+        }
         let mut payload = response.data.clone();
         payload.insert("req_date".into(), Value::String(date.clone()));
         payload.insert("req_seq_id".into(), Value::String(input.order_no.clone()));
         Ok(GatewayCreateResult {
             provider_ref: locator(&date, &input.order_no),
-            redirect_url: response.string("jump_url"),
+            redirect_url: jump_url.clone(),
+            // In direct mode desktop clients encode the signed hosted URL as a
+            // QR code; mobile clients open the same URL so Huifu can invoke the
+            // selected app. Redirect mode leaves the QR value empty.
+            qr_code_url: if direct { jump_url } else { String::new() },
             payload,
             display_channel_type: input.channel_type.clone(),
             ..GatewayCreateResult::default()
