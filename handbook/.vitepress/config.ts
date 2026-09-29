@@ -111,7 +111,6 @@ const sidebar: DefaultTheme.Sidebar = {
       items: [
         { text: '概念：上游与下游', link: '/integration/' },
         { text: 'Zebra Store 协议', link: '/integration/zebra-store' },
-        { text: 'dujiao-next 协议', link: '/integration/dujiao-next' },
         { text: '异次元发卡 acg-faka', link: '/integration/acg-faka' },
         { text: '萌次元 mcy-shop', link: '/integration/mcy' },
         { text: '采购单与故障处理', link: '/integration/procurement' },

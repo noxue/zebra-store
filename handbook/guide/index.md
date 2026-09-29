@@ -5,7 +5,7 @@
 系统会**自动把卡密发给买家**，不需要你在线守着。
 
 斑马小铺采用 Rust 后端和 Vue 3 前端，可以直接使用 SQLite，也可以切换到 MySQL 或 PostgreSQL。
-它默认不依赖 Redis，单个可执行文件即可运行；对接模块支持 Zebra Store、dujiao-next、异次元和萌次元协议。
+它默认不依赖 Redis，单个可执行文件即可运行；对接模块支持 Zebra Store、异次元和萌次元协议。
 
 ## 它能做什么
 

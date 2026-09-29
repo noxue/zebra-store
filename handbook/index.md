@@ -32,7 +32,7 @@ features:
     link: /payment/
     linkText: 配置支付渠道
   - title: 站点之间对接
-    details: 可以从别的发卡站进货，也可以给别人供货。支持 dujiao-next、Zebra Store、异次元发卡、萌次元四种协议。
+    details: 可以从别的发卡站进货，也可以给别人供货。支持 Zebra Store、异次元发卡、萌次元三种公开协议。
     link: /integration/
     linkText: 什么是上游和下游
   - title: 分站 / 分销

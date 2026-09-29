@@ -21,10 +21,7 @@
 
 **关闭“启用”开关**：所有用这个凭证的对接请求立即被拒绝，适合临时暂停供货。
 
-凭证用于两种协议：
-
-- **dujiao-next 协议**：对方填写本站地址、API Key、API Secret；
-- **Zebra Store 协议**：推荐使用下面的连接码。
+API Key 和 API Secret 用于 Zebra Store 站点对接，推荐使用下面的连接码完成配置。
 
 ## 2. 生成连接码（Zebra Store 协议）
 

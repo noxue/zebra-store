@@ -83,7 +83,7 @@ dot2.com 实验环境和全新本地实例中整理到 `handbook/public/screensh
 | `admin/media.png` | 素材库 | 后台/media | 有若干图片 | admin | 1440×900 | admin/content.md |
 | `admin/affiliate-settings.png` | 返利设置 | 后台/affiliates/settings | 默认状态 | admin | 1440×900 | admin/affiliate.md |
 | `admin/affiliate-withdraws.png` | 提现审核 | 后台/affiliates/withdraws | 至少一条提现申请 | admin | 1440×900 | admin/affiliate.md |
-| `admin/site-connections.png` | 连接管理 | 后台/site-connections | 显示 acg-faka、dujiao-next 两个连接 | admin | 1440×900 | admin/integration.md |
+| `admin/site-connections.png` | 连接管理 | 后台/site-connections | 显示已配置的上游连接 | admin | 1440×900 | admin/integration.md |
 | `admin/site-connection-edit.png` | 新建连接 | 后台/site-connections | 打开“新建连接”，协议下拉展开或选中 Zebra Store 显示连接码框（不保存） | admin | 1440×1000 | admin/integration.md |
 | `admin/product-mappings.png` | 商品映射 | 后台/product-mappings | 展开一行显示 SKU 对比 | admin | 1440×900 | admin/integration.md |
 | `admin/procurement-orders.png` | 采购单管理 | 后台/procurement-orders | 有 fulfilled 的采购单 | admin | 1440×900 | admin/integration.md |
@@ -113,7 +113,6 @@ dot2.com 实验环境和全新本地实例中整理到 `handbook/public/screensh
 | `integration/zs-connection-code.png` | 生成连接码 | S/me/api | 点击“生成连接码”后显示连接码的弹窗（截图后对连接码打码） | zs2-supply@lab.test | 1440×900 | integration/zebra-store.md |
 | `integration/zs-paste-code.png` | 粘贴连接码并握手 | https://zs2.dot2.com/admin/site-connections | 新建连接，粘贴连接码并解析，显示握手成功信息（不保存；连接码打码） | admin（zs2） | 1440×1000 | integration/zebra-store.md |
 | `integration/zs-procurement-fulfilled.png` | 采购单已完成 | https://zs2.dot2.com/admin/procurement-orders | verify case c 之后，有 fulfilled 采购单 | admin（zs2） | 1440×900 | integration/zebra-store.md |
-| `integration/dujiao-connection.png` | 新建 dujiao-next 连接 | 后台/site-connections | 编辑 dujiao-next 连接的对话框（Secret 留空） | admin | 1440×1000 | integration/dujiao-next.md |
 | `integration/acg-connection.png` | 新建异次元连接 | 后台/site-connections | 编辑 acg-faka 连接的对话框 | admin | 1440×1000 | integration/acg-faka.md |
 | `integration/acg-shared-store.png` | 异次元后台添加共享店铺 | https://acg.dot2.com/admin → 店铺共享 | 列表中显示 store.dot2.com（异次元类型）已连接 | acg-faka 管理员（lab.sh creds） | 1440×900 | integration/acg-faka.md |
 | `integration/procurement-manual-review.png` | 待人工核对的采购单 | 后台/procurement-orders?status=manual_review | 需要一条 manual_review 采购单：本地实例上停掉上游后下单制造；或用集成测试同样的方法 | admin | 1440×900 | integration/procurement.md |

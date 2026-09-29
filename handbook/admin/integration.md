@@ -25,9 +25,9 @@
 | 字段 | 说明 |
 |---|---|
 | 名称 | 自己起的名字，例如“异次元货源” |
-| 对接协议 | **Zebra Store**（推荐，对方也是斑马小铺时）、**dujiao-next**、**异次元发卡**、**萌次元商城**。不同协议要填的字段不同 |
+| 对接协议 | **Zebra Store**（推荐，对方也是斑马小铺时）、**异次元发卡**、**萌次元商城**。不同协议要填的字段不同 |
 | 站点地址 | 上游的网址，例如 `https://supplier.example.com` |
-| API Key / Secret | dujiao-next 和 Zebra Store 协议：上游个人中心“API 对接”里的凭证 |
+| API Key / Secret | Zebra Store 协议：上游个人中心“API 对接”里的凭证 |
 | 商户 ID / 对接密钥 | 异次元协议：你在上游的用户 ID 和 app_key |
 | API-ID / API 密钥 | 萌次元协议：你在上游的 API-ID 和密钥 |
 | 供货站结算货币 | 异次元 / 萌次元协议需要手动填写，例如 CNY |
