@@ -54,7 +54,7 @@ impl std::fmt::Debug for HttpConnector {
 
 impl HttpConnector {
     /// `policy` must be [`AddressPolicy::PublicOnly`] in production; tests against a
-    /// local mock server use `AllowPrivate` (redirects stay refused).
+    /// local mock server use `AllowPrivate`.
     pub fn new(policy: AddressPolicy, clock: Arc<dyn Clock>, max_download: u64) -> Self {
         Self {
             http: build_client(policy, REQUEST_TIMEOUT),

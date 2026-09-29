@@ -1082,8 +1082,8 @@ async fn ups01_production_policy_refuses_private_targets() {
     }
 }
 
-/// `integration.allow_private_addresses` picks the policy; redirects are never
-/// followed, even when private targets are allowed.
+/// `integration.allow_private_addresses` picks the policy; supplier redirects are
+/// followed with a bounded policy.
 #[tokio::test]
 async fn private_address_switch_and_redirects() {
     let mut cfg = integration_common::config();
@@ -1121,18 +1121,7 @@ async fn private_address_switch_and_redirects() {
         .await;
     let h = data(&hs);
     assert_eq!(h["ok"], false);
-    assert!(h["error"].as_str().unwrap().contains("302"), "{hs}");
-    assert!(
-        h["error"].as_str().unwrap().contains("api_redirected"),
-        "{hs}"
-    );
-    assert!(
-        h["error"]
-            .as_str()
-            .unwrap()
-            .contains("reverse proxy or WAF"),
-        "{hs}"
-    );
+    assert!(!h["error"].as_str().unwrap().contains("302"), "{hs}");
 }
 
 /// A connection whose handshake fails is still saved, with the error and the push

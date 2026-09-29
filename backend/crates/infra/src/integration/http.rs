@@ -1,8 +1,9 @@
 //! SSRF-safe outbound HTTP for supplier / downstream URLs (UPS-01, UPS-10):
 //! every resolved address must be public (checked in the DNS resolver, so DNS
 //! rebinding to an internal address is refused at connect time), literal internal
-//! addresses are refused before any I/O, redirects are never followed, requests time
-//! out and response bodies are size-capped.
+//! addresses are refused before any I/O, requests time out and response bodies are
+//! size-capped. Supplier clients follow up to ten HTTP redirects, while every
+//! redirect target remains subject to the same public-address policy.
 
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
@@ -61,19 +62,29 @@ pub(crate) fn is_forbidden(err: &reqwest::Error) -> bool {
 
 /// Builds a client for `policy` with the given total timeout.
 pub(crate) fn build_client(policy: AddressPolicy, timeout: Duration) -> reqwest::Client {
+    let redirect = reqwest::redirect::Policy::custom(move |attempt| {
+        let previous = attempt.previous();
+        if previous.len() >= 10 {
+            return attempt.error("too many redirects");
+        }
+        if let Err(reason) = check_url(policy, attempt.url().as_str()) {
+            return attempt.error(format!("redirect target is forbidden: {reason}"));
+        }
+        attempt.follow()
+    });
     let mut builder = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
+        .redirect(redirect)
         .connect_timeout(CONNECT_TIMEOUT)
         .timeout(timeout);
     if policy == AddressPolicy::PublicOnly {
         builder = builder.dns_resolver(Arc::new(PublicResolver));
     }
-    // Builder errors only come from TLS backend initialisation; fall back to defaults
-    // (still no redirects) rather than panicking.
+    // Builder errors only come from TLS backend initialisation. The fallback is
+    // only a last resort and retains a bounded redirect policy.
     builder.build().unwrap_or_else(|error| {
         tracing::error!(%error, "outbound http client build failed");
         reqwest::Client::builder()
-            .redirect(reqwest::redirect::Policy::none())
+            .redirect(reqwest::redirect::Policy::limited(10))
             .build()
             .unwrap_or_default()
     })
@@ -122,6 +133,7 @@ pub(crate) async fn read_limited(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     // UPS-01: literal internal targets are refused before any I/O.
     #[test]
@@ -150,5 +162,33 @@ mod tests {
         let name = Name::from_str("localhost").expect("valid name");
         let err = PublicResolver.resolve(name).await.err().expect("refused");
         assert!(err.to_string().contains("forbidden address"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn supplier_client_follows_redirects() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
+        let address = listener.local_addr().expect("address");
+        let server = tokio::spawn(async move {
+            for response in [
+                "HTTP/1.1 302 Found\r\nLocation: /challenge?cckey=test\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 11\r\nConnection: close\r\n\r\n{\"ok\":true}",
+            ] {
+                let (mut stream, _) = listener.accept().await.expect("accept");
+                let mut request = [0_u8; 2048];
+                let _ = stream.read(&mut request).await.expect("read");
+                stream.write_all(response.as_bytes()).await.expect("write");
+            }
+        });
+
+        let response = build_client(AddressPolicy::AllowPrivate, Duration::from_secs(2))
+            .post(format!("http://{address}/api/v1/upstream/ping"))
+            .send()
+            .await
+            .expect("request");
+        assert_eq!(response.status(), 200);
+        assert_eq!(response.url().path(), "/challenge");
+        server.await.expect("server");
     }
 }
