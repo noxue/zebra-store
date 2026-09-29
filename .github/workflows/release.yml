@@ -62,6 +62,12 @@ jobs:
         with:
           targets: ${{ matrix.target }}
       - uses: mlugg/setup-zig@v2
+        with:
+          # Pin the compiler and disable setup-zig's post-job cache upload.
+          # Its cache cleanup can fail on a transient mirror fetch even after
+          # the binary has already built and uploaded successfully.
+          version: 0.16.0
+          use-cache: false
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: backend -> target
