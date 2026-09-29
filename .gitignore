@@ -16,5 +16,6 @@ dist
 
 # local live-QA output and session artifacts
 /e2e/live/shots/
+/e2e/live/storefront-log.jsonl
 /e2e/live/**/out/
 /e2e/live/**/.state/
