@@ -18,6 +18,30 @@ fn epay_body() -> Value {
     })
 }
 
+fn huifu_body() -> Value {
+    json!({
+        "name": "汇付-支付宝",
+        "provider_type": "huifu",
+        "channel_type": "alipay",
+        "interaction_mode": "redirect",
+        "payment_roles": ["guest", "member"],
+        "payment_types": ["order"],
+        "config_json": {
+            "api_base_url": "http://127.0.0.1:18766",
+            "sys_id": "6666000108840829",
+            "product_id": "YYZY",
+            "huifu_id": "6666000100000001",
+            "merchant_private_key": payment_common::PRIV_PEM,
+            "huifu_public_key": PUB_PEM,
+            "skill_source": "hfps/1.3.1;sandbox/1.0.0",
+            "project_id": "ZEBRA-SANDBOX",
+            "project_title": "Zebra Store",
+            "notify_url": "http://127.0.0.1:8080/api/v1/payments/callback",
+            "return_url": "http://127.0.0.1:8080/pay"
+        }
+    })
+}
+
 fn data(v: &Value) -> &Value {
     assert_eq!(v["status_code"], 0, "expected success, got {v}");
     &v["data"]
@@ -211,6 +235,143 @@ async fn channel_validation_errors() {
         "config_json": {"client_id": "c", "client_secret": "s", "base_url": "https://api-m.paypal.com",
         "return_url": "https://shop/pay", "cancel_url": "https://shop/cancel"}});
     assert_eq!(app.call("POST", uri, Some(paypal)).await["status_code"], 0);
+}
+
+/// Huifu is a first-class payment provider: valid hosted Alipay config can be stored, private
+/// keys are never echoed, and unsupported channels or interaction modes are rejected.
+#[tokio::test]
+async fn huifu_channel_validation_and_secret_redaction() {
+    let app = PayApp::offline().await;
+    let uri = "/api/v1/admin/payment-channels";
+    let created = app.call("POST", uri, Some(huifu_body())).await;
+    let channel = data(&created);
+    assert_eq!(channel["provider_type"], "huifu");
+    assert_eq!(channel["channel_type"], "alipay");
+    assert_eq!(channel["interaction_mode"], "redirect");
+    assert_eq!(channel["config_json"]["merchant_private_key"], "••••••••");
+    assert_eq!(channel["config_json"]["huifu_public_key"], PUB_PEM);
+
+    let mut unsupported_channel = huifu_body();
+    unsupported_channel["channel_type"] = json!("paypal");
+    expect_error(
+        &app,
+        "POST",
+        uri,
+        Some(unsupported_channel),
+        400,
+        "error.payment_provider_not_supported",
+    )
+    .await;
+
+    let mut unsupported_mode = huifu_body();
+    unsupported_mode["interaction_mode"] = json!("qr");
+    expect_error(
+        &app,
+        "POST",
+        uri,
+        Some(unsupported_mode),
+        400,
+        "error.payment_channel_config_invalid",
+    )
+    .await;
+
+    let mut missing_project = huifu_body();
+    missing_project["config_json"]["project_id"] = json!("");
+    expect_error(
+        &app,
+        "POST",
+        uri,
+        Some(missing_project),
+        400,
+        "error.payment_channel_config_invalid",
+    )
+    .await;
+}
+
+/// Huifu trade bills are queried through a signed API response and downloaded through the
+/// server-side proxy, so the short-lived provider URL is never exposed to the browser.
+#[tokio::test]
+async fn huifu_trade_bill_query_and_download() {
+    let app = PayApp::new(|request| {
+        if request.method == "GET" {
+            assert_eq!(request.url, "http://127.0.0.1:18766/bills/trade.csv");
+            return Ok(HttpResponse::new(
+                200,
+                b"huifu_id,file_date,bill_type\n6666000100000001,20260929,TRADE_BILL\n".to_vec(),
+            ));
+        }
+        assert!(request.url.ends_with("/v2/trade/check/filequery"));
+        let data = json!({
+            "resp_code": "00000000",
+            "resp_desc": "success",
+            "file_details": [{
+                "huifu_id": "6666000100000001",
+                "file_date": "20260929",
+                "file_id": "FILE-1",
+                "file_name": "trade-20260929.csv",
+                "bill_type": "TRADE_BILL",
+                "download_url": "http://127.0.0.1:18766/bills/trade.csv"
+            }],
+            "task_details": [{
+                "huifu_id": "6666000100000001",
+                "data_date": "20260929",
+                "file_id": "FILE-1",
+                "file_name": "trade-20260929.csv",
+                "bill_type": "TRADE_BILL",
+                "task_stat": "S",
+                "task_start_time": "2026-09-30 12:00:00",
+                "task_end_time": "2026-09-30 12:00:01"
+            }]
+        });
+        let sign = huifu_pay::sign_value(payment_common::PRIV_PEM, &data).unwrap();
+        Ok(HttpResponse::new(
+            200,
+            json!({"data": data, "sign": sign}).to_string(),
+        ))
+    })
+    .await;
+    let channel = app
+        .seed_channel(
+            "huifu",
+            "alipay",
+            "redirect",
+            huifu_body()["config_json"].clone(),
+        )
+        .await;
+
+    let queried = app
+        .call(
+            "GET",
+            &format!("/api/v1/admin/payment-channels/{channel}/trade-bill?file_date=20260929"),
+            None,
+        )
+        .await;
+    let result = data(&queried);
+    assert_eq!(result["files"][0]["file_id"], "FILE-1");
+    assert_eq!(result["files"][0]["file_name"], "trade-20260929.csv");
+    assert_eq!(result["tasks"][0]["task_stat"], "S");
+    assert!(
+        result["files"][0].get("download_url").is_none(),
+        "the provider URL must stay server-side"
+    );
+
+    let request = Request::builder()
+        .uri(format!(
+            "/api/v1/admin/payment-channels/{channel}/trade-bill/download?file_date=20260929&file_id=FILE-1"
+        ))
+        .header(header::AUTHORIZATION, format!("Bearer {}", app.token))
+        .body(Body::empty())
+        .unwrap();
+    let (status, headers, body) = app.send(request).await;
+    assert_eq!(status, 200);
+    assert_eq!(headers[header::CONTENT_TYPE], "application/octet-stream");
+    assert!(
+        headers[header::CONTENT_DISPOSITION]
+            .to_str()
+            .unwrap()
+            .contains("trade-20260929.csv")
+    );
+    assert!(body.starts_with(b"huifu_id,file_date,bill_type"));
 }
 
 /// Compliance gate and authentication on the finance routes.

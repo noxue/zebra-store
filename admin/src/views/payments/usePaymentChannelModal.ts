@@ -35,7 +35,8 @@ export interface PaymentChannelModalOptions {
 export function usePaymentChannelModal(opts: PaymentChannelModalOptions) {
   const t = i18n.global.t
   const form = reactive<ChannelForm>(defaultChannelForm())
-  const configs = reactive<ProviderConfigs>(defaultConfigs())
+  const siteOrigin = typeof window === 'undefined' ? '' : window.location.origin
+  const configs = reactive<ProviderConfigs>(defaultConfigs(siteOrigin))
   const error = ref('')
   const loading = ref(false)
   const submitting = ref(false)
@@ -153,7 +154,7 @@ export function usePaymentChannelModal(opts: PaymentChannelModalOptions) {
     error.value = ''
     wechatTestResult.value = null
     showAdvanced.value = false
-    assignState(defaultChannelForm(), defaultConfigs())
+    assignState(defaultChannelForm(), defaultConfigs(siteOrigin))
   }
 
   let loadSeq = 0

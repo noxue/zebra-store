@@ -93,6 +93,17 @@ describe('config sections', () => {
   })
 })
 
+describe('Huifu defaults', () => {
+  it('prefills callback URLs from the current shop origin', () => {
+    const config = defaultConfigs('https://store.example.com/').huifu
+    expect(config.api_base_url).toBe('https://api.huifu.com')
+    expect(config.skill_source).toBe('hfps/1.3.5')
+    expect(config.project_title).toBe('Zebra Store')
+    expect(config.notify_url).toBe('https://store.example.com/api/v1/payments/callback')
+    expect(config.return_url).toBe('https://store.example.com/pay')
+  })
+})
+
 describe('applyConfigs', () => {
   it('parses stored values with defaults', () => {
     const c = applyConfigs({ epay_version: 'V1', gateway_url: 'https://g', payment_method_types: ['card', ' alipay '], sign_type: 'rsa', h5_type: 'ios' })

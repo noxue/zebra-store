@@ -1500,6 +1500,8 @@ const messages = {
         huifuNotifyUrlPlaceholder: 'https://example.com/api/v1/payments/callback',
         huifuReturnUrl: '支付完成回跳地址',
         huifuReturnUrlPlaceholder: 'https://example.com/pay',
+        huifuApplicationHint: '个人身份也可以申请。通常准备姓名、手机号、邮箱、银行卡正反面和身份证正反面照片；实际准入与补充材料以汇付审核为准。',
+        huifuApplicationLink: '前往汇付官网申请',
         huifuHint: '仅支持支付宝、微信 H5 和 PC 托管收款，交互方式固定为跳转。异步通知必须指向公开可访问的 /api/v1/payments/callback；生产环境使用 hfps/1.3.5。',
         dujiaopaySection: 'DujiaoPay 配置',
         dujiaopayApiBaseUrl: 'API 地址',

@@ -282,7 +282,12 @@ const DUJIAOPAY_API = 'https://www.dujiaopay.com'
 const HUIFU_API = 'https://api.huifu.com'
 
 /** Values used for a fresh "create" dialog (original reset*Config functions). */
-export const defaultConfigs = (): ProviderConfigs => ({
+export const defaultConfigs = (siteOrigin = ''): ProviderConfigs => {
+  const origin = siteOrigin.trim().replace(/\/+$/, '')
+  const inferredNotifyUrl = origin ? `${origin}/api/v1/payments/callback` : DEFAULT_NOTIFY_URL
+  const inferredReturnUrl = origin ? `${origin}/pay` : DEFAULT_RETURN_URL
+
+  return {
   epay: {
     epay_version: 'v2',
     gateway_url: '',
@@ -407,10 +412,11 @@ export const defaultConfigs = (): ProviderConfigs => ({
     skill_source: 'hfps/1.3.5',
     project_id: '',
     project_title: 'Zebra Store',
-    notify_url: DEFAULT_NOTIFY_URL,
-    return_url: DEFAULT_RETURN_URL,
+    notify_url: inferredNotifyUrl,
+    return_url: inferredReturnUrl,
   },
-})
+  }
+}
 
 type Raw = Record<string, unknown>
 

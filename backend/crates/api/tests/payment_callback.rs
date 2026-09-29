@@ -6,18 +6,64 @@
 mod payment_common;
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
+use std::time::Duration;
 
 use axum::http::StatusCode;
 use chrono::Utc;
 use payment_common::{PUB_PEM, PayApp, rsa_sha256};
+use sea_orm::EntityTrait;
 use serde_json::{Value, json};
 use zs_domain::payment::form::encode_pairs;
 use zs_domain::settings::SettingsStore;
+use zs_infra::db::entity::orders;
 use zs_infra::payment::epusdt::SignValue;
 use zs_infra::payment::http::HttpResponse;
 use zs_infra::payment::{alipay, bepusdt, epay, epusdt, okpay, stripe, tokenpay};
 
 const EPAY_KEY: &str = "epay-secret-key";
+
+fn huifu_config() -> Value {
+    json!({
+        "api_base_url": "http://127.0.0.1:18766",
+        "sys_id": "6666000108840829",
+        "product_id": "YYZY",
+        "huifu_id": "6666000100000001",
+        "merchant_private_key": payment_common::PRIV_PEM,
+        "huifu_public_key": PUB_PEM,
+        "skill_source": "hfps/1.3.5;sandbox/1.0.0",
+        "project_id": "ZEBRA-TEST",
+        "project_title": "Zebra Store",
+        "notify_url": "http://127.0.0.1:8080/api/v1/payments/callback",
+        "return_url": "http://127.0.0.1:8080/pay"
+    })
+}
+
+async fn huifu_setup(app: &PayApp, order_no: &str) -> (i64, i64, i64) {
+    let channel = app
+        .seed_channel("huifu", "alipay", "redirect", huifu_config())
+        .await;
+    let order = app.seed_order(order_no, "9.90").await;
+    let payment = app
+        .seed_payment(order, channel, order_no, "9.90", "CNY")
+        .await;
+    (channel, order, payment)
+}
+
+fn huifu_form(order_no: &str, merchant: &str, amount: &str, status: &str) -> String {
+    let resp_data = json!({
+        "req_date": "20260930",
+        "req_seq_id": order_no,
+        "huifu_id": merchant,
+        "trans_amt": amount,
+        "trans_stat": status
+    })
+    .to_string();
+    encode_pairs(&[
+        ("sign".into(), rsa_sha256(&resp_data)),
+        ("resp_data".into(), resp_data),
+    ])
+}
 
 async fn epay_setup(app: &PayApp) -> (i64, i64, i64) {
     let channel = app
@@ -125,6 +171,146 @@ async fn pay_35_epay_rejections() {
         assert_eq!((status, body.as_str()), (StatusCode::OK, "fail"), "{query}");
     }
     assert_eq!(app.payment(payment).await.status, "pending");
+}
+
+/// Huifu Notify uses an RSA-signed `resp_data` form field. A successful notification pays
+/// the order and returns the provider-specific acknowledgement; replays remain idempotent.
+#[tokio::test]
+async fn huifu_signed_notify_settles_and_replays_safely() {
+    let app = PayApp::offline().await;
+    let (_, order_id, payment_id) = huifu_setup(&app, "DJP-HUIFU-1").await;
+    let form = huifu_form("DJP-HUIFU-1", "6666000100000001", "9.90", "S");
+
+    for _ in 0..2 {
+        let (status, content_type, body) = app
+            .callback(
+                "POST",
+                "/api/v1/payments/callback",
+                "application/x-www-form-urlencoded;charset=UTF-8",
+                &[],
+                form.clone(),
+            )
+            .await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(content_type.starts_with("text/plain"));
+        assert_eq!(body, "RECV_ORD_ID_DJP-HUIFU-1");
+    }
+
+    assert_eq!(app.payment(payment_id).await.status, "success");
+    let order = orders::Entity::find_by_id(order_id)
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(order.status, "paid");
+    assert_eq!(format!("{:.2}", order.online_paid_amount), "9.90");
+}
+
+/// Invalid signature, merchant, amount and non-final state cannot accidentally settle a Huifu
+/// payment. Pending callbacks are acknowledged but leave both payment and order pending.
+#[tokio::test]
+async fn huifu_notify_rejects_mismatches_and_keeps_pending_atomic() {
+    let app = PayApp::offline().await;
+    let (_, order_id, payment_id) = huifu_setup(&app, "DJP-HUIFU-2").await;
+    let mut cases = vec![
+        huifu_form("DJP-HUIFU-2", "wrong-merchant", "9.90", "S"),
+        huifu_form("DJP-HUIFU-2", "6666000100000001", "9.89", "S"),
+    ];
+    let resp_data = json!({
+        "req_date": "20260930",
+        "req_seq_id": "DJP-HUIFU-2",
+        "huifu_id": "6666000100000001",
+        "trans_amt": "9.90",
+        "trans_stat": "S"
+    })
+    .to_string();
+    cases.push(encode_pairs(&[
+        ("sign".into(), "forged".into()),
+        ("resp_data".into(), resp_data),
+    ]));
+
+    for form in cases {
+        let (_, _, body) = app
+            .callback(
+                "POST",
+                "/api/v1/payments/callback",
+                "application/x-www-form-urlencoded",
+                &[],
+                form,
+            )
+            .await;
+        assert_eq!(body, "fail");
+        assert_eq!(app.payment(payment_id).await.status, "pending");
+    }
+
+    let pending = huifu_form("DJP-HUIFU-2", "6666000100000001", "9.90", "P");
+    let (_, _, body) = app
+        .callback(
+            "POST",
+            "/api/v1/payments/callback",
+            "application/x-www-form-urlencoded",
+            &[],
+            pending,
+        )
+        .await;
+    assert_eq!(body, "RECV_ORD_ID_DJP-HUIFU-2");
+    assert_eq!(app.payment(payment_id).await.status, "pending");
+    assert_eq!(
+        orders::Entity::find_by_id(order_id)
+            .one(&app.db)
+            .await
+            .unwrap()
+            .unwrap()
+            .status,
+        "pending_payment"
+    );
+}
+
+/// Concurrent delivery of the same Huifu notification must finish without a deadlock and commit
+/// one payment transition plus one fulfilment job.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn huifu_concurrent_notify_has_one_atomic_effect() {
+    let app = Arc::new(PayApp::offline().await);
+    let (_, order_id, payment_id) = huifu_setup(&app, "DJP-HUIFU-3").await;
+    let form = huifu_form("DJP-HUIFU-3", "6666000100000001", "9.90", "S");
+    let mut tasks = Vec::new();
+    for _ in 0..10 {
+        let app = Arc::clone(&app);
+        let form = form.clone();
+        tasks.push(tokio::spawn(async move {
+            app.callback(
+                "POST",
+                "/api/v1/payments/callback",
+                "application/x-www-form-urlencoded",
+                &[],
+                form,
+            )
+            .await
+        }));
+    }
+    let results = tokio::time::timeout(Duration::from_secs(10), async {
+        let mut replies = Vec::new();
+        for task in tasks {
+            replies.push(task.await.unwrap());
+        }
+        replies
+    })
+    .await
+    .expect("concurrent Huifu callbacks must not deadlock");
+    assert!(
+        results
+            .iter()
+            .all(|(status, _, body)| *status == StatusCode::OK
+                && body == "RECV_ORD_ID_DJP-HUIFU-3")
+    );
+    assert_eq!(app.payment(payment_id).await.status, "success");
+    let order = orders::Entity::find_by_id(order_id)
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(order.status, "paid");
+    assert_eq!(format!("{:.2}", order.online_paid_amount), "9.90");
 }
 
 /// PAY-18: `;`-separated and `&amp;`-escaped queries.
