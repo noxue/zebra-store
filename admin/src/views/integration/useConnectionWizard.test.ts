@@ -217,6 +217,19 @@ describe('useConnectionWizard — handshake / 测试连接', () => {
     })
   })
 
+  it('explains that an upstream redirect usually comes from reverse-proxy protection', async () => {
+    const detail = 'upstream responded with status 302 (api_redirected): API request was redirected'
+    handshakeSiteConnection.mockResolvedValue({ data: { ...handshakeOk().data, ok: false, error: detail } })
+    const form = reactive({ ...emptySiteConnectionForm('zebra-store'), config: { base_url: 'https://a.io', api_key: 'k', api_secret: 's' } })
+    const w = useConnectionWizard(form, resolve)
+    expect(await w.handshake()).toBe(false)
+    expect(w.error.value).toEqual({
+      title: t('siteConnections.wizard.handshakeFailed'),
+      detail,
+      hint: t('siteConnections.wizard.redirectedHint'),
+    })
+  })
+
   it('falls back to a helpful hint when the request fails without a message', async () => {
     handshakeSiteConnection.mockRejectedValue(new Error(''))
     const form = reactive({ ...emptySiteConnectionForm('zebra-store'), config: { base_url: 'https://a.io', api_key: 'k', api_secret: 's' } })

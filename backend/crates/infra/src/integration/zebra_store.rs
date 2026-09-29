@@ -335,6 +335,9 @@ impl ZebraStoreClient {
                 .body(bytes);
         }
         let res = req.send().await.map_err(|e| transport(&e))?;
+        if let Some(error) = super::client::redirect_error(&res) {
+            return Err(error);
+        }
         let status = res.status().as_u16();
         let raw = read_limited(res, MAX_RESPONSE_BYTES)
             .await

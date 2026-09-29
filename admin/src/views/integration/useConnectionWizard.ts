@@ -17,6 +17,11 @@ export interface WizardError {
 
 const withHint = (title: string, detail: string, hint: string): WizardError => (detail && detail !== hint ? { title, detail, hint } : { title, detail: hint })
 
+const handshakeHint = (detail: string): string =>
+  /status 30[12378]\b|api_redirected/i.test(detail)
+    ? i18n.global.t('siteConnections.wizard.redirectedHint')
+    : i18n.global.t('siteConnections.wizard.handshakeFailedHint')
+
 /**
  * 新建/编辑连接时的「连接码 + 握手」逻辑：粘贴连接码 → 后端解析并填表 → 自动握手；
  * 或用当前表单值「测试连接」。与具体协议无关：必填字段来自协议注册表的定义。
@@ -76,7 +81,8 @@ export function useConnectionWizard(form: SiteConnectionForm, resolveProtocol: (
       if (mine !== seq) return false
       const data = res.data
       if (!data || !data.ok) {
-        error.value = withHint(t('siteConnections.wizard.handshakeFailed'), data?.error ?? '', t('siteConnections.wizard.handshakeFailedHint'))
+        const detail = data?.error ?? ''
+        error.value = withHint(t('siteConnections.wizard.handshakeFailed'), detail, handshakeHint(detail))
         return false
       }
       result.value = data
@@ -84,7 +90,8 @@ export function useConnectionWizard(form: SiteConnectionForm, resolveProtocol: (
       return true
     } catch (err) {
       if (mine !== seq) return false
-      error.value = withHint(t('siteConnections.wizard.handshakeFailed'), errorMessage(err), t('siteConnections.wizard.handshakeFailedHint'))
+      const detail = errorMessage(err)
+      error.value = withHint(t('siteConnections.wizard.handshakeFailed'), detail, handshakeHint(detail))
       return false
     } finally {
       if (mine === seq) testing.value = false

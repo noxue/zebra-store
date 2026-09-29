@@ -1122,6 +1122,17 @@ async fn private_address_switch_and_redirects() {
     let h = data(&hs);
     assert_eq!(h["ok"], false);
     assert!(h["error"].as_str().unwrap().contains("302"), "{hs}");
+    assert!(
+        h["error"].as_str().unwrap().contains("api_redirected"),
+        "{hs}"
+    );
+    assert!(
+        h["error"]
+            .as_str()
+            .unwrap()
+            .contains("reverse proxy or WAF"),
+        "{hs}"
+    );
 }
 
 /// A connection whose handshake fails is still saved, with the error and the push

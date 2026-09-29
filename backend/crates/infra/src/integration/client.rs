@@ -131,6 +131,34 @@ pub(crate) fn body_lost(reason: String) -> UpstreamError {
     UpstreamError::Uncertain(format!("read answer: {reason}"))
 }
 
+/// Turns an HTTP redirect into an actionable error. Supplier API calls must not
+/// follow redirects: doing so would change the signed path and could cross an
+/// SSRF trust boundary. In practice redirects here usually come from a login
+/// page or a browser-only WAF / anti-bot challenge in front of the API.
+pub(crate) fn redirect_error(res: &reqwest::Response) -> Option<UpstreamError> {
+    let status = res.status();
+    if !status.is_redirection() {
+        return None;
+    }
+    let destination = res
+        .headers()
+        .get(reqwest::header::LOCATION)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or_default();
+    let message = if destination.is_empty() {
+        "API request was redirected; configure the upstream reverse proxy or WAF to allow API paths without a browser challenge".to_owned()
+    } else {
+        format!(
+            "API request was redirected to {destination}; configure the upstream reverse proxy or WAF to allow API paths without a browser challenge"
+        )
+    };
+    Some(UpstreamError::Http {
+        status: status.as_u16(),
+        code: "api_redirected".into(),
+        message,
+    })
+}
+
 /// A received answer that is not the expected JSON (truncated, proxy error page …).
 pub(crate) fn unreadable(raw: &[u8]) -> UpstreamError {
     UpstreamError::Uncertain(format!(
@@ -322,6 +350,9 @@ impl DujiaoNextClient {
                 .body(b);
         }
         let res = req.send().await.map_err(|e| transport(&e))?;
+        if let Some(error) = redirect_error(&res) {
+            return Err(error);
+        }
         let status = res.status().as_u16();
         let bytes = read_limited(res, MAX_RESPONSE_BYTES)
             .await
