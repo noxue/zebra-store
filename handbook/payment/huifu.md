@@ -4,7 +4,7 @@ Zebra Store 通过汇付托管支付页面支持 **支付宝和微信 H5 / PC �
 
 - Rust SDK：[github.com/noxue/huifu-pay](https://github.com/noxue/huifu-pay)
 - crates.io：[`huifu-pay`](https://crates.io/crates/huifu-pay)
-- 汇付申请与管理入口：[paas.huifu.com](https://paas.huifu.com/)
+- 汇付注册与申请入口：[使用 Zebra Store 邀请链接注册](https://paas.huifu.com/login?inviteCode=TAXG4QKSR)
 - 汇付开发文档：[paas.huifu.com/docs/devtools](https://paas.huifu.com/docs/devtools/#/skillsv1_0)
 
 ## 个人申请资料
@@ -17,7 +17,7 @@ Zebra Store 通过汇付托管支付页面支持 **支付宝和微信 H5 / PC �
 - 本人银行卡正反面照片；
 - 本人身份证正反面照片。
 
-通过汇付官方渠道提交资料。直接联系汇付官网上的微信客服，或加入官网提供的微信群申请，通常会更快。审核通过后申请托管支付项目，并取得系统号、产品号、汇付商户号和 RSA 密钥。实际准入、费率、结算周期或补充材料以汇付审核结果为准。身份证、银行卡和私钥不要发到 GitHub Issue，也不要放进代码仓库。
+先通过[Zebra Store 邀请链接](https://paas.huifu.com/login?inviteCode=TAXG4QKSR)注册汇付账号，再提交上述资料。直接联系汇付官网上的微信客服，或加入官网提供的微信群申请，通常会更快。审核通过后申请托管支付项目，并取得系统号、产品号、汇付商户号和 RSA 密钥。实际准入、费率、结算周期或补充材料以汇付审核结果为准。身份证、银行卡和私钥不要发到 GitHub Issue，也不要放进代码仓库。
 
 ## 新建支付渠道
 

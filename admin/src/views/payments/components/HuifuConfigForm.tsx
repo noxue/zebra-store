@@ -5,7 +5,7 @@ import type { HuifuConfig } from '../paymentChannelRules'
 import { ExternalLink } from 'lucide-vue-next'
 import { ProviderSection, useConfigFields } from './configFields'
 
-const HUIFU_APPLICATION_URL = 'https://paas.huifu.com/'
+const HUIFU_APPLICATION_URL = 'https://paas.huifu.com/login?inviteCode=TAXG4QKSR'
 
 /** Huifu hosted Alipay/WeChat H5 and PC payment configuration. */
 export const HuifuConfigForm = defineComponent({
