@@ -51,6 +51,7 @@ import {
 } from '@/utils/orderPayment'
 import { resolveWholesalePriceAmount } from '@/utils/productPricing'
 import { buildSkuDisplayText } from '@/utils/sku'
+import { paymentChoices } from '@/utils/paymentMethods'
 
 /** Minimum guest order password length (original checkout). */
 const GUEST_PASSWORD_MIN_LENGTH = 6
@@ -90,6 +91,7 @@ export function useCheckout() {
   let channelsRequestId = 0
 
   const selectedChannelId = ref<number | null>(null)
+  const selectedChannelType = ref('')
   const useBalance = ref(false)
   const walletLoading = ref(false)
   const walletBalance = ref('0')
@@ -160,9 +162,10 @@ export function useCheckout() {
     return ''
   }
 
-  const selectChannel = (channel: PaymentChannel) => {
+  const selectChannel = (channel: PaymentChannel, channelType?: string) => {
     if (isChannelDisabledForAmount(channel)) return
     selectedChannelId.value = Number(channel.id) || null
+    selectedChannelType.value = channelType || paymentChoices([channel])[0]?.type || channel.channel_type
   }
 
   const selectedChannelAmountHint = computed(() => {
@@ -210,7 +213,7 @@ export function useCheckout() {
     if (cartItems.value.some(checkoutItemStockExceeded)) return false
     if (cartItems.value.some(checkoutItemMinNotMet)) return false
     if (walletOnlyPayment.value && expectedOnlinePayCents.value > 0) return false
-    if (!walletOnlyPayment.value && requiresOnlineChannel.value && !selectedChannelId.value) return false
+    if (!walletOnlyPayment.value && requiresOnlineChannel.value && (!selectedChannelId.value || !selectedChannelType.value)) return false
     if (requiresOnlineChannel.value && selectedChannelAmountHint.value) return false
     if (auth.isAuthenticated) return true
     if (checkoutMode.value !== 'guest') return false
@@ -227,7 +230,7 @@ export function useCheckout() {
     const minBlocked = cartItems.value.find(checkoutItemMinNotMet)
     if (minBlocked) return t('cart.minPurchaseNotMet', { count: cartItemPurchaseMin(minBlocked) })
     if (walletOnlyPayment.value && expectedOnlinePayCents.value > 0) return t('payment.walletInsufficientHint')
-    if (!walletOnlyPayment.value && requiresOnlineChannel.value && !selectedChannelId.value) return t('checkout.errors.selectPayment')
+    if (!walletOnlyPayment.value && requiresOnlineChannel.value && (!selectedChannelId.value || !selectedChannelType.value)) return t('checkout.errors.selectPayment')
     if (requiresOnlineChannel.value && selectedChannelAmountHint.value) return selectedChannelAmountHint.value
     if (auth.isAuthenticated) return ''
     if (checkoutMode.value !== 'guest') return t('checkout.errors.loginOrGuest')
@@ -338,6 +341,7 @@ export function useCheckout() {
       const payload: CreateAndPayPayload = {
         ...buildOrderPayload(),
         channel_id: requiresOnlineChannel.value ? selectedChannelId.value || undefined : undefined,
+        channel_type: requiresOnlineChannel.value ? selectedChannelType.value || undefined : undefined,
         use_balance: useBalance.value,
       }
       let orderNo = ''
@@ -404,9 +408,19 @@ export function useCheckout() {
   watch(
     () => [paymentChannels.value, expectedOnlinePayCents.value, requiresOnlineChannel.value],
     () => {
+      const choices = paymentChoices(paymentChannels.value)
+      if (choices.length === 1) {
+        selectedChannelId.value = Number(choices[0].channel.id) || null
+        selectedChannelType.value = choices[0].type
+        return
+      }
       if (!selectedChannelId.value) return
       const selected = paymentChannels.value.find((c) => Number(c.id) === Number(selectedChannelId.value))
-      if (!selected || isChannelDisabledForAmount(selected)) selectedChannelId.value = null
+      const typeStillAvailable = selected && paymentChoices([selected]).some((choice) => choice.type === selectedChannelType.value)
+      if (!selected || isChannelDisabledForAmount(selected) || !typeStillAvailable) {
+        selectedChannelId.value = null
+        selectedChannelType.value = ''
+      }
     },
     { deep: true },
   )
@@ -560,6 +574,7 @@ export function useCheckout() {
     requiresOnlineChannel,
     paymentChannels,
     selectedChannelId,
+    selectedChannelType,
     isChannelDisabledForAmount,
     channelAmountLimitHint,
     selectChannel,

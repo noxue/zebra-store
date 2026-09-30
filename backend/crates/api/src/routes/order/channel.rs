@@ -1325,6 +1325,7 @@ async fn create_payment(
         .pay(&PayRequest {
             order_id: req.order_id,
             channel_id: req.channel_id,
+            channel_type: String::new(),
             use_balance: req.use_balance,
             client_ip: client.ip.clone(),
             tenant: ResellerTenant::default(),

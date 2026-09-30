@@ -155,13 +155,18 @@ export default defineComponent({
                 compact
                 channels={c.paymentChannels.value}
                 modelValue={c.selectedChannelId.value}
+                channelType={c.selectedChannelType.value}
                 isDisabled={c.isChannelDisabledForAmount}
                 limitHint={c.channelAmountLimitHint}
                 fixedFee={c.formatChannelFixedFee}
                 emptyText={t('checkout.noPaymentChannels')}
                 onUpdate:modelValue={(id: number) => {
                   const ch = c.paymentChannels.value.find((x) => Number(x.id) === id)
-                  if (ch) c.selectChannel(ch)
+                  if (ch) c.selectChannel(ch, c.selectedChannelType.value)
+                }}
+                onUpdate:channelType={(type: string) => {
+                  const ch = c.paymentChannels.value.find((x) => Number(x.id) === Number(c.selectedChannelId.value))
+                  if (ch) c.selectChannel(ch, type)
                 }}
               />
             )}

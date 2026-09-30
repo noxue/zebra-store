@@ -276,10 +276,12 @@ export default defineComponent({
                     <PaymentChannelSelector
                       channels={p.channels.value}
                       modelValue={p.selectedChannelId.value}
+                      channelType={p.selectedChannelType.value}
                       isDisabled={p.isChannelDisabledForAmount}
                       limitHint={p.channelAmountLimitHint}
                       emptyText={p.showBalanceOption.value ? t('payment.channelEmptyUseBalance') : t('payment.channelEmpty')}
                       onUpdate:modelValue={(id: number) => (p.selectedChannelId.value = id)}
+                      onUpdate:channelType={(type: string) => (p.selectedChannelType.value = type)}
                     />
                   )}
                 </div>

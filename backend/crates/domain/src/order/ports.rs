@@ -341,6 +341,8 @@ pub struct BeginPayment {
     pub order_id: Id,
     /// `0` = wallet balance only.
     pub channel_id: Id,
+    /// Selected method within a multi-method channel; empty keeps legacy channel behavior.
+    pub channel_type: String,
     pub use_balance: bool,
     pub wallet_only: bool,
     pub customer_fee_enabled: bool,

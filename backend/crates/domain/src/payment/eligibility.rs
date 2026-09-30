@@ -101,6 +101,8 @@ pub struct AvailableChannel {
     pub name: String,
     pub provider_type: String,
     pub channel_type: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub supported_channel_types: Vec<String>,
     pub interaction_mode: String,
     pub min_amount: Amount,
     pub max_amount: Amount,
@@ -125,19 +127,29 @@ pub fn available_channels(
     channels
         .iter()
         .filter(|c| is_available(c, filter))
-        .map(|c| AvailableChannel {
-            id: c.id,
-            name: c.name.clone(),
-            provider_type: c.provider_type.clone(),
-            channel_type: c.channel_type.clone(),
-            interaction_mode: c.interaction_mode.clone(),
-            min_amount: c.min_amount,
-            max_amount: c.max_amount,
-            hide_amount_out_range: c.hide_amount_out_range,
-            fee_policy: customer_fee_enabled.then_some(FeePolicy::CustomerSurcharge),
-            fee_rate: customer_fee_enabled.then_some(c.fee_rate),
-            fixed_fee: customer_fee_enabled.then_some(c.fixed_fee),
-            icon: c.icon.clone(),
+        .map(|c| {
+            let supported = c.supported_channel_types();
+            let supported_channel_types =
+                if supported.len() > 1 || supported.first().is_some_and(|t| t != &c.channel()) {
+                    supported
+                } else {
+                    Vec::new()
+                };
+            AvailableChannel {
+                id: c.id,
+                name: c.name.clone(),
+                provider_type: c.provider_type.clone(),
+                channel_type: c.channel_type.clone(),
+                supported_channel_types,
+                interaction_mode: c.interaction_mode.clone(),
+                min_amount: c.min_amount,
+                max_amount: c.max_amount,
+                hide_amount_out_range: c.hide_amount_out_range,
+                fee_policy: customer_fee_enabled.then_some(FeePolicy::CustomerSurcharge),
+                fee_rate: customer_fee_enabled.then_some(c.fee_rate),
+                fixed_fee: customer_fee_enabled.then_some(c.fixed_fee),
+                icon: c.icon.clone(),
+            }
         })
         .collect()
 }
@@ -279,6 +291,35 @@ mod tests {
             created_at: Utc::now(),
             updated_at: Utc::now(),
         }
+    }
+
+    #[test]
+    fn payment_methods_expand_only_configured_aggregate_methods() {
+        let mut huifu = channel();
+        huifu.provider_type = "huifu".into();
+        huifu.config_json =
+            serde_json::json!({"supported_channel_types": ["wechat", "alipay", "invalid"]})
+                .as_object()
+                .cloned()
+                .unwrap_or_default();
+        assert_eq!(huifu.supported_channel_types(), ["wechat", "alipay"]);
+
+        huifu.config_json.clear();
+        assert_eq!(huifu.supported_channel_types(), ["alipay"]);
+
+        let mut epusdt = channel();
+        epusdt.provider_type = "epusdt".into();
+        epusdt.channel_type = "usdt.tron".into();
+        epusdt.config_json = serde_json::json!({"token": "USDT", "network": "TRON"})
+            .as_object()
+            .cloned()
+            .unwrap_or_default();
+        assert_eq!(epusdt.supported_channel_types(), ["usdt.tron"]);
+
+        epusdt
+            .config_json
+            .insert("order_mode".into(), "cashier".into());
+        assert_eq!(epusdt.supported_channel_types(), ["usdt.tron"]);
     }
 
     const MEMBER_L1: Payer = Payer {

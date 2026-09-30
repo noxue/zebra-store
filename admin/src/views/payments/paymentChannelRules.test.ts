@@ -101,6 +101,40 @@ describe('Huifu defaults', () => {
     expect(config.project_title).toBe('Zebra Store')
     expect(config.notify_url).toBe('https://store.example.com/api/v1/payments/callback')
     expect(config.return_url).toBe('https://store.example.com/pay')
+    expect(config.supported_channel_types).toEqual(['wechat', 'alipay'])
+    const all = defaultConfigs('https://store.example.com/')
+    expect(all.epay.notify_url).toBe('https://store.example.com/api/v1/payments/callback')
+    expect(all.alipay.return_url).toBe('https://store.example.com/pay')
+    expect(all.wechat.notify_url).toBe('https://store.example.com/api/v1/payments/callback')
+    expect(all.epusdt.notify_url).toBe('https://store.example.com/api/v1/payments/callback')
+    expect(all.okpay.callback_url).toBe('https://store.example.com/api/v1/payments/callback')
+    expect(all.dujiaopay.success_url).toBe('https://store.example.com/pay')
+  })
+
+  it('persists a selected method set and keeps old one-method channels compatible', () => {
+    const configs = defaultConfigs()
+    configs.huifu.supported_channel_types = ['alipay', 'wechat']
+    const built = buildChannelPayload(form({ provider_type: 'huifu', channel_type: 'wechat' }), configs)
+    expect(built.ok).toBe(true)
+    if (built.ok) {
+      expect(built.payload.channel_type).toBe('alipay')
+      expect(built.payload.config_json).toMatchObject({ supported_channel_types: ['alipay', 'wechat'] })
+    }
+    const legacy = channelToState({
+      id: 4,
+      name: 'legacy',
+      provider_type: 'huifu',
+      channel_type: 'alipay',
+      interaction_mode: 'qr',
+      fee_rate: '0.00',
+      config_json: { api_base_url: 'https://api.huifu.com' },
+      icon: '',
+      is_active: true,
+      sort_order: 1,
+      created_at: '',
+      updated_at: '',
+    })
+    expect(legacy.configs.huifu.supported_channel_types).toEqual(['alipay'])
   })
 })
 
@@ -115,6 +149,16 @@ describe('applyConfigs', () => {
     expect(c.wechat.verification_mode).toBe('platform_certificate')
     expect(c.paypal.base_url).toBe('https://api-m.sandbox.paypal.com')
     expect(c.okpay.exchange_rate).toBe('1')
+  })
+
+  it('uses browser-derived callback and return URLs for missing saved fields', () => {
+    const c = applyConfigs({}, 'https://shop.example.test')
+    expect(c.epay.notify_url).toBe('https://shop.example.test/api/v1/payments/callback')
+    expect(c.alipay.return_url).toBe('https://shop.example.test/pay')
+    expect(c.wechat.notify_url).toBe('https://shop.example.test/api/v1/payments/callback')
+    expect(c.paypal.cancel_url).toBe('https://shop.example.test/pay')
+    expect(c.stripe.success_url).toBe('https://shop.example.test/pay')
+    expect(c.huifu.notify_url).toBe('https://shop.example.test/api/v1/payments/callback')
   })
 
   it('clears mode-specific fields for cashier mode', () => {
@@ -179,7 +223,7 @@ describe('buildConfigJson', () => {
     const res = buildConfigJson(form({ provider_type: 'epay', config_json: '{"merchant_key":"old","extra":1,"exchange_rate":"7"}' }), configs)
     expect(res).toEqual({
       ok: true,
-      config: { extra: 1, epay_version: 'v2', gateway_url: 'https://pay.example.com', merchant_id: '1001', private_key: 'PK' },
+      config: { extra: 1, epay_version: 'v2', gateway_url: 'https://pay.example.com', merchant_id: '1001', notify_url: 'https://api.yourdomain.com/api/v1/payments/callback', private_key: 'PK', return_url: 'https://yourdomain.com/pay' },
     })
   })
 

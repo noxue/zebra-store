@@ -34,6 +34,7 @@ import {
   type PaymentResetReason,
 } from '@/utils/paymentResumePolicy'
 import { PAID_ORDER_STATUSES } from '@/utils/status'
+import { paymentChoiceLabel, paymentChoices, paymentTypeLabel } from '@/utils/paymentMethods'
 
 /** Poll interval while waiting for the payment (original: 5s). */
 const POLL_INTERVAL_MS = 5000
@@ -70,6 +71,7 @@ export function usePayment() {
   const cachedPayment = ref<PaymentCreateResult | null>(null)
   const error = ref('')
   const selectedChannelId = ref<number | null>(null)
+  const selectedChannelType = ref('')
   const capturing = ref(false)
   const redirecting = ref(false)
   let redirected = false
@@ -117,12 +119,17 @@ export function usePayment() {
     const key = CHANNEL_TYPE_KEYS[value]
     return key ? t(`payment.channelTypes.${key}`) : value
   }
-  const channelName = (channel: PaymentChannel | null, fallbackType?: string) => channel?.name || channelTypeLabel(fallbackType)
+  const methodDisplayName = (channel: PaymentChannel | null, type?: string) => {
+    if (!channel || !type) return channel?.name || channelTypeLabel(type)
+    const allChoices = paymentChoices(channels.value)
+    const choice = allChoices.find((item) => Number(item.channel.id) === Number(channel.id) && item.type === type)
+    return choice ? paymentChoiceLabel(choice, allChoices, (key) => t(key)) : paymentTypeLabel(type, (key) => t(key))
+  }
   const selectedChannel = computed(() => findChannel(selectedChannelId.value))
-  const selectedChannelName = computed(() => channelName(selectedChannel.value, selectedChannel.value?.channel_type))
-  const cachedChannelName = computed(() => channelName(findChannel(cachedPayment.value?.channel_id), cachedPayment.value?.channel_type))
+  const selectedChannelName = computed(() => methodDisplayName(selectedChannel.value, selectedChannelType.value))
+  const cachedChannelName = computed(() => methodDisplayName(findChannel(cachedPayment.value?.channel_id), cachedPayment.value?.channel_type))
   const resultChannel = computed(() => findChannel(paymentResult.value?.channel_id))
-  const resultChannelName = computed(() => channelName(resultChannel.value, paymentResult.value?.channel_type))
+  const resultChannelName = computed(() => methodDisplayName(resultChannel.value, paymentResult.value?.channel_type))
 
   const currentPaymentId = () => {
     const id = Number(paymentResult.value?.payment_id || 0)
@@ -320,6 +327,7 @@ export function usePayment() {
         cachedPayment.value = data
         paymentResult.value = data
         selectedChannelId.value = data.channel_id || null
+        selectedChannelType.value = data.channel_type || ''
         startPolling()
         void captureCurrentPayment(true)
         startCountdown()
@@ -478,11 +486,14 @@ export function usePayment() {
   const performPayment = async () => {
     error.value = ''
     if (!orderNoResolved.value) return void (error.value = t('payment.orderNotFound'))
-    if (requiresOnlineChannel.value && !selectedChannelId.value) return void (error.value = t('payment.selectChannelError'))
+    if (requiresOnlineChannel.value && (!selectedChannelId.value || !selectedChannelType.value)) return void (error.value = t('payment.selectChannelError'))
     if (requiresOnlineChannel.value && selectedChannelAmountHint.value) return void (error.value = selectedChannelAmountHint.value)
     if (orderCanceled.value) return void (error.value = t('payment.orderCanceled'))
     if (orderExpired.value) return void (error.value = t('payment.orderExpired'))
-    if (requiresOnlineChannel.value && cachedPayment.value && selectedChannelId.value && selectedChannelId.value === cachedPayment.value.channel_id) {
+    if (
+      requiresOnlineChannel.value && cachedPayment.value && selectedChannelId.value &&
+      selectedChannelId.value === cachedPayment.value.channel_id && selectedChannelType.value === cachedPayment.value.channel_type
+    ) {
       activatePayment(cachedPayment.value)
       window.scrollTo({ top: 0, behavior: 'smooth' })
       return
@@ -491,17 +502,25 @@ export function usePayment() {
     try {
       if (isGuest.value) {
         if (!hasGuestAuth.value) return void (error.value = t('payment.guestAuthRequired'))
-        const res = await guestOrderAPI.createPayment(guestCreds(), { order_no: orderNoResolved.value, channel_id: selectedChannelId.value || undefined })
+        const res = await guestOrderAPI.createPayment(guestCreds(), {
+          order_no: orderNoResolved.value,
+          channel_id: selectedChannelId.value || undefined,
+          channel_type: selectedChannelType.value,
+        })
         activatePayment(res.data)
       } else {
         const payload: CreatePaymentPayload = { order_no: orderNoResolved.value, use_balance: useBalance.value }
-        if (requiresOnlineChannel.value && selectedChannelId.value) payload.channel_id = selectedChannelId.value
+        if (requiresOnlineChannel.value && selectedChannelId.value) {
+          payload.channel_id = selectedChannelId.value
+          payload.channel_type = selectedChannelType.value
+        }
         const res = await paymentAPI.create(payload)
         const created = res.data || {}
         if (created.order_paid && !created.payment_id) {
           paymentResult.value = null
           cachedPayment.value = null
           selectedChannelId.value = null
+          selectedChannelType.value = ''
           useBalance.value = false
           stopPolling()
           stopCountdown()
@@ -535,7 +554,10 @@ export function usePayment() {
     redirecting.value = false
     redirected = false
     latestLoaded = !policy.resumeLatestPayment
-    if (policy.clearSelectedChannel) selectedChannelId.value = null
+    if (policy.clearSelectedChannel) {
+      selectedChannelId.value = null
+      selectedChannelType.value = ''
+    }
   }
 
   const restoreCachedPayment = () => {
@@ -543,6 +565,7 @@ export function usePayment() {
     const policy = getCachedPaymentRestorePolicy()
     paymentResult.value = cachedPayment.value
     selectedChannelId.value = cachedPayment.value.channel_id || null
+    selectedChannelType.value = cachedPayment.value.channel_type || ''
     link.openedPayWindow.value = false
     if (policy.startActivePaymentWatch) {
       startPolling()
@@ -623,6 +646,7 @@ export function usePayment() {
       resetPayment('route_change')
       cachedPayment.value = null
       selectedChannelId.value = null
+      selectedChannelType.value = ''
       order.value = null
       orderPaymentChannels.value = []
       orderPaymentChannelsLoaded.value = false
@@ -647,9 +671,19 @@ export function usePayment() {
   watch(
     () => [channels.value, expectedOnlinePayCents.value, requiresOnlineChannel.value],
     () => {
+      const choices = paymentChoices(channels.value)
+      if (choices.length === 1) {
+        selectedChannelId.value = Number(choices[0].channel.id) || null
+        selectedChannelType.value = choices[0].type
+        return
+      }
       if (!selectedChannelId.value) return
       const ch = findChannel(selectedChannelId.value)
-      if (!ch || isChannelDisabledForAmount(ch)) selectedChannelId.value = null
+      const typeAvailable = ch && paymentChoices([ch]).some((choice) => choice.type === selectedChannelType.value)
+      if (!ch || isChannelDisabledForAmount(ch) || !typeAvailable) {
+        selectedChannelId.value = null
+        selectedChannelType.value = ''
+      }
     },
     { deep: true },
   )
@@ -676,6 +710,7 @@ export function usePayment() {
     order,
     paymentResult,
     selectedChannelId,
+    selectedChannelType,
     cachedPayment,
     guestAuth,
     guestAuthError,

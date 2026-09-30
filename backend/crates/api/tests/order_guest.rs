@@ -7,6 +7,7 @@
 )]
 
 mod order_common;
+mod payment_common;
 
 use axum::extract::State;
 use axum::http::StatusCode;
@@ -16,11 +17,13 @@ use axum::{Json, Router};
 use order_common::{Auth, OrderApp};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde_json::{Value, json};
+use std::sync::Mutex;
 use std::sync::{
     Arc,
     atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 use zs_domain::queue::kinds;
+use zs_infra::payment::http::{HttpResponse, MockTransport};
 
 const EMAIL: &str = "Buyer@Example.com";
 const PASSWORD: &str = "secret-pass";
@@ -189,6 +192,126 @@ async fn guest_checkout_callback_auto_delivery_and_download() {
         .call("GET", "/api/v1/guest/orders", None, &guest())
         .await;
     assert_eq!(res["data"].as_array().unwrap().len(), 1, "{res}");
+}
+
+/// PAY-52: one Huifu connection accepts both configured methods and rejects unconfigured types.
+#[tokio::test]
+async fn huifu_multi_method_selection_is_sent_and_persisted_per_payment() {
+    let methods = Arc::new(Mutex::new(Vec::new()));
+    let observed = methods.clone();
+    let transport = MockTransport::new(move |request| {
+        let body: Value =
+            serde_json::from_slice(&request.body).map_err(|error| error.to_string())?;
+        observed.lock().map_err(|error| error.to_string())?.push(
+            body["data"]["trans_type"]
+                .as_str()
+                .unwrap_or_default()
+                .to_owned(),
+        );
+        let data = json!({
+            "resp_code": "00000000",
+            "resp_desc": "success",
+            "jump_url": "https://pay.example.com/huifu"
+        });
+        let sign = huifu_pay::sign_value(payment_common::PRIV_PEM, &data)
+            .map_err(|error| error.to_string())?;
+        Ok(HttpResponse::new(
+            200,
+            json!({"data": data, "sign": sign}).to_string(),
+        ))
+    });
+    let app = OrderApp::with_transport(Arc::new(transport)).await;
+    let (product, sku) = app
+        .product("huifu-methods-card", json!({"price_amount": "9.90"}))
+        .await;
+    app.secrets(product, sku, 2).await;
+    let created = app
+        .admin_call(
+            "POST",
+            "/api/v1/admin/payment-channels",
+            Some(json!({
+                "name": "Huifu",
+                "provider_type": "huifu",
+                "channel_type": "wechat",
+                "interaction_mode": "qr",
+                "payment_roles": ["guest", "member"],
+                "payment_types": ["order"],
+                "config_json": {
+                    "api_base_url": "http://127.0.0.1:18766",
+                    "sys_id": "SYS-1",
+                    "product_id": "PROD-1",
+                    "huifu_id": "HU-1",
+                    "merchant_private_key": payment_common::PRIV_PEM,
+                    "huifu_public_key": payment_common::PUB_PEM,
+                    "project_id": "PROJECT-1",
+                    "notify_url": "https://shop.example.com/api/v1/payments/callback",
+                    "return_url": "https://shop.example.com/pay",
+                    "supported_channel_types": ["wechat", "alipay"]
+                }
+            })),
+        )
+        .await;
+    assert_eq!(created["status_code"], 0, "{created}");
+    let channel = created["data"]["id"].as_i64().unwrap();
+    let public = app
+        .call("GET", "/api/v1/public/config", None, &Auth::None)
+        .await;
+    let public_channel = public["data"]["payment_channels"]
+        .as_array()
+        .and_then(|items| items.iter().find(|item| item["id"] == channel))
+        .expect("Huifu methods must be available to the storefront");
+    assert_eq!(
+        public_channel["supported_channel_types"],
+        json!(["wechat", "alipay"])
+    );
+    assert!(public_channel.get("merchant_private_key").is_none());
+
+    for (method, expected_type) in [("alipay", "A_NATIVE"), ("wechat", "T_JSAPI")] {
+        let payment = app
+            .call(
+                "POST",
+                "/api/v1/guest/orders/create-and-pay",
+                Some(json!({
+                    "email": format!("{method}@example.com"),
+                    "order_password": PASSWORD,
+                    "items": [{"product_id": product, "sku_id": sku, "quantity": 1}],
+                    "channel_id": channel,
+                    "channel_type": method
+                })),
+                &Auth::None,
+            )
+            .await;
+        assert_eq!(payment["status_code"], 0, "{payment}");
+        assert_eq!(payment["data"]["channel_type"], method);
+        assert_eq!(
+            methods.lock().unwrap().last().map(String::as_str),
+            Some(expected_type)
+        );
+    }
+
+    let rejected = app
+        .call(
+            "POST",
+            "/api/v1/guest/orders/create-and-pay",
+            Some(json!({
+                "email": "unsupported@example.com",
+                "order_password": PASSWORD,
+                "items": [{"product_id": product, "sku_id": sku, "quantity": 1}],
+                "channel_id": channel,
+                "channel_type": "qqpay"
+            })),
+            &Auth::None,
+        )
+        .await;
+    assert_ne!(
+        rejected["status_code"], 0,
+        "unconfigured type must be rejected: {rejected}"
+    );
+    assert_eq!(
+        methods.lock().unwrap().len(),
+        2,
+        "invalid method must not contact Huifu"
+    );
 }
 
 #[derive(Default)]

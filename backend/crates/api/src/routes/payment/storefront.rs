@@ -39,6 +39,8 @@ struct CreateBody {
     #[serde(default)]
     channel_id: Id,
     #[serde(default)]
+    channel_type: String,
+    #[serde(default)]
     use_balance: bool,
 }
 
@@ -88,6 +90,7 @@ async fn pay(
         .pay(&PayRequest {
             order_id: order.id,
             channel_id: req.channel_id,
+            channel_type: req.channel_type.clone(),
             use_balance: allow_balance && req.use_balance,
             client_ip: ip.to_owned(),
             tenant: tenant.0,

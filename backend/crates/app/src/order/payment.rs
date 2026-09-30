@@ -151,6 +151,7 @@ pub struct LatestPaymentView {
 pub struct PayRequest {
     pub order_id: Id,
     pub channel_id: Id,
+    pub channel_type: String,
     pub use_balance: bool,
     pub client_ip: String,
     pub tenant: ResellerTenant,
@@ -232,6 +233,7 @@ impl OrderService {
             .begin(&BeginPayment {
                 order_id: req.order_id,
                 channel_id: req.channel_id,
+                channel_type: req.channel_type.clone(),
                 use_balance,
                 wallet_only,
                 customer_fee_enabled: fee.customer_fee_enabled,

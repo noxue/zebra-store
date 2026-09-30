@@ -96,6 +96,7 @@ export interface ConfigPaymentChannel {
   id: number
   name: string
   channel_type: string
+  supported_channel_types?: string[]
   provider_type: string
   interaction_mode: string
   min_amount?: string
@@ -509,6 +510,7 @@ export interface GuestOrderPreviewPayload extends OrderPreviewPayload {
 
 export interface CreateAndPayPayload extends OrderPreviewPayload {
   channel_id?: number
+  channel_type?: string
   use_balance?: boolean
 }
 
@@ -645,6 +647,7 @@ export interface PaymentChannel {
   name: string
   icon?: string
   channel_type: string
+  supported_channel_types?: string[]
   provider_type: string
   interaction_mode: string
   fee_policy?: string
@@ -663,6 +666,7 @@ export interface PaymentChannelsPayload {
 export interface CreatePaymentPayload {
   order_no: string
   channel_id?: number
+  channel_type?: string
   use_balance?: boolean
 }
 

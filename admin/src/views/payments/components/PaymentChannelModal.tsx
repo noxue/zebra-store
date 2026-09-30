@@ -118,7 +118,7 @@ export const PaymentChannelModal = defineComponent({
           <FormField label={pc('providerType')}>
             <Select modelValue={form.provider_type} onUpdate:modelValue={(v) => (form.provider_type = String(v))} options={providerOptions()} />
           </FormField>
-          {s.showChannelSelect.value && (
+          {s.showChannelSelect.value && form.provider_type !== 'huifu' && (
             <FormField label={pc('channelType')}>
               <Select modelValue={form.channel_type} onUpdate:modelValue={(v) => (form.channel_type = String(v))} options={s.channelTypeOptions.value} />
             </FormField>

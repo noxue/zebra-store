@@ -141,6 +141,8 @@ pub(super) struct OrderBody {
     #[serde(default)]
     channel_id: Id,
     #[serde(default)]
+    channel_type: String,
+    #[serde(default)]
     use_balance: bool,
 }
 
@@ -277,7 +279,8 @@ async fn create_and_pay(
     Bind(req): Bind<OrderBody>,
 ) -> Result<Data<Value>, OrderError> {
     let svc = &s.svc.order.service;
-    let (channel_id, use_balance) = (req.channel_id, req.use_balance);
+    let (channel_id, channel_type, use_balance) =
+        (req.channel_id, req.channel_type.clone(), req.use_balance);
     let tenant_value = tenant.0.clone();
     let order = svc
         .create_order(&checkout(user.id, tenant, &client.ip, req))
@@ -292,6 +295,7 @@ async fn create_and_pay(
     let pay = PayRequest {
         order_id: order.id,
         channel_id,
+        channel_type,
         use_balance,
         client_ip: client.ip.clone(),
         tenant: tenant_value,

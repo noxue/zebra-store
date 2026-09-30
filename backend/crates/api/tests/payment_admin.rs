@@ -238,7 +238,7 @@ async fn channel_validation_errors() {
 }
 
 /// Huifu is a first-class payment provider: valid hosted Alipay config can be stored, private
-/// keys are never echoed, and unsupported channels or interaction modes are rejected.
+/// keys are never echoed, hosted/QR modes are supported, and unsupported values are rejected.
 #[tokio::test]
 async fn huifu_channel_validation_and_secret_redaction() {
     let app = PayApp::offline().await;
@@ -263,8 +263,13 @@ async fn huifu_channel_validation_and_secret_redaction() {
     )
     .await;
 
+    let mut qr_mode = huifu_body();
+    qr_mode["interaction_mode"] = json!("qr");
+    let qr_created = app.call("POST", uri, Some(qr_mode)).await;
+    assert_eq!(data(&qr_created)["interaction_mode"], "qr");
+
     let mut unsupported_mode = huifu_body();
-    unsupported_mode["interaction_mode"] = json!("qr");
+    unsupported_mode["interaction_mode"] = json!("page");
     expect_error(
         &app,
         "POST",

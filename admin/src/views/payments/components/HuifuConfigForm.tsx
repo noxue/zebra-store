@@ -1,4 +1,6 @@
 import { defineComponent, type PropType } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { FormField, MultiSelect } from '@/components/ui'
 import type { HuifuConfig } from '../paymentChannelRules'
 import { ExternalLink } from 'lucide-vue-next'
 import { ProviderSection, useConfigFields } from './configFields'
@@ -13,10 +15,23 @@ export const HuifuConfigForm = defineComponent({
   },
   setup(props) {
     const { m, text } = useConfigFields()
+    const { t } = useI18n()
     return () => {
       const c = props.config
       return (
         <ProviderSection title="huifuSection" hint="huifuHint">
+          <FormField label={m('huifuMethods')} required>
+            <MultiSelect
+              modelValue={c.supported_channel_types}
+              options={[
+                { value: 'wechat', label: t('admin.paymentChannels.channelTypes.wechat') },
+                { value: 'alipay', label: t('admin.paymentChannels.channelTypes.alipay') },
+              ]}
+              onUpdate:modelValue={(values: (string | number)[]) => {
+                if (values.length > 0) c.supported_channel_types = values.map(String)
+              }}
+            />
+          </FormField>
           {text(c, 'api_base_url', 'huifuApiBaseUrl', { wide: true })}
           {text(c, 'sys_id', 'huifuSysId', { required: true })}
           {text(c, 'product_id', 'huifuProductId', { required: true })}

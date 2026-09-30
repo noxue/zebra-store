@@ -42,21 +42,76 @@ impl PaymentChannelReader for SeaPaymentChannelReader {
             .dom()?;
         Ok(rows
             .into_iter()
-            .map(|m| PaymentChannelView {
-                id: m.id,
-                name: m.name,
-                icon: m.icon,
-                provider_type: m.provider_type,
-                channel_type: m.channel_type,
-                interaction_mode: m.interaction_mode,
-                fee_rate: Amount::new(m.fee_rate),
-                fixed_fee: Amount::new(m.fixed_fee),
-                min_amount: Amount::new(m.min_amount),
-                max_amount: Amount::new(m.max_amount),
-                hide_amount_out_range: m.hide_amount_out_range,
-                payment_roles: from_json(m.payment_roles),
-                member_levels: from_json(m.member_levels),
-                payment_types: from_json(m.payment_types),
+            .map(|m| {
+                let channel_type = m.channel_type;
+                let provider_type = m.provider_type;
+                let config: serde_json::Value = from_json(m.config_json);
+                let configured_types = if provider_type == "huifu" {
+                    config
+                        .get("supported_channel_types")
+                        .and_then(serde_json::Value::as_array)
+                        .map(|values| {
+                            values
+                                .iter()
+                                .filter_map(serde_json::Value::as_str)
+                                .map(str::to_owned)
+                                .filter(|value| matches!(value.as_str(), "wechat" | "alipay"))
+                                .collect::<Vec<_>>()
+                        })
+                        .filter(|values| !values.is_empty())
+                        .unwrap_or_else(|| vec![channel_type.clone()])
+                } else if provider_type == "epusdt"
+                    && config
+                        .get("order_mode")
+                        .and_then(serde_json::Value::as_str)
+                        .is_none_or(|mode| mode != "cashier")
+                {
+                    let token = config
+                        .get("token")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("usdt")
+                        .trim()
+                        .to_ascii_lowercase();
+                    let network = config
+                        .get("network")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("tron")
+                        .trim()
+                        .to_ascii_lowercase();
+                    if token.is_empty() || network.is_empty() {
+                        vec![channel_type.clone()]
+                    } else {
+                        vec![format!("{token}.{network}")]
+                    }
+                } else {
+                    vec![channel_type.clone()]
+                };
+                let supported_channel_types = if configured_types.len() > 1
+                    || configured_types
+                        .first()
+                        .is_some_and(|value| value != &channel_type)
+                {
+                    configured_types
+                } else {
+                    Vec::new()
+                };
+                PaymentChannelView {
+                    id: m.id,
+                    name: m.name,
+                    icon: m.icon,
+                    provider_type,
+                    channel_type,
+                    supported_channel_types,
+                    interaction_mode: m.interaction_mode,
+                    fee_rate: Amount::new(m.fee_rate),
+                    fixed_fee: Amount::new(m.fixed_fee),
+                    min_amount: Amount::new(m.min_amount),
+                    max_amount: Amount::new(m.max_amount),
+                    hide_amount_out_range: m.hide_amount_out_range,
+                    payment_roles: from_json(m.payment_roles),
+                    member_levels: from_json(m.member_levels),
+                    payment_types: from_json(m.payment_types),
+                }
             })
             .collect())
     }

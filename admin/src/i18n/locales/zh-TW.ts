@@ -1484,6 +1484,7 @@ const messages = {
         okpayDisplayNamePlaceholder: '例如：D&J Studio 訂單支付',
         okpayHint: '實際傳給 OKPAY 的金額 = 網站訂單金額 × 匯率基數。channel_type 使用 USDT/TRX，系統會自動寫入 coin；回調地址請填寫可公開訪問的後端地址。',
         huifuSection: '匯付配置',
+        huifuMethods: '啟用支付方式',
         huifuApiBaseUrl: 'API 地址',
         huifuApiBaseUrlPlaceholder: 'https://api.huifu.com',
         huifuSysId: '系統號（sys_id）',

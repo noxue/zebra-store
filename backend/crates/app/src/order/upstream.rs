@@ -197,6 +197,7 @@ impl OrderIntegrationPorts {
             .pay(&PayRequest {
                 order_id: order.id,
                 channel_id: 0,
+                channel_type: String::new(),
                 use_balance: true,
                 client_ip: client_ip.to_owned(),
                 tenant: ResellerTenant::default(),

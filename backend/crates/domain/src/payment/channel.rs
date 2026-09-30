@@ -78,6 +78,54 @@ impl PaymentChannel {
     pub fn is_official(&self, channel_type: &str) -> bool {
         self.provider() == provider::OFFICIAL && self.channel() == channel_type
     }
+
+    /// Public payment methods configured for one provider connection. Old rows remain a
+    /// singleton channel; Huifu may explicitly opt into both supported methods.
+    pub fn supported_channel_types(&self) -> Vec<String> {
+        if self.provider() == provider::HUIFU {
+            if let Some(values) = self
+                .config_json
+                .get("supported_channel_types")
+                .and_then(Value::as_array)
+            {
+                let methods = values
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(|value| value.trim().to_ascii_lowercase())
+                    .filter(|value| matches!(value.as_str(), "wechat" | "alipay"))
+                    .collect::<Vec<_>>();
+                if !methods.is_empty() {
+                    return methods;
+                }
+            }
+        }
+        if self.provider() == "epusdt"
+            && self
+                .config_json
+                .get("order_mode")
+                .and_then(Value::as_str)
+                .is_none_or(|mode| mode != "cashier")
+        {
+            let token = self
+                .config_json
+                .get("token")
+                .and_then(Value::as_str)
+                .unwrap_or("usdt")
+                .trim()
+                .to_ascii_lowercase();
+            let network = self
+                .config_json
+                .get("network")
+                .and_then(Value::as_str)
+                .unwrap_or("tron")
+                .trim()
+                .to_ascii_lowercase();
+            if !token.is_empty() && !network.is_empty() {
+                return vec![format!("{token}.{network}")];
+            }
+        }
+        vec![self.channel()]
+    }
 }
 
 /// Fields written on create/update.
@@ -198,9 +246,6 @@ pub fn check_channel_rules(
             Some(InteractionMode::Qr | InteractionMode::Redirect)
         );
         if !mode_ok {
-            return invalid;
-        }
-        if provider_type == provider::HUIFU && mode != "redirect" {
             return invalid;
         }
         // PAY-44: BEpusdt cashier orders cannot be rendered as a QR code.

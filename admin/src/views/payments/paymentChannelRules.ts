@@ -255,6 +255,7 @@ export interface HuifuConfig {
   project_title: string
   notify_url: string
   return_url: string
+  supported_channel_types: string[]
 }
 
 export interface ProviderConfigs {
@@ -295,8 +296,8 @@ export const defaultConfigs = (siteOrigin = ''): ProviderConfigs => {
     merchant_key: '',
     private_key: '',
     platform_public_key: '',
-    notify_url: '',
-    return_url: '',
+    notify_url: inferredNotifyUrl,
+    return_url: inferredReturnUrl,
     target_currency: '',
     exchange_rate: '',
   },
@@ -304,8 +305,8 @@ export const defaultConfigs = (siteOrigin = ''): ProviderConfigs => {
     client_id: '',
     client_secret: '',
     base_url: PAYPAL_SANDBOX,
-    return_url: '',
-    cancel_url: '',
+    return_url: inferredReturnUrl,
+    cancel_url: inferredReturnUrl,
     webhook_id: '',
     brand_name: '',
     locale: '',
@@ -316,8 +317,8 @@ export const defaultConfigs = (siteOrigin = ''): ProviderConfigs => {
     secret_key: '',
     publishable_key: '',
     webhook_secret: '',
-    success_url: '',
-    cancel_url: '',
+    success_url: inferredReturnUrl,
+    cancel_url: inferredReturnUrl,
     api_base_url: STRIPE_API,
     payment_method_types: 'card',
     target_currency: '',
@@ -328,8 +329,8 @@ export const defaultConfigs = (siteOrigin = ''): ProviderConfigs => {
     private_key: '',
     alipay_public_key: '',
     gateway_url: ALIPAY_GATEWAY,
-    notify_url: '',
-    return_url: '',
+    notify_url: inferredNotifyUrl,
+    return_url: inferredReturnUrl,
     sign_type: 'RSA2',
     app_cert_sn: '',
     alipay_root_cert_sn: '',
@@ -345,7 +346,7 @@ export const defaultConfigs = (siteOrigin = ''): ProviderConfigs => {
     verification_mode: 'platform_certificate',
     wechatpay_public_key_id: '',
     wechatpay_public_key: '',
-    notify_url: '',
+    notify_url: inferredNotifyUrl,
     h5_redirect_url: '',
     h5_type: 'WAP',
     h5_wap_url: '',
@@ -360,8 +361,8 @@ export const defaultConfigs = (siteOrigin = ''): ProviderConfigs => {
     trade_type: 'usdt.trc20',
     currencies: '',
     fiat: 'CNY',
-    notify_url: DEFAULT_NOTIFY_URL,
-    return_url: DEFAULT_RETURN_URL,
+    notify_url: inferredNotifyUrl,
+    return_url: inferredReturnUrl,
   },
   epusdt: {
     gateway_url: '',
@@ -371,15 +372,15 @@ export const defaultConfigs = (siteOrigin = ''): ProviderConfigs => {
     token: 'usdt',
     network: 'tron',
     currency: 'cny',
-    notify_url: DEFAULT_NOTIFY_URL,
-    return_url: DEFAULT_RETURN_URL,
+    notify_url: inferredNotifyUrl,
+    return_url: inferredReturnUrl,
   },
   tokenpay: {
     gateway_url: '',
     notify_secret: '',
     currency: 'USDT',
-    notify_url: DEFAULT_NOTIFY_URL,
-    redirect_url: DEFAULT_RETURN_URL,
+    notify_url: inferredNotifyUrl,
+    redirect_url: inferredReturnUrl,
     base_currency: 'CNY',
   },
   okpay: {
@@ -387,8 +388,8 @@ export const defaultConfigs = (siteOrigin = ''): ProviderConfigs => {
     merchant_id: '',
     merchant_token: '',
     exchange_rate: '1',
-    return_url: DEFAULT_RETURN_URL,
-    callback_url: DEFAULT_NOTIFY_URL,
+    return_url: inferredReturnUrl,
+    callback_url: inferredNotifyUrl,
     display_name: '',
   },
   dujiaopay: {
@@ -399,8 +400,8 @@ export const defaultConfigs = (siteOrigin = ''): ProviderConfigs => {
     order_mode: 'transaction',
     allowed_methods: '',
     fiat_currency: 'CNY',
-    success_url: DEFAULT_RETURN_URL,
-    cancel_url: DEFAULT_RETURN_URL,
+    success_url: inferredReturnUrl,
+    cancel_url: inferredReturnUrl,
   },
   huifu: {
     api_base_url: HUIFU_API,
@@ -414,6 +415,7 @@ export const defaultConfigs = (siteOrigin = ''): ProviderConfigs => {
     project_title: 'Zebra Store',
     notify_url: inferredNotifyUrl,
     return_url: inferredReturnUrl,
+    supported_channel_types: ['wechat', 'alipay'],
   },
   }
 }
@@ -428,7 +430,8 @@ const str = (raw: Raw, key: string, fallback = '') => {
 const cashierOr = (raw: Raw): OrderMode => (str(raw, 'order_mode', 'transaction') === 'cashier' ? 'cashier' : 'transaction')
 
 /** Parse a stored config_json into every provider form (original apply*Config functions). */
-export const applyConfigs = (raw: Raw): ProviderConfigs => {
+export const applyConfigs = (raw: Raw, siteOrigin = ''): ProviderConfigs => {
+  const inferred = defaultConfigs(siteOrigin)
   const version = str(raw, 'epay_version').toLowerCase()
   const methodTypes = Array.isArray(raw.payment_method_types)
     ? (raw.payment_method_types as unknown[]).map((item) => String(item ?? '').trim()).filter(Boolean)
@@ -445,8 +448,8 @@ export const applyConfigs = (raw: Raw): ProviderConfigs => {
       merchant_key: str(raw, 'merchant_key'),
       private_key: str(raw, 'private_key'),
       platform_public_key: str(raw, 'platform_public_key'),
-      notify_url: str(raw, 'notify_url'),
-      return_url: str(raw, 'return_url'),
+      notify_url: str(raw, 'notify_url', inferred.epay.notify_url),
+      return_url: str(raw, 'return_url', inferred.epay.return_url),
       target_currency: str(raw, 'target_currency'),
       exchange_rate: str(raw, 'exchange_rate'),
     },
@@ -454,8 +457,8 @@ export const applyConfigs = (raw: Raw): ProviderConfigs => {
       client_id: str(raw, 'client_id'),
       client_secret: str(raw, 'client_secret'),
       base_url: str(raw, 'base_url', PAYPAL_SANDBOX),
-      return_url: str(raw, 'return_url'),
-      cancel_url: str(raw, 'cancel_url'),
+      return_url: str(raw, 'return_url', inferred.paypal.return_url),
+      cancel_url: str(raw, 'cancel_url', inferred.paypal.cancel_url),
       webhook_id: str(raw, 'webhook_id'),
       brand_name: str(raw, 'brand_name'),
       locale: str(raw, 'locale'),
@@ -466,8 +469,8 @@ export const applyConfigs = (raw: Raw): ProviderConfigs => {
       secret_key: str(raw, 'secret_key'),
       publishable_key: str(raw, 'publishable_key'),
       webhook_secret: str(raw, 'webhook_secret'),
-      success_url: str(raw, 'success_url'),
-      cancel_url: str(raw, 'cancel_url'),
+      success_url: str(raw, 'success_url', inferred.stripe.success_url),
+      cancel_url: str(raw, 'cancel_url', inferred.stripe.cancel_url),
       api_base_url: str(raw, 'api_base_url', STRIPE_API),
       payment_method_types: methodTypes.length > 0 ? methodTypes.join(',') : 'card',
       target_currency: str(raw, 'target_currency'),
@@ -478,8 +481,8 @@ export const applyConfigs = (raw: Raw): ProviderConfigs => {
       private_key: str(raw, 'private_key'),
       alipay_public_key: str(raw, 'alipay_public_key'),
       gateway_url: str(raw, 'gateway_url', ALIPAY_GATEWAY),
-      notify_url: str(raw, 'notify_url'),
-      return_url: str(raw, 'return_url'),
+      notify_url: str(raw, 'notify_url', inferred.alipay.notify_url),
+      return_url: str(raw, 'return_url', inferred.alipay.return_url),
       sign_type: str(raw, 'sign_type', 'RSA2').toUpperCase(),
       app_cert_sn: str(raw, 'app_cert_sn'),
       alipay_root_cert_sn: str(raw, 'alipay_root_cert_sn'),
@@ -495,7 +498,7 @@ export const applyConfigs = (raw: Raw): ProviderConfigs => {
       verification_mode: (WECHAT_VERIFICATION_MODES as readonly string[]).includes(verificationMode) ? verificationMode : 'platform_certificate',
       wechatpay_public_key_id: str(raw, 'wechatpay_public_key_id'),
       wechatpay_public_key: str(raw, 'wechatpay_public_key'),
-      notify_url: str(raw, 'notify_url'),
+      notify_url: str(raw, 'notify_url', inferred.wechat.notify_url),
       h5_redirect_url: str(raw, 'h5_redirect_url'),
       h5_type: str(raw, 'h5_type', 'WAP').toUpperCase(),
       h5_wap_url: str(raw, 'h5_wap_url'),
@@ -510,8 +513,8 @@ export const applyConfigs = (raw: Raw): ProviderConfigs => {
       trade_type: bepusdtMode === 'cashier' ? '' : str(raw, 'trade_type', 'usdt.trc20'),
       currencies: bepusdtMode === 'cashier' ? str(raw, 'currencies') : '',
       fiat: str(raw, 'fiat', 'CNY'),
-      notify_url: str(raw, 'notify_url'),
-      return_url: str(raw, 'return_url'),
+      notify_url: str(raw, 'notify_url', inferred.bepusdt.notify_url),
+      return_url: str(raw, 'return_url', inferred.bepusdt.return_url),
     },
     epusdt: {
       gateway_url: str(raw, 'gateway_url'),
@@ -521,15 +524,15 @@ export const applyConfigs = (raw: Raw): ProviderConfigs => {
       token: epusdtMode === 'cashier' ? '' : str(raw, 'token', 'usdt'),
       network: epusdtMode === 'cashier' ? '' : str(raw, 'network', 'tron'),
       currency: str(raw, 'currency', 'cny'),
-      notify_url: str(raw, 'notify_url'),
-      return_url: str(raw, 'return_url'),
+      notify_url: str(raw, 'notify_url', inferred.epusdt.notify_url),
+      return_url: str(raw, 'return_url', inferred.epusdt.return_url),
     },
     tokenpay: {
       gateway_url: str(raw, 'gateway_url'),
       notify_secret: str(raw, 'notify_secret'),
       currency: str(raw, 'currency', 'USDT'),
-      notify_url: str(raw, 'notify_url'),
-      redirect_url: str(raw, 'redirect_url'),
+      notify_url: str(raw, 'notify_url', inferred.tokenpay.notify_url),
+      redirect_url: str(raw, 'redirect_url', inferred.tokenpay.redirect_url),
       base_currency: str(raw, 'base_currency', 'CNY'),
     },
     okpay: {
@@ -537,8 +540,8 @@ export const applyConfigs = (raw: Raw): ProviderConfigs => {
       merchant_id: str(raw, 'merchant_id'),
       merchant_token: str(raw, 'merchant_token'),
       exchange_rate: str(raw, 'exchange_rate', '1'),
-      return_url: str(raw, 'return_url'),
-      callback_url: str(raw, 'callback_url'),
+      return_url: str(raw, 'return_url', inferred.okpay.return_url),
+      callback_url: str(raw, 'callback_url', inferred.okpay.callback_url),
       display_name: str(raw, 'display_name'),
     },
     dujiaopay: {
@@ -549,8 +552,8 @@ export const applyConfigs = (raw: Raw): ProviderConfigs => {
       order_mode: dujiaoMode,
       allowed_methods: dujiaoMode === 'cashier' ? str(raw, 'allowed_methods') : '',
       fiat_currency: str(raw, 'fiat_currency', 'CNY').toUpperCase(),
-      success_url: str(raw, 'success_url'),
-      cancel_url: str(raw, 'cancel_url'),
+      success_url: str(raw, 'success_url', inferred.dujiaopay.success_url),
+      cancel_url: str(raw, 'cancel_url', inferred.dujiaopay.cancel_url),
     },
     huifu: {
       api_base_url: str(raw, 'api_base_url', HUIFU_API),
@@ -562,8 +565,13 @@ export const applyConfigs = (raw: Raw): ProviderConfigs => {
       skill_source: str(raw, 'skill_source', 'hfps/1.3.5'),
       project_id: str(raw, 'project_id'),
       project_title: str(raw, 'project_title', 'Zebra Store'),
-      notify_url: str(raw, 'notify_url', DEFAULT_NOTIFY_URL),
-      return_url: str(raw, 'return_url', DEFAULT_RETURN_URL),
+      notify_url: str(raw, 'notify_url', inferred.huifu.notify_url),
+      return_url: str(raw, 'return_url', inferred.huifu.return_url),
+      supported_channel_types: Array.isArray(raw.supported_channel_types)
+        ? raw.supported_channel_types
+            .map((item) => String(item ?? '').trim())
+            .filter((item) => HUIFU_CHANNEL_OPTIONS.some((option) => option.value === item))
+        : [],
     },
   }
 }
@@ -716,19 +724,22 @@ export const buildDujiaopayConfig = (c: DujiaopayConfig, channelType: string): R
 }
 
 export const buildHuifuConfig = (c: HuifuConfig): Raw =>
-  pickNonEmpty(c, [
-    'api_base_url',
-    'sys_id',
-    'product_id',
-    'huifu_id',
-    'merchant_private_key',
-    'huifu_public_key',
-    'skill_source',
-    'project_id',
-    'project_title',
-    'notify_url',
-    'return_url',
-  ])
+  ({
+    ...pickNonEmpty(c, [
+      'api_base_url',
+      'sys_id',
+      'product_id',
+      'huifu_id',
+      'merchant_private_key',
+      'huifu_public_key',
+      'skill_source',
+      'project_id',
+      'project_title',
+      'notify_url',
+      'return_url',
+    ]),
+    supported_channel_types: c.supported_channel_types.filter((item) => HUIFU_CHANNEL_OPTIONS.some((option) => option.value === item)),
+  })
 
 // ---------------------------------------------------------------------------------------------
 // Order-mode side effects (original order_mode watchers). They mutate the given config.
@@ -806,7 +817,7 @@ export const defaultChannelForm = (): ChannelForm => ({
 const moneyText = (v: unknown) => (v !== undefined && v !== null ? String(v) : '0')
 
 /** Map a loaded channel onto the dialog state (form + every provider config). */
-export const channelToState = (channel: AdminPaymentChannel): { form: ChannelForm; configs: ProviderConfigs } => {
+export const channelToState = (channel: AdminPaymentChannel, siteOrigin = ''): { form: ChannelForm; configs: ProviderConfigs } => {
   const raw = channel.config_json && typeof channel.config_json === 'object' ? channel.config_json : null
   const form: ChannelForm = {
     name: channel.name,
@@ -829,6 +840,10 @@ export const channelToState = (channel: AdminPaymentChannel): { form: ChannelFor
   if (raw && channel.provider_type === 'okpay' && !String(form.channel_type || '').trim()) {
     form.channel_type = resolveOkpayChannelTypeFromConfig(raw)
   }
+  const configs = raw ? applyConfigs(raw, siteOrigin) : defaultConfigs(siteOrigin)
+  if (channel.provider_type === 'huifu' && configs.huifu.supported_channel_types.length === 0) {
+    configs.huifu.supported_channel_types = [form.channel_type]
+  }
   form.interaction_mode = pickInteractionMode(
     form.interaction_mode,
     interactionModesFor(form.provider_type, form.channel_type, {
@@ -836,11 +851,11 @@ export const channelToState = (channel: AdminPaymentChannel): { form: ChannelFor
       dujiaopay: raw ? cashierOr(raw) : 'transaction',
     }),
   )
-  return { form, configs: raw ? applyConfigs(raw) : defaultConfigs() }
+  return { form, configs }
 }
 
 /** channel_type actually sent to the backend. */
-export const resolvePayloadChannelType = (form: Pick<ChannelForm, 'provider_type' | 'channel_type'>, configs: Pick<ProviderConfigs, 'dujiaopay'>) => {
+export const resolvePayloadChannelType = (form: Pick<ChannelForm, 'provider_type' | 'channel_type'>, configs: Pick<ProviderConfigs, 'dujiaopay' | 'huifu'>) => {
   switch (form.provider_type) {
     case 'tokenpay':
       return 'usdt'
@@ -850,6 +865,8 @@ export const resolvePayloadChannelType = (form: Pick<ChannelForm, 'provider_type
       return 'epusdt'
     case 'dujiaopay':
       return configs.dujiaopay.order_mode === 'cashier' ? 'dujiaopay' : String(form.channel_type || '').trim().toLowerCase()
+    case 'huifu':
+      return configs.huifu.supported_channel_types[0] || form.channel_type
     default:
       return form.channel_type
   }

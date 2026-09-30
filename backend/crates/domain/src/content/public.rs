@@ -19,6 +19,7 @@ pub struct PaymentChannelView {
     pub icon: String,
     pub provider_type: String,
     pub channel_type: String,
+    pub supported_channel_types: Vec<String>,
     pub interaction_mode: String,
     pub fee_rate: Amount,
     pub fixed_fee: Amount,
@@ -50,6 +51,9 @@ impl PaymentChannelView {
             "max_amount": self.max_amount,
             "hide_amount_out_range": self.hide_amount_out_range,
         });
+        if !self.supported_channel_types.is_empty() {
+            v["supported_channel_types"] = json!(self.supported_channel_types);
+        }
         if customer_fee_enabled {
             v["fee_policy"] = json!("customer_surcharge");
             v["fee_rate"] = json!(self.fee_rate);
@@ -119,6 +123,7 @@ mod tests {
             icon: String::new(),
             provider_type: "epay".into(),
             channel_type: "alipay".into(),
+            supported_channel_types: vec!["alipay".into()],
             interaction_mode: "redirect".into(),
             fee_rate: Amount::from_cents(150),
             fixed_fee: Amount::ZERO,

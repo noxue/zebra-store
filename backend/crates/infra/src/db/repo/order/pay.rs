@@ -258,7 +258,7 @@ pub(crate) async fn begin_in<C: ConnectionTrait>(
     let mut channel = None;
     let mut fee_rate = Decimal::ZERO;
     if req.channel_id != 0 {
-        let ch = payment_channels::Entity::find_by_id(req.channel_id)
+        let mut ch = payment_channels::Entity::find_by_id(req.channel_id)
             .filter(payment_channels::Column::DeletedAt.is_null())
             .one(conn)
             .await
@@ -268,6 +268,23 @@ pub(crate) async fn begin_in<C: ConnectionTrait>(
         if !ch.is_active {
             return Err(Error::bad_request(pay_keys::CHANNEL_INACTIVE));
         }
+        let supported_types = ch.supported_channel_types();
+        let selected_type = if req.channel_type.trim().is_empty() {
+            if supported_types.contains(&ch.channel_type) {
+                ch.channel_type.clone()
+            } else {
+                supported_types
+                    .first()
+                    .cloned()
+                    .unwrap_or_else(|| ch.channel_type.clone())
+            }
+        } else {
+            req.channel_type.trim().to_ascii_lowercase()
+        };
+        if !supported_types.contains(&selected_type) {
+            return Err(Error::bad_request(pay_keys::PAYMENT_INVALID));
+        }
+        ch.channel_type = selected_type;
         fee_rate = ch.fee_rate.decimal();
         if fee_rate < Decimal::ZERO || fee_rate > Decimal::ONE_HUNDRED {
             return Err(Error::bad_request(pay_keys::CHANNEL_CONFIG_INVALID));
@@ -275,6 +292,7 @@ pub(crate) async fn begin_in<C: ConnectionTrait>(
         check_order_channel(&ch, payer_of(&order))?;
         check_product_channels(conn, &order, ch.id).await?;
 
+        let selected_type = ch.channel_type.clone();
         let existing = payments::Entity::find()
             .filter(payments::Column::DeletedAt.is_null())
             .filter(payments::Column::OrderId.eq(order.id))
@@ -289,7 +307,11 @@ pub(crate) async fn begin_in<C: ConnectionTrait>(
             .await
             .dom()?
             .into_iter()
-            .find(|p| p.expired_at.is_none_or(|e| e > now) && has_pay_link(p));
+            .find(|p| {
+                p.channel_type == selected_type
+                    && p.expired_at.is_none_or(|e| e > now)
+                    && has_pay_link(p)
+            });
         if let Some(existing) = existing {
             let fee_positive = existing.fee_amount > Decimal::ZERO;
             let legacy = fee_positive

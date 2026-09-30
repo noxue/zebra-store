@@ -60,6 +60,8 @@ struct GuestOrderBody {
     captcha_payload: CaptchaPayload,
     #[serde(default)]
     channel_id: Id,
+    #[serde(default)]
+    channel_type: String,
 }
 
 impl BindRules for GuestOrderBody {
@@ -161,6 +163,7 @@ async fn create_and_pay(
     let locale = i18n::resolve_locale(uri.query(), &headers);
     let svc = &s.svc.order.service;
     let channel_id = req.channel_id;
+    let channel_type = req.channel_type.clone();
     let tenant_value = tenant.0.clone();
     let order = svc
         .create_order(&checkout(tenant, &client.ip, locale, req))
@@ -175,6 +178,7 @@ async fn create_and_pay(
     let pay = PayRequest {
         order_id: order.id,
         channel_id,
+        channel_type,
         use_balance: false,
         client_ip: client.ip.clone(),
         tenant: tenant_value,

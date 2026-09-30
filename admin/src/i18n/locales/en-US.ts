@@ -1485,6 +1485,7 @@ const messages = {
         okpayDisplayNamePlaceholder: 'Example: D&J Studio Order Payment',
         okpayHint: 'Actual OKPAY amount = site order amount × exchange rate. Use USDT/TRX as channel_type. The system will derive coin automatically; callback_url must be publicly reachable.',
         huifuSection: 'Huifu Configuration',
+        huifuMethods: 'Enabled payment methods',
         huifuApiBaseUrl: 'API Base URL',
         huifuApiBaseUrlPlaceholder: 'https://api.huifu.com',
         huifuSysId: 'System ID (sys_id)',

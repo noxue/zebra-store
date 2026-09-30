@@ -167,7 +167,7 @@ export function usePaymentChannelModal(opts: PaymentChannelModalOptions) {
     try {
       const channel = (await adminAPI.getPaymentChannel(id)).data
       if (seq !== loadSeq || !channel) return
-      const state = channelToState(channel)
+      const state = channelToState(channel, siteOrigin)
       assignState(state.form, state.configs)
     } catch (err) {
       if (seq === loadSeq) error.value = errorMessage(err, t('admin.paymentChannels.errors.fetchFailed'))
