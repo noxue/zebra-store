@@ -426,6 +426,11 @@ fn payment_rule(key: &str) -> Option<Failure> {
             "payment_create_failed",
             "error.payment_gateway_response_invalid",
         ),
+        "error.payment_provider_permission_missing" => f(
+            S::BAD_REQUEST,
+            "payment_create_failed",
+            "error.payment_provider_permission_missing",
+        ),
         "error.payment_currency_mismatch" => f(
             S::BAD_REQUEST,
             "payment_create_failed",
@@ -1328,6 +1333,7 @@ async fn create_payment(
             channel_type: String::new(),
             use_balance: req.use_balance,
             client_ip: client.ip.clone(),
+            user_agent: client.user_agent.clone(),
             tenant: ResellerTenant::default(),
             scheme: "https".into(),
         })
@@ -1394,5 +1400,9 @@ mod tests {
         );
         assert!(order_rule("error.internal_error").is_none());
         assert_eq!(payment_rule("error.order_not_found"), Some(ORDER_NOT_FOUND));
+        assert_eq!(
+            payment_rule("error.payment_provider_permission_missing").map(|f| f.key),
+            Some("error.payment_provider_permission_missing")
+        );
     }
 }

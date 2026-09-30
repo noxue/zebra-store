@@ -194,6 +194,48 @@ async fn guest_checkout_callback_auto_delivery_and_download() {
     assert_eq!(res["data"].as_array().unwrap().len(), 1, "{res}");
 }
 
+/// FE payment-method selection: one Epay connection publishes all explicitly enabled choices.
+#[tokio::test]
+async fn epay_multiple_methods_are_published_for_the_storefront() {
+    let app = OrderApp::new().await;
+    let created = app
+        .admin_call(
+            "POST",
+            "/api/v1/admin/payment-channels",
+            Some(json!({
+                "name": "Epay",
+                "provider_type": "epay",
+                "channel_type": "wechat",
+                "interaction_mode": "qr",
+                "payment_roles": ["guest", "member"],
+                "payment_types": ["order"],
+                "config_json": {
+                    "epay_version": "v1",
+                    "gateway_url": "https://pay.example.com",
+                    "merchant_id": "M-1",
+                    "merchant_key": "test-key",
+                    "notify_url": "https://shop.example.com/api/v1/payments/callback",
+                    "return_url": "https://shop.example.com/pay",
+                    "supported_channel_types": ["wechat", "alipay", "qqpay", "card"]
+                }
+            })),
+        )
+        .await;
+    assert_eq!(created["status_code"], 0, "{created}");
+    let channel_id = created["data"]["id"].as_i64().unwrap();
+    let public = app
+        .call("GET", "/api/v1/public/config", None, &Auth::None)
+        .await;
+    let channel = public["data"]["payment_channels"]
+        .as_array()
+        .and_then(|items| items.iter().find(|item| item["id"] == channel_id))
+        .expect("Epay channel should be public");
+    assert_eq!(
+        channel["supported_channel_types"],
+        json!(["wechat", "alipay", "qqpay"])
+    );
+}
+
 /// PAY-52: one Huifu connection accepts both configured methods and rejects unconfigured types.
 #[tokio::test]
 async fn huifu_multi_method_selection_is_sent_and_persisted_per_payment() {

@@ -80,23 +80,27 @@ impl PaymentChannel {
     }
 
     /// Public payment methods configured for one provider connection. Old rows remain a
-    /// singleton channel; Huifu may explicitly opt into both supported methods.
+    /// singleton channel; Huifu and Epay may explicitly opt into multiple methods.
     pub fn supported_channel_types(&self) -> Vec<String> {
-        if self.provider() == provider::HUIFU {
-            if let Some(values) = self
+        let provider = self.provider();
+        if (provider == provider::HUIFU || provider == "epay")
+            && let Some(values) = self
                 .config_json
                 .get("supported_channel_types")
                 .and_then(Value::as_array)
-            {
-                let methods = values
-                    .iter()
-                    .filter_map(Value::as_str)
-                    .map(|value| value.trim().to_ascii_lowercase())
-                    .filter(|value| matches!(value.as_str(), "wechat" | "alipay"))
-                    .collect::<Vec<_>>();
-                if !methods.is_empty() {
-                    return methods;
-                }
+        {
+            let methods = values
+                .iter()
+                .filter_map(Value::as_str)
+                .map(|value| value.trim().to_ascii_lowercase())
+                .filter(|value| match provider.as_str() {
+                    provider::HUIFU => matches!(value.as_str(), "wechat" | "alipay"),
+                    "epay" => matches!(value.as_str(), "wechat" | "wxpay" | "alipay" | "qqpay"),
+                    _ => false,
+                })
+                .collect::<Vec<_>>();
+            if !methods.is_empty() {
+                return methods;
             }
         }
         if self.provider() == "epusdt"
@@ -352,6 +356,43 @@ mod tests {
 
     fn obj(v: Value) -> ChannelConfig {
         v.as_object().cloned().unwrap_or_default()
+    }
+
+    /// FE payment-method selection: an Epay connection exposes its configured methods as choices.
+    #[test]
+    fn epay_supported_methods_are_filtered_and_legacy_config_stays_singleton() {
+        let mut epay =
+            obj(json!({"supported_channel_types": ["wechat", "QQPAY", "card", "alipay"]}));
+        let channel = PaymentChannel {
+            id: 1,
+            name: "Epay".into(),
+            icon: String::new(),
+            provider_type: "epay".into(),
+            channel_type: "alipay".into(),
+            interaction_mode: "qr".into(),
+            fee_rate: Amount::ZERO,
+            fixed_fee: Amount::ZERO,
+            min_amount: Amount::ZERO,
+            max_amount: Amount::ZERO,
+            hide_amount_out_range: false,
+            payment_roles: vec![],
+            member_levels: vec![],
+            payment_types: vec![],
+            config_json: std::mem::take(&mut epay),
+            is_active: true,
+            sort_order: 0,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        assert_eq!(
+            channel.supported_channel_types(),
+            ["wechat", "qqpay", "alipay"]
+        );
+        let legacy = PaymentChannel {
+            config_json: ChannelConfig::new(),
+            ..channel
+        };
+        assert_eq!(legacy.supported_channel_types(), ["alipay"]);
     }
 
     /// PAY-12: fee and amount ranges are enforced on save.

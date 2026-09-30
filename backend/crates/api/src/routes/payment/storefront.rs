@@ -5,6 +5,7 @@ use axum::extract::{Path, State};
 use axum::http::HeaderMap;
 use serde::Deserialize;
 use serde_json::{Value, json};
+use zs_app::identity::admin_auth::ClientInfo;
 use zs_app::order::payment::{LatestPaymentView, PayRequest, PaymentView};
 use zs_app::order::query::Viewer;
 use zs_domain::payment::errors::keys as pay_keys;
@@ -76,7 +77,7 @@ async fn pay(
     s: &AppState,
     viewer: Viewer,
     tenant: TenantCtx,
-    ip: &str,
+    client: &ClientInfo,
     headers: &HeaderMap,
     req: CreateBody,
     allow_balance: bool,
@@ -92,7 +93,8 @@ async fn pay(
             channel_id: req.channel_id,
             channel_type: req.channel_type.clone(),
             use_balance: allow_balance && req.use_balance,
-            client_ip: ip.to_owned(),
+            client_ip: client.ip.clone(),
+            user_agent: client.user_agent.clone(),
             tenant: tenant.0,
             scheme: request_scheme(headers),
         })
@@ -112,7 +114,7 @@ async fn create(
         &s,
         Viewer::User(user.id),
         tenant,
-        &client.ip,
+        &client,
         &headers,
         req,
         true,
@@ -134,7 +136,7 @@ async fn guest_create(
     if req.channel_id <= 0 {
         return Err(Error::invalid().into());
     }
-    pay(&s, viewer, tenant, &client.ip, &headers, req, false).await
+    pay(&s, viewer, tenant, &client, &headers, req, false).await
 }
 
 async fn capture_for(

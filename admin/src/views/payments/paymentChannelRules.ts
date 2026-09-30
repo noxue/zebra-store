@@ -138,6 +138,7 @@ export interface EpayConfig {
   return_url: string
   target_currency: string
   exchange_rate: string
+  supported_channel_types: string[]
 }
 export interface PaypalConfig {
   client_id: string
@@ -299,6 +300,7 @@ export const defaultConfigs = (siteOrigin = ''): ProviderConfigs => {
     return_url: inferredReturnUrl,
     target_currency: '',
     exchange_rate: '',
+    supported_channel_types: ['wechat', 'alipay', 'qqpay'],
   },
   paypal: {
     client_id: '',
@@ -450,6 +452,11 @@ export const applyConfigs = (raw: Raw, siteOrigin = ''): ProviderConfigs => {
       return_url: str(raw, 'return_url', inferred.epay.return_url),
       target_currency: str(raw, 'target_currency'),
       exchange_rate: str(raw, 'exchange_rate'),
+      supported_channel_types: Array.isArray(raw.supported_channel_types)
+        ? raw.supported_channel_types
+            .map((item) => String(item ?? '').trim())
+            .filter((item) => EPAY_CHANNEL_OPTIONS.some((option) => option.value === item))
+        : [],
     },
     paypal: {
       client_id: str(raw, 'client_id'),
@@ -593,8 +600,8 @@ const pickNonEmpty = (source: object, keys: string[]): Raw => {
   return out
 }
 
-export const buildEpayConfig = (c: EpayConfig): Raw =>
-  pickNonEmpty(c, [
+export const buildEpayConfig = (c: EpayConfig): Raw => ({
+  ...pickNonEmpty(c, [
     'epay_version',
     'gateway_url',
     'merchant_id',
@@ -603,7 +610,9 @@ export const buildEpayConfig = (c: EpayConfig): Raw =>
     ...(c.epay_version === 'v1' ? ['merchant_key'] : ['private_key', 'platform_public_key']),
     'target_currency',
     'exchange_rate',
-  ])
+  ]),
+  supported_channel_types: c.supported_channel_types.filter((item) => EPAY_CHANNEL_OPTIONS.some((option) => option.value === item)),
+})
 
 export const buildPaypalConfig = (c: PaypalConfig): Raw =>
   pickNonEmpty(c, ['client_id', 'client_secret', 'base_url', 'return_url', 'cancel_url', 'webhook_id', 'brand_name', 'locale', 'target_currency', 'exchange_rate'])
@@ -840,6 +849,9 @@ export const channelToState = (channel: AdminPaymentChannel, siteOrigin = ''): {
   if (channel.provider_type === 'huifu' && configs.huifu.supported_channel_types.length === 0) {
     configs.huifu.supported_channel_types = [form.channel_type]
   }
+  if (channel.provider_type === 'epay' && configs.epay.supported_channel_types.length === 0) {
+    configs.epay.supported_channel_types = [form.channel_type]
+  }
   form.interaction_mode = pickInteractionMode(
     form.interaction_mode,
     interactionModesFor(form.provider_type, form.channel_type, {
@@ -851,7 +863,7 @@ export const channelToState = (channel: AdminPaymentChannel, siteOrigin = ''): {
 }
 
 /** channel_type actually sent to the backend. */
-export const resolvePayloadChannelType = (form: Pick<ChannelForm, 'provider_type' | 'channel_type'>, configs: Pick<ProviderConfigs, 'dujiaopay' | 'huifu'>) => {
+export const resolvePayloadChannelType = (form: Pick<ChannelForm, 'provider_type' | 'channel_type'>, configs: Pick<ProviderConfigs, 'dujiaopay' | 'huifu' | 'epay'>) => {
   switch (form.provider_type) {
     case 'tokenpay':
       return 'usdt'
@@ -863,6 +875,10 @@ export const resolvePayloadChannelType = (form: Pick<ChannelForm, 'provider_type
       return configs.dujiaopay.order_mode === 'cashier' ? 'dujiaopay' : String(form.channel_type || '').trim().toLowerCase()
     case 'huifu':
       return configs.huifu.supported_channel_types[0] || form.channel_type
+    case 'epay':
+      return configs.epay.supported_channel_types.includes(form.channel_type)
+        ? form.channel_type
+        : configs.epay.supported_channel_types[0] || form.channel_type
     default:
       return form.channel_type
   }

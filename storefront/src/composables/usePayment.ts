@@ -72,6 +72,7 @@ export function usePayment() {
   const error = ref('')
   const selectedChannelId = ref<number | null>(null)
   const selectedChannelType = ref('')
+  const paymentMethodExpanded = ref(false)
   const capturing = ref(false)
   const redirecting = ref(false)
   let redirected = false
@@ -127,6 +128,15 @@ export function usePayment() {
   }
   const selectedChannel = computed(() => findChannel(selectedChannelId.value))
   const selectedChannelName = computed(() => methodDisplayName(selectedChannel.value, selectedChannelType.value))
+  const checkoutChannelId = computed(() => Number(readQueryValue(query.value, 'channel_id')) || null)
+  const checkoutChannelType = computed(() => readQueryValue(query.value, 'channel_type').trim())
+  const checkoutSelectionActive = computed(() => readQueryFlag(query.value, 'checkout'))
+  const showChannelSelector = computed(() => {
+    if (paymentMethodExpanded.value || !checkoutSelectionActive.value) return true
+    const channel = findChannel(checkoutChannelId.value)
+    const validChoice = channel && paymentChoices([channel]).some((choice) => choice.type === checkoutChannelType.value)
+    return !validChoice || isChannelDisabledForAmount(channel)
+  })
   const cachedChannelName = computed(() => methodDisplayName(findChannel(cachedPayment.value?.channel_id), cachedPayment.value?.channel_type))
   const resultChannel = computed(() => findChannel(paymentResult.value?.channel_id))
   const resultChannelName = computed(() => methodDisplayName(resultChannel.value, paymentResult.value?.channel_type))
@@ -408,6 +418,11 @@ export function usePayment() {
     const no = String(order.value?.order_no || orderNoQuery.value || '').trim()
     if (no) q.order_no = no
     if (isGuest.value) q.guest = '1'
+    if (checkoutSelectionActive.value && checkoutChannelId.value && checkoutChannelType.value) {
+      q.checkout = '1'
+      q.channel_id = String(checkoutChannelId.value)
+      q.channel_type = checkoutChannelType.value
+    }
     return q
   }
 
@@ -576,7 +591,13 @@ export function usePayment() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  const handleChangePaymentMethod = () => resetPayment('change_payment_method')
+  const handleChangePaymentMethod = () => {
+    paymentMethodExpanded.value = true
+    if (paymentResult.value) resetPayment('change_payment_method')
+    const q: Record<string, string> = { order_no: orderNoResolved.value }
+    if (isGuest.value) q.guest = '1'
+    void router.replace({ path: route.path, query: q })
+  }
 
   const handleGuestAuthSubmit = async () => {
     guestAuthError.value = ''
@@ -672,6 +693,13 @@ export function usePayment() {
     () => [channels.value, expectedOnlinePayCents.value, requiresOnlineChannel.value],
     () => {
       const choices = paymentChoices(channels.value)
+      if (checkoutSelectionActive.value && !paymentMethodExpanded.value && checkoutChannelId.value && checkoutChannelType.value) {
+        const preferred = choices.find((choice) => Number(choice.channel.id) === checkoutChannelId.value && choice.type === checkoutChannelType.value)
+        if (preferred && !isChannelDisabledForAmount(preferred.channel)) {
+          selectedChannelId.value = checkoutChannelId.value
+          selectedChannelType.value = checkoutChannelType.value
+        }
+      }
       if (choices.length === 1) {
         selectedChannelId.value = Number(choices[0].channel.id) || null
         selectedChannelType.value = choices[0].type
@@ -725,6 +753,7 @@ export function usePayment() {
     channels,
     selectedChannel,
     selectedChannelName,
+    showChannelSelector,
     cachedChannelName,
     resultChannelName,
     interactionLabel,

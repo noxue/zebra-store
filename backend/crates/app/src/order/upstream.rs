@@ -200,6 +200,7 @@ impl OrderIntegrationPorts {
                 channel_type: String::new(),
                 use_balance: true,
                 client_ip: client_ip.to_owned(),
+                user_agent: String::new(),
                 tenant: ResellerTenant::default(),
                 scheme: "https".into(),
             })

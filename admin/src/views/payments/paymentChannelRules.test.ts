@@ -223,8 +223,22 @@ describe('buildConfigJson', () => {
     const res = buildConfigJson(form({ provider_type: 'epay', config_json: '{"merchant_key":"old","extra":1,"exchange_rate":"7"}' }), configs)
     expect(res).toEqual({
       ok: true,
-      config: { extra: 1, epay_version: 'v2', gateway_url: 'https://pay.example.com', merchant_id: '1001', notify_url: 'https://api.yourdomain.com/api/v1/payments/callback', private_key: 'PK', return_url: 'https://yourdomain.com/pay' },
+      config: { extra: 1, epay_version: 'v2', gateway_url: 'https://pay.example.com', merchant_id: '1001', notify_url: 'https://api.yourdomain.com/api/v1/payments/callback', private_key: 'PK', return_url: 'https://yourdomain.com/pay', supported_channel_types: ['wechat', 'alipay', 'qqpay'] },
     })
+  })
+
+  it('persists multiple Epay methods and falls back to a legacy channel type', () => {
+    const configs = defaultConfigs()
+    configs.epay.supported_channel_types = ['wechat', 'qqpay']
+    const payload = buildChannelPayload(form({ provider_type: 'epay', channel_type: 'alipay' }), configs)
+    expect(payload.ok && payload.payload.config_json).toMatchObject({ supported_channel_types: ['wechat', 'qqpay'] })
+    expect(payload.ok && payload.payload.channel_type).toBe('wechat')
+    const legacy = channelToState({
+      id: 5, name: 'legacy epay', provider_type: 'epay', channel_type: 'alipay', interaction_mode: 'qr',
+      fee_rate: '0.00', config_json: { gateway_url: 'https://pay.example.com' }, icon: '', is_active: true,
+      sort_order: 1, created_at: '', updated_at: '',
+    })
+    expect(legacy.configs.epay.supported_channel_types).toEqual(['alipay'])
   })
 
   it('explicit nulls in raw JSON win over form values', () => {

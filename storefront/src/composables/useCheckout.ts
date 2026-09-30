@@ -362,7 +362,13 @@ export function useCheckout() {
       if (!orderNo) throw new Error(t('checkout.errors.submitFailed'))
       if (isBuyNowMode.value) buyNowStore.clear()
       else cartStore.clear()
-      await router.push({ path: '/pay', query: auth.isAuthenticated ? { order_no: orderNo } : { guest: '1', order_no: orderNo } })
+      const payQuery: Record<string, string> = auth.isAuthenticated ? { order_no: orderNo } : { guest: '1', order_no: orderNo }
+      if (requiresOnlineChannel.value && selectedChannelId.value && selectedChannelType.value) {
+        payQuery.checkout = '1'
+        payQuery.channel_id = String(selectedChannelId.value)
+        payQuery.channel_type = selectedChannelType.value
+      }
+      await router.push({ path: '/pay', query: payQuery })
     } catch (err) {
       error.value = errorMessage(err, t('checkout.errors.submitFailed'))
       if (captcha.enabled.value) captcha.reset()

@@ -27,6 +27,9 @@ pub enum GatewayError {
     SignatureInvalid(String),
     #[error("payment provider auth failed: {0}")]
     AuthFailed(String),
+    /// The provider explicitly reports that this merchant lacks the requested product access.
+    #[error("payment provider permission missing: {0}")]
+    ProviderPermissionMissing(String),
     #[error("payment channel type not supported by provider: {0}")]
     UnsupportedChannel(String),
     #[error("payment provider not found in registry")]
@@ -109,6 +112,8 @@ pub struct GatewayCreateInput {
     /// Parameters appended to the return URL (PAY-16/PAY-20).
     pub return_url_query: BTreeMap<String, String>,
     pub client_ip: String,
+    /// Original browser user agent, used by gateways with distinct H5/PC flows.
+    pub user_agent: String,
     pub channel_type: String,
     /// The channel's interaction mode (typed to avoid the PAY-08 parameter mix-up).
     pub interaction_mode: Option<InteractionMode>,

@@ -43,6 +43,7 @@ export const HuifuConfigForm = defineComponent({
           {text(c, 'notify_url', 'huifuNotifyUrl', { wide: true, required: true })}
           {text(c, 'return_url', 'huifuReturnUrl', { wide: true, required: true })}
           <div class="md:col-span-2 rounded-zs border border-line bg-surface p-3 text-xs leading-relaxed text-muted">
+            <p class="mb-2">{m('huifuWechatConfigHint')}</p>
             <p>{m('huifuApplicationHint')}</p>
             <a
               class="mt-2 inline-flex items-center gap-1 font-medium text-primary hover:underline"

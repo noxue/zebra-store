@@ -272,7 +272,18 @@ export default defineComponent({
                       </div>
                     </div>
                   )}
-                  {!p.walletOnlyPayment.value && (
+                  {!p.walletOnlyPayment.value && p.selectedChannel.value && !p.showChannelSelector.value ? (
+                    <div class="flex items-center justify-between gap-3 rounded-zs border border-primary/30 bg-primary-soft p-3">
+                      <div class="min-w-0 text-sm">
+                        <div class="text-xs text-muted">{t('payment.methodLabel')}</div>
+                        <div class="truncate font-bold text-fg">{p.selectedChannelName.value}</div>
+                      </div>
+                      <Button variant="secondary" size="sm" onClick={p.handleChangePaymentMethod}>
+                        <CreditCard class="size-4" />
+                        {t('payment.changeMethod')}
+                      </Button>
+                    </div>
+                  ) : !p.walletOnlyPayment.value && (
                     <PaymentChannelSelector
                       channels={p.channels.value}
                       modelValue={p.selectedChannelId.value}

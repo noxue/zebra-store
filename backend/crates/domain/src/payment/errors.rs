@@ -20,6 +20,7 @@ pub mod keys {
     pub const PROVIDER_NOT_SUPPORTED: &str = "error.payment_provider_not_supported";
     pub const GATEWAY_REQUEST_FAILED: &str = "error.payment_gateway_request_failed";
     pub const GATEWAY_RESPONSE_INVALID: &str = "error.payment_gateway_response_invalid";
+    pub const PROVIDER_PERMISSION_MISSING: &str = "error.payment_provider_permission_missing";
     pub const CHANNEL_INVALID: &str = "error.payment_channel_invalid";
     pub const CHANNEL_CONFIG_INVALID: &str = "error.payment_channel_config_invalid";
     pub const CHANNEL_NOT_FOUND: &str = "error.payment_channel_not_found";
@@ -47,6 +48,7 @@ impl From<GatewayError> for Error {
             GatewayError::RequestFailed(_) | GatewayError::AuthFailed(_) => {
                 keys::GATEWAY_REQUEST_FAILED
             }
+            GatewayError::ProviderPermissionMissing(_) => keys::PROVIDER_PERMISSION_MISSING,
             GatewayError::ResponseInvalid(_) | GatewayError::SignatureInvalid(_) => {
                 keys::GATEWAY_RESPONSE_INVALID
             }

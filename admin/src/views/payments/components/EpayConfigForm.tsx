@@ -1,4 +1,7 @@
 import { defineComponent, type PropType } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { FormField, MultiSelect } from '@/components/ui'
+import { EPAY_CHANNEL_OPTIONS } from '../paymentChannelRules'
 import type { EpayConfig } from '../paymentChannelRules'
 import { ProviderSection, useConfigFields } from './configFields'
 
@@ -8,10 +11,18 @@ export const EpayConfigForm = defineComponent({
   props: { config: { type: Object as PropType<EpayConfig>, required: true } },
   setup(props) {
     const { text, select } = useConfigFields()
+    const { t } = useI18n()
     return () => {
       const c = props.config
       return (
         <ProviderSection title="epaySection" hint="epayHint">
+          <FormField label={t('admin.paymentChannels.huifuMethods')} required>
+            <MultiSelect
+              modelValue={c.supported_channel_types}
+              options={EPAY_CHANNEL_OPTIONS.map((option) => ({ value: option.value, label: t(option.labelKey) }))}
+              onUpdate:modelValue={(values: (string | number)[]) => { c.supported_channel_types = values.map(String) }}
+            />
+          </FormField>
           {select(c, 'epay_version', 'epayVersion', [
             { value: 'v1', label: 'v1', literal: true },
             { value: 'v2', label: 'v2', literal: true },

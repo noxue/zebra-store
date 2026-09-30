@@ -181,6 +181,7 @@ async fn create_and_pay(
         channel_type,
         use_balance: false,
         client_ip: client.ip.clone(),
+        user_agent: client.user_agent.clone(),
         tenant: tenant_value,
         scheme: request_scheme(&headers),
     };

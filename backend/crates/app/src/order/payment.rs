@@ -154,6 +154,7 @@ pub struct PayRequest {
     pub channel_type: String,
     pub use_balance: bool,
     pub client_ip: String,
+    pub user_agent: String,
     pub tenant: ResellerTenant,
     /// `http` / `https` of the request (tenant return URLs, PAY-06).
     pub scheme: String,
@@ -358,6 +359,7 @@ impl OrderService {
                 "",
             ),
             client_ip: req.client_ip.trim().to_owned(),
+            user_agent: req.user_agent.trim().to_owned(),
             channel_type: channel.channel_type.clone(),
             interaction_mode: InteractionMode::parse(&channel.interaction_mode),
             order_user_key,

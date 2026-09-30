@@ -191,11 +191,35 @@ fn require_accepted(response: &huifu_pay::ApiResponse) -> Result<(), GatewayErro
     if response.accepted() {
         return Ok(());
     }
+    let code = response.string("resp_code");
+    let description = response.string("resp_desc");
+    if code == "00000009" && description.contains("统一收银台") {
+        return Err(GatewayError::ProviderPermissionMissing(format!(
+            "huifu {code}: {description}"
+        )));
+    }
     Err(GatewayError::response(format!(
-        "huifu rejected request: {} {}",
-        response.string("resp_code"),
-        response.string("resp_desc")
+        "huifu rejected request: {code} {description}"
     )))
+}
+
+fn huifu_request_type(user_agent: &str) -> &'static str {
+    let ua = user_agent.to_ascii_lowercase();
+    if [
+        "android",
+        "iphone",
+        "ipad",
+        "ipod",
+        "mobile",
+        "micromessenger",
+    ]
+    .iter()
+    .any(|marker| ua.contains(marker))
+    {
+        "M"
+    } else {
+        "P"
+    }
 }
 
 #[async_trait]
@@ -261,7 +285,7 @@ impl PaymentGateway for HuifuGateway {
                 callback_url: return_url,
                 project_id: config.project_id,
                 project_title: config.project_title,
-                request_type: "P".into(),
+                request_type: huifu_request_type(&input.user_agent).into(),
                 trans_type: trans_type.into(),
                 time_expire: String::new(),
             })
@@ -465,5 +489,47 @@ impl PaymentGateway for HuifuGateway {
             file_name: file.file_name.clone(),
             body,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{GatewayError, huifu_request_type, require_accepted};
+    use huifu_pay::ApiResponse;
+    use serde_json::{Map, Value};
+
+    fn response(code: &str, desc: &str) -> ApiResponse {
+        let mut data = Map::new();
+        data.insert("resp_code".to_owned(), Value::String(code.to_owned()));
+        data.insert("resp_desc".to_owned(), Value::String(desc.to_owned()));
+        ApiResponse { data }
+    }
+
+    #[test]
+    fn selects_h5_for_mobile_browsers_and_pc_by_default() {
+        for user_agent in [
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)",
+            "Mozilla/5.0 (Linux; Android 14; Pixel 8)",
+            "Mozilla/5.0 (Linux; Android 14) MicroMessenger/8.0",
+        ] {
+            assert_eq!(huifu_request_type(user_agent), "M");
+        }
+        assert_eq!(
+            huifu_request_type("Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) Safari/605.1"),
+            "P"
+        );
+        assert_eq!(huifu_request_type(""), "P");
+    }
+
+    #[test]
+    fn identifies_huifu_unified_cashier_permission_rejection() {
+        let result = require_accepted(&response("00000009", "商户暂未开通支付统一收银台权限"));
+        assert!(matches!(
+            result,
+            Err(GatewayError::ProviderPermissionMissing(_))
+        ));
+
+        let other = require_accepted(&response("OTHER", "some other rejection"));
+        assert!(matches!(other, Err(GatewayError::ResponseInvalid(_))));
     }
 }

@@ -81,6 +81,7 @@ impl ChannelPatch {
 fn validation_error(err: &GatewayError) -> Error {
     match err {
         GatewayError::ConfigInvalid(_) => Error::bad_request(keys::CHANNEL_CONFIG_INVALID),
+        GatewayError::ProviderPermissionMissing(_) => Error::bad_request(keys::CHANNEL_INVALID),
         GatewayError::UnsupportedChannel(_)
         | GatewayError::ProviderNotFound
         | GatewayError::Unsupported => Error::bad_request(keys::PROVIDER_NOT_SUPPORTED),
@@ -234,6 +235,9 @@ impl ChannelService {
                         Error::bad_request(keys::WECHAT_KEY_TEST_CONFIG_INVALID)
                     }
                     GatewayError::RequestFailed(_) | GatewayError::AuthFailed(_) => {
+                        Error::bad_request(keys::WECHAT_KEY_TEST_REQUEST_FAILED)
+                    }
+                    GatewayError::ProviderPermissionMissing(_) => {
                         Error::bad_request(keys::WECHAT_KEY_TEST_REQUEST_FAILED)
                     }
                     GatewayError::ResponseInvalid(_) | GatewayError::SignatureInvalid(_) => {

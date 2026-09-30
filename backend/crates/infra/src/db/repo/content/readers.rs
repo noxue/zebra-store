@@ -46,7 +46,7 @@ impl PaymentChannelReader for SeaPaymentChannelReader {
                 let channel_type = m.channel_type;
                 let provider_type = m.provider_type;
                 let config: serde_json::Value = from_json(m.config_json);
-                let configured_types = if provider_type == "huifu" {
+                let configured_types = if matches!(provider_type.as_str(), "huifu" | "epay") {
                     config
                         .get("supported_channel_types")
                         .and_then(serde_json::Value::as_array)
@@ -54,8 +54,15 @@ impl PaymentChannelReader for SeaPaymentChannelReader {
                             values
                                 .iter()
                                 .filter_map(serde_json::Value::as_str)
-                                .map(str::to_owned)
-                                .filter(|value| matches!(value.as_str(), "wechat" | "alipay"))
+                                .map(|value| value.trim().to_ascii_lowercase())
+                                .filter(|value| match provider_type.as_str() {
+                                    "huifu" => matches!(value.as_str(), "wechat" | "alipay"),
+                                    "epay" => matches!(
+                                        value.as_str(),
+                                        "wechat" | "wxpay" | "alipay" | "qqpay"
+                                    ),
+                                    _ => false,
+                                })
                                 .collect::<Vec<_>>()
                         })
                         .filter(|values| !values.is_empty())
