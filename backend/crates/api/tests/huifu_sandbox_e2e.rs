@@ -10,7 +10,9 @@ use std::fs;
 use std::sync::Arc;
 use std::time::Duration;
 
+use axum::body::Body;
 use chrono::Utc;
+use http::{Request, header};
 use order_common::{Auth, OrderApp};
 use sea_orm::prelude::Decimal;
 use sea_orm::{ActiveModelTrait, Set};
@@ -26,13 +28,18 @@ fn env(name: &str) -> String {
     std::env::var(name).unwrap_or_else(|_| panic!("{name} must be set"))
 }
 
-async fn seed_huifu_channel(app: &OrderApp, notify_url: &str, return_url: &str) -> i64 {
+async fn seed_huifu_channel(
+    app: &OrderApp,
+    channel_type: &str,
+    notify_url: &str,
+    return_url: &str,
+) -> i64 {
     let now = Utc::now();
     payment_channels::ActiveModel {
-        name: Set("Huifu sandbox Alipay".into()),
+        name: Set(format!("Huifu sandbox {channel_type}")),
         icon: Set(String::new()),
         provider_type: Set("huifu".into()),
-        channel_type: Set("alipay".into()),
+        channel_type: Set(channel_type.into()),
         interaction_mode: Set("qr".into()),
         fee_rate: Set(Decimal::ZERO),
         fixed_fee: Set(Decimal::ZERO),
@@ -107,7 +114,13 @@ async fn sandbox_post(path: &str, body: Value) -> Value {
 #[ignore = "requires the separately downloaded Huifu local sandbox"]
 async fn guest_checkout_huifu_notify_and_card_delivery() {
     let app = Arc::new(OrderApp::with_transport(Arc::new(ReqwestTransport::new())).await);
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let callback_port = std::env::var("HUIFU_SANDBOX_CALLBACK_PORT")
+        .unwrap_or_else(|_| "18767".to_owned())
+        .parse::<u16>()
+        .unwrap();
+    let listener = tokio::net::TcpListener::bind(("127.0.0.1", callback_port))
+        .await
+        .unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
     let router = app.router.clone();
     let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
@@ -118,6 +131,7 @@ async fn guest_checkout_huifu_notify_and_card_delivery() {
     app.secrets(product, sku, 1).await;
     let channel = seed_huifu_channel(
         &app,
+        "alipay",
         &format!("{base}/api/v1/payments/callback"),
         &format!("{base}/pay"),
     )
@@ -152,6 +166,16 @@ async fn guest_checkout_huifu_notify_and_card_delivery() {
     let payment_id = created["data"]["payment_id"].as_i64().unwrap();
     let gateway_order_no = app.payment(payment_id).await.gateway_order_no;
     assert_eq!(app.secrets_with(product, "reserved").await, 1);
+
+    let simulated = sandbox_post(
+        "/__admin/hosting/success",
+        json!({"req_seq_id": gateway_order_no}),
+    )
+    .await;
+    assert_eq!(
+        simulated["ok"], true,
+        "sandbox payment simulation failed: {simulated}"
+    );
 
     let delivered = tokio::time::timeout(
         Duration::from_secs(10),
@@ -222,6 +246,104 @@ async fn guest_checkout_huifu_notify_and_card_delivery() {
         detail["data"]["children"][0]["fulfillment"]["payload"]
             .as_str()
             .is_some_and(|payload| payload.contains("CARD-"))
+    );
+
+    let refund_body = json!({"amount": "0.01", "remark": "local sandbox refund"});
+    let mut refund = app
+        .admin_call(
+            "POST",
+            &format!("/api/v1/admin/orders/{}/original-refund", parent.id),
+            Some(refund_body.clone()),
+        )
+        .await;
+    assert_eq!(
+        refund["status_code"], 0,
+        "refund submission failed: {refund}"
+    );
+    for _ in 0..3 {
+        if refund["data"]["attempt"]["status"] == "succeeded" {
+            break;
+        }
+        refund = app
+            .admin_call(
+                "POST",
+                &format!("/api/v1/admin/orders/{}/original-refund", parent.id),
+                Some(refund_body.clone()),
+            )
+            .await;
+        assert_eq!(
+            refund["status_code"], 0,
+            "refund reconciliation failed: {refund}"
+        );
+    }
+    assert_eq!(refund["data"]["attempt"]["status"], "succeeded", "{refund}");
+    assert_eq!(refund["data"]["order"]["refunded_amount"], "0.01");
+    let refund_replay = app
+        .admin_call(
+            "POST",
+            &format!("/api/v1/admin/orders/{}/original-refund", parent.id),
+            Some(refund_body),
+        )
+        .await;
+    assert_eq!(
+        refund_replay["status_code"], 0,
+        "refund replay: {refund_replay}"
+    );
+    assert_eq!(refund_replay["data"]["attempt"]["status"], "succeeded");
+    assert_eq!(
+        refund_replay["data"]["refund_record"]["id"], refund["data"]["refund_record"]["id"],
+        "replayed refund must reference the original local refund record"
+    );
+
+    // Also exercise a mobile WeChat H5 request. The browser User-Agent determines the
+    // hosted checkout request type, while the selected payment method determines T_JSAPI.
+    let (wechat_product, wechat_sku) = app
+        .product("huifu-sandbox-wechat", json!({"price_amount": "0.01"}))
+        .await;
+    app.secrets(wechat_product, wechat_sku, 1).await;
+    let wechat_channel = seed_huifu_channel(
+        &app,
+        "wechat",
+        &format!("{base}/api/v1/payments/callback"),
+        &format!("{base}/pay"),
+    )
+    .await;
+    let request = Request::builder()
+        .method("POST")
+        .uri("/api/v1/guest/orders/create-and-pay")
+        .header(header::ACCEPT_LANGUAGE, "en-US")
+        .header(header::CONTENT_TYPE, "application/json")
+        .header(
+            header::USER_AGENT,
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) MicroMessenger/8.0",
+        )
+        .header("x-forwarded-for", "203.0.113.7")
+        .body(Body::from(
+            json!({
+                "email": "huifu-wechat-sandbox@uuid.com",
+                "order_password": "01999999-7777-4777-8777-019999999998",
+                "items": [{"product_id": wechat_product, "sku_id": wechat_sku, "quantity": 1}],
+                "channel_id": wechat_channel
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let (status, _, body) = app.send(request).await;
+    assert!(
+        status.is_success(),
+        "WeChat H5 checkout HTTP status: {status}"
+    );
+    let wechat_created: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(
+        wechat_created["status_code"], 0,
+        "WeChat H5 checkout failed: {wechat_created}"
+    );
+    assert_eq!(wechat_created["data"]["provider_type"], "huifu");
+    assert!(
+        wechat_created["data"]["pay_url"]
+            .as_str()
+            .is_some_and(|url| url.starts_with(&env("HUIFU_SANDBOX_CONTROL_URL"))),
+        "WeChat H5 must return a sandbox hosted pay URL: {wechat_created}"
     );
 
     server.abort();

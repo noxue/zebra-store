@@ -21,6 +21,11 @@ async fn sync_creates_all_tables_idempotently() {
         .await
         .unwrap();
     // 60 original tables + casbin_rule + jobs + integration / zebra-store extras,
-    // including converter profiles, bindings and event history.
-    assert_eq!(rows.len(), 77, "tables: {rows:?}");
+    // including converter profiles, bindings, event history, and gateway refund attempts.
+    let names: Vec<String> = rows
+        .iter()
+        .map(|row| row.try_get("", "name").unwrap())
+        .collect();
+    assert_eq!(rows.len(), 78, "tables: {names:?}");
+    assert!(names.iter().any(|name| name == "gateway_refund_attempts"));
 }

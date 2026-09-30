@@ -547,6 +547,61 @@
       },
       {
         "subject": "",
+        "object": "/admin/card-converters",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/card-converters",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/card-converters/:id",
+        "action": "PUT"
+      },
+      {
+        "subject": "",
+        "object": "/admin/card-converters/:id",
+        "action": "DELETE"
+      },
+      {
+        "subject": "",
+        "object": "/admin/card-converters/:id/test",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/card-converters/:id/refresh-types",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/card-converters/:id/events",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/card-converters/pending",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/card-converter-bindings",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/card-converter-bindings",
+        "action": "PUT"
+      },
+      {
+        "subject": "",
+        "object": "/admin/card-converter-bindings",
+        "action": "DELETE"
+      },
+      {
+        "subject": "",
         "object": "/admin/procurement-orders",
         "action": "GET"
       },
@@ -568,6 +623,11 @@
       {
         "subject": "",
         "object": "/admin/procurement-orders/:id/retry",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/procurement-orders/:id/retry-delivery",
         "action": "POST"
       },
       {

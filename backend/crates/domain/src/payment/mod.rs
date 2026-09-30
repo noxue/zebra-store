@@ -10,6 +10,7 @@ pub mod fee;
 pub mod form;
 pub mod gateway;
 pub mod model;
+pub mod refund;
 pub mod returns;
 pub mod routes;
 pub mod settlement;

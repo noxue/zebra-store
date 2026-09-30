@@ -25,6 +25,10 @@ use zs_domain::order::ports::{
 use zs_domain::order::status::is_transition_allowed;
 use zs_domain::payment::callback::CallbackInput;
 use zs_domain::payment::model::Payment;
+use zs_domain::payment::refund::{
+    GatewayRefundAttempt, GatewayRefundAttemptUpdate, NewGatewayRefundAttempt,
+    ReservedGatewayRefund,
+};
 use zs_domain::wallet::model::txn_type;
 use zs_domain::{Error, Id, Result};
 use zs_shared::money::Amount;
@@ -300,6 +304,33 @@ impl OrderStore for SeaOrderStore {
 
     async fn refund(&self, request: &RefundRequest) -> Result<RefundDone> {
         in_txn!(self, |txn| refund::refund_in(&txn, request).await)
+    }
+
+    async fn reserve_gateway_refund(
+        &self,
+        input: &NewGatewayRefundAttempt,
+    ) -> Result<ReservedGatewayRefund> {
+        in_txn!(self, |txn| refund::reserve_gateway_refund_in(&txn, input)
+            .await)
+    }
+
+    async fn gateway_refund_attempt(&self, id: Id) -> Result<Option<GatewayRefundAttempt>> {
+        refund::get_gateway_refund_attempt_in(&self.db, id).await
+    }
+
+    async fn gateway_refund_attempts(&self, order_id: Id) -> Result<Vec<GatewayRefundAttempt>> {
+        refund::list_gateway_refund_attempts_in(&self.db, order_id).await
+    }
+
+    async fn update_gateway_refund_attempt(
+        &self,
+        id: Id,
+        update: &GatewayRefundAttemptUpdate,
+    ) -> Result<GatewayRefundAttempt> {
+        in_txn!(self, |txn| refund::update_gateway_refund_attempt_in(
+            &txn, id, update
+        )
+        .await)
     }
 
     async fn set_refund_fee_flag(

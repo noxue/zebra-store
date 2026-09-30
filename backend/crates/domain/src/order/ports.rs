@@ -19,6 +19,10 @@ use crate::integration::hooks::UpstreamDelivery;
 use crate::payment::callback::CallbackInput;
 use crate::payment::channel::PaymentChannel;
 use crate::payment::model::Payment;
+use crate::payment::refund::{
+    GatewayRefundAttempt, GatewayRefundAttemptUpdate, NewGatewayRefundAttempt,
+    ReservedGatewayRefund,
+};
 use crate::reseller::pricing::OrderPricingContext;
 use crate::wallet::Transaction;
 use crate::{Id, Result};
@@ -228,6 +232,10 @@ pub struct RefundRequest {
     pub to_wallet: bool,
     /// Manual refunds may also give back the payment fee (RFD-01).
     pub payment_fee_refunded: bool,
+    /// Gateway attempt completed by this refund, persisted in the same transaction.
+    pub gateway_refund_attempt_id: Option<Id>,
+    pub gateway_refund_provider_ref: String,
+    pub gateway_refund_payload: serde_json::Map<String, serde_json::Value>,
     pub max_refund_days: i64,
     pub reseller_confirm_days: i64,
     pub now: DateTime<Utc>,
@@ -325,6 +333,19 @@ pub trait OrderStore: Send + Sync {
 
     /// Records a refund (RFD-01 … RFD-04), with affiliate and reseller claw-backs.
     async fn refund(&self, request: &RefundRequest) -> Result<RefundDone>;
+
+    /// Reserves one provider refund attempt per payment; pending attempts are reused.
+    async fn reserve_gateway_refund(
+        &self,
+        input: &NewGatewayRefundAttempt,
+    ) -> Result<ReservedGatewayRefund>;
+    async fn gateway_refund_attempt(&self, id: Id) -> Result<Option<GatewayRefundAttempt>>;
+    async fn gateway_refund_attempts(&self, order_id: Id) -> Result<Vec<GatewayRefundAttempt>>;
+    async fn update_gateway_refund_attempt(
+        &self,
+        id: Id,
+        update: &GatewayRefundAttemptUpdate,
+    ) -> Result<GatewayRefundAttempt>;
 
     /// Switches the fee-refunded flag of a manual refund record (RFD-01).
     async fn set_refund_fee_flag(

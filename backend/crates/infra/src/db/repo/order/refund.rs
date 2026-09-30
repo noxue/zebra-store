@@ -4,12 +4,16 @@
 use chrono::{DateTime, Utc};
 use sea_orm::sea_query::Expr;
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder,
-    QuerySelect, Set,
+    ActiveModelTrait, ColumnTrait, ConnectionTrait, EntityTrait, IntoActiveModel, QueryFilter,
+    QueryOrder, QuerySelect, Set,
 };
 use zs_domain::order::model::{Order, RefundRecord, keys, refund_type};
 use zs_domain::order::ports::{RefundDone, RefundRequest};
 use zs_domain::order::refund::{payment_fee_refund_amount, plan_refund, refundable_fee_snapshot};
+use zs_domain::payment::refund::{
+    GatewayRefundAttempt, GatewayRefundAttemptUpdate, NewGatewayRefundAttempt,
+    ReservedGatewayRefund, status as gateway_refund_status,
+};
 use zs_domain::reseller::ports::OrderRefunded;
 use zs_domain::wallet::model::txn_type;
 use zs_domain::wallet::ports::BalanceChangeRequest;
@@ -17,7 +21,7 @@ use zs_domain::{Error, Id, Result};
 use zs_shared::money::Amount;
 
 use super::{map, ops, wallet};
-use crate::db::entity::{order_refund_records, orders, payments};
+use crate::db::entity::{gateway_refund_attempts, order_refund_records, orders, payments};
 use crate::db::repo::affiliate::clawback_on_refund;
 use crate::db::repo::payment::records::to_domain as payment_to_domain;
 use crate::db::repo::reseller::ledger::deduct_refund_in;
@@ -25,6 +29,148 @@ use crate::db::repo::support::DbResultExt;
 
 /// Remark of a wallet refund without one (`管理员退款到余额`).
 const WALLET_REFUND_REMARK: &str = "管理员退款到余额";
+
+fn gateway_attempt_to_domain(model: gateway_refund_attempts::Model) -> GatewayRefundAttempt {
+    let payload = model
+        .payload
+        .and_then(|value| value.as_object().cloned())
+        .unwrap_or_default();
+    GatewayRefundAttempt {
+        id: model.id,
+        order_id: model.order_id,
+        payment_id: model.payment_id,
+        channel_id: model.channel_id,
+        request_date: model.request_date,
+        refund_no: model.refund_no,
+        provider_ref: model.provider_ref,
+        amount: Amount::new(model.amount),
+        status: model.status,
+        remark: model.remark,
+        payment_fee_refunded: model.payment_fee_refunded,
+        payload,
+        error: model.error,
+        refund_record_id: model.refund_record_id,
+        created_at: model.created_at,
+        updated_at: model.updated_at,
+    }
+}
+
+pub(crate) async fn reserve_gateway_refund_in<C: ConnectionTrait>(
+    conn: &C,
+    input: &NewGatewayRefundAttempt,
+) -> Result<ReservedGatewayRefund> {
+    // Locking the successful payment serializes retries across processes, so a pending
+    // provider request is always queried instead of being submitted a second time.
+    payments::Entity::find_by_id(input.payment_id)
+        .lock_exclusive()
+        .one(conn)
+        .await
+        .dom()?
+        .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
+    if let Some(existing) = gateway_refund_attempts::Entity::find()
+        .filter(gateway_refund_attempts::Column::PaymentId.eq(input.payment_id))
+        .filter(gateway_refund_attempts::Column::Status.eq(gateway_refund_status::PENDING))
+        .order_by_desc(gateway_refund_attempts::Column::Id)
+        .lock_exclusive()
+        .one(conn)
+        .await
+        .dom()?
+    {
+        return Ok(ReservedGatewayRefund {
+            attempt: gateway_attempt_to_domain(existing),
+            created: false,
+        });
+    }
+    // A concurrent retry may have finished while this request was waiting for the payment
+    // lock. Treat a matching successful request as the same idempotent operation.
+    if let Some(existing) = gateway_refund_attempts::Entity::find()
+        .filter(gateway_refund_attempts::Column::PaymentId.eq(input.payment_id))
+        .filter(gateway_refund_attempts::Column::Status.eq(gateway_refund_status::SUCCEEDED))
+        .filter(gateway_refund_attempts::Column::Amount.eq(input.amount.decimal()))
+        .filter(gateway_refund_attempts::Column::Remark.eq(input.remark.clone()))
+        .filter(gateway_refund_attempts::Column::PaymentFeeRefunded.eq(input.payment_fee_refunded))
+        .order_by_desc(gateway_refund_attempts::Column::Id)
+        .lock_exclusive()
+        .one(conn)
+        .await
+        .dom()?
+    {
+        return Ok(ReservedGatewayRefund {
+            attempt: gateway_attempt_to_domain(existing),
+            created: false,
+        });
+    }
+    let model = gateway_refund_attempts::ActiveModel {
+        order_id: Set(input.order_id),
+        payment_id: Set(input.payment_id),
+        channel_id: Set(input.channel_id),
+        request_date: Set(input.request_date.clone()),
+        refund_no: Set(input.refund_no.clone()),
+        provider_ref: Set(input.provider_ref.clone()),
+        amount: Set(input.amount.decimal()),
+        status: Set(gateway_refund_status::PENDING.to_owned()),
+        remark: Set(input.remark.clone()),
+        payment_fee_refunded: Set(input.payment_fee_refunded),
+        payload: Set(Some(serde_json::Value::Object(Default::default()))),
+        error: Set(String::new()),
+        refund_record_id: Set(None),
+        created_at: Set(input.now),
+        updated_at: Set(input.now),
+        ..Default::default()
+    }
+    .insert(conn)
+    .await
+    .dom()?;
+    Ok(ReservedGatewayRefund {
+        attempt: gateway_attempt_to_domain(model),
+        created: true,
+    })
+}
+
+pub(crate) async fn get_gateway_refund_attempt_in<C: ConnectionTrait>(
+    conn: &C,
+    id: Id,
+) -> Result<Option<GatewayRefundAttempt>> {
+    Ok(gateway_refund_attempts::Entity::find_by_id(id)
+        .one(conn)
+        .await
+        .dom()?
+        .map(gateway_attempt_to_domain))
+}
+
+pub(crate) async fn list_gateway_refund_attempts_in<C: ConnectionTrait>(
+    conn: &C,
+    order_id: Id,
+) -> Result<Vec<GatewayRefundAttempt>> {
+    Ok(gateway_refund_attempts::Entity::find()
+        .filter(gateway_refund_attempts::Column::OrderId.eq(order_id))
+        .order_by_desc(gateway_refund_attempts::Column::Id)
+        .all(conn)
+        .await
+        .dom()?
+        .into_iter()
+        .map(gateway_attempt_to_domain)
+        .collect())
+}
+
+pub(crate) async fn update_gateway_refund_attempt_in<C: ConnectionTrait>(
+    conn: &C,
+    id: Id,
+    update: &GatewayRefundAttemptUpdate,
+) -> Result<GatewayRefundAttempt> {
+    let mut model = gateway_refund_attempts::Entity::find_by_id(id)
+        .lock_exclusive()
+        .one(conn)
+        .await
+        .dom()?
+        .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?
+        .into_active_model();
+    model.status = Set(update.status.clone());
+    model.payload = Set(Some(serde_json::Value::Object(update.payload.clone())));
+    model.error = Set(update.error.clone());
+    model.updated_at = Set(update.now);
+    Ok(gateway_attempt_to_domain(model.update(conn).await.dom()?))
+}
 
 /// Root (parent) order id of an order.
 fn root_id(order: &Order) -> Id {
@@ -105,6 +251,33 @@ pub(crate) async fn refund_in<C: ConnectionTrait>(
     let order = map::load_locked(conn, req.order_id)
         .await?
         .ok_or_else(not_found)?;
+    let gateway_attempt = if let Some(attempt_id) = req.gateway_refund_attempt_id {
+        let attempt = gateway_refund_attempts::Entity::find_by_id(attempt_id)
+            .lock_exclusive()
+            .one(conn)
+            .await
+            .dom()?
+            .ok_or_else(not_found)?;
+        if attempt.order_id != order.id || Amount::new(attempt.amount) != req.amount {
+            return Err(Error::invalid());
+        }
+        if let Some(record_id) = attempt.refund_record_id {
+            let record = order_refund_records::Entity::find_by_id(record_id)
+                .filter(order_refund_records::Column::DeletedAt.is_null())
+                .one(conn)
+                .await
+                .dom()?
+                .ok_or_else(not_found)?;
+            return Ok(RefundDone {
+                order,
+                record: map::refund_to_domain(record),
+                transaction: None,
+            });
+        }
+        Some(attempt)
+    } else {
+        None
+    };
     if req.to_wallet && order.user_id == 0 {
         return Err(Error::invalid());
     }
@@ -217,6 +390,37 @@ pub(crate) async fn refund_in<C: ConnectionTrait>(
     .insert(conn)
     .await
     .map_err(|e| Error::internal(e).or_internal(keys::ORDER_UPDATE_FAILED))?;
+
+    if let Some(attempt) = gateway_attempt {
+        gateway_refund_attempts::Entity::update_many()
+            .col_expr(
+                gateway_refund_attempts::Column::Status,
+                Expr::value(gateway_refund_status::SUCCEEDED),
+            )
+            .col_expr(
+                gateway_refund_attempts::Column::ProviderRef,
+                Expr::value(req.gateway_refund_provider_ref.trim()),
+            )
+            .col_expr(
+                gateway_refund_attempts::Column::Payload,
+                Expr::value(serde_json::Value::Object(
+                    req.gateway_refund_payload.clone(),
+                )),
+            )
+            .col_expr(
+                gateway_refund_attempts::Column::RefundRecordId,
+                Expr::value(record.id),
+            )
+            .col_expr(
+                gateway_refund_attempts::Column::Error,
+                Expr::value(String::new()),
+            )
+            .col_expr(gateway_refund_attempts::Column::UpdatedAt, Expr::value(now))
+            .filter(gateway_refund_attempts::Column::Id.eq(attempt.id))
+            .exec(conn)
+            .await
+            .dom()?;
+    }
 
     let reason = if req.to_wallet {
         "order_refunded_to_wallet"

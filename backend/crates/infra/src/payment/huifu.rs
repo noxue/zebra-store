@@ -26,6 +26,7 @@ use super::common::{GatewayEnv, callback_amount, parse_config};
 use super::http::{HttpRequest, HttpTransport};
 
 const DEFAULT_API: &str = huifu_pay::DEFAULT_BASE_URL;
+const LOCAL_SANDBOX_SKILL_SOURCE: &str = "hfps/1.3.1;sandbox/1.0.0";
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default)]
@@ -76,6 +77,16 @@ impl Config {
     }
 
     fn sdk(&self) -> Result<SdkConfig, GatewayError> {
+        // Huifu's official local sandbox preview is pinned to skill 1.3.1 and requires its
+        // sandbox suffix. Production and official online testing always use the current fixed
+        // integration source from huifu-pay.
+        let skill_source = if self.api_base_url.starts_with("http://127.0.0.1:")
+            || self.api_base_url.starts_with("http://localhost:")
+        {
+            LOCAL_SANDBOX_SKILL_SOURCE
+        } else {
+            huifu_pay::DEFAULT_SKILL_SOURCE
+        };
         let c = SdkConfig {
             base_url: self.api_base_url.trim().to_owned(),
             sys_id: self.sys_id.trim().to_owned(),
@@ -83,7 +94,7 @@ impl Config {
             huifu_id: self.huifu_id.trim().to_owned(),
             merchant_private_key: self.merchant_private_key.trim().to_owned(),
             huifu_public_key: self.huifu_public_key.trim().to_owned(),
-            skill_source: huifu_pay::DEFAULT_SKILL_SOURCE.to_owned(),
+            skill_source: skill_source.to_owned(),
         };
         c.validate().map_err(map_error)?;
         Ok(c)
@@ -376,7 +387,11 @@ impl PaymentGateway for HuifuGateway {
     ) -> Result<GatewayRefundResult, GatewayError> {
         let (config, client) = self.client(raw)?;
         let (org_date, org_sequence) = split_locator(&input.provider_ref)?;
-        let date = self.date();
+        let date = if input.request_date.trim().is_empty() {
+            self.date()
+        } else {
+            input.request_date.trim().to_owned()
+        };
         let notify_url = if input.notify_url.trim().is_empty() {
             config.notify_url
         } else {
@@ -494,9 +509,18 @@ impl PaymentGateway for HuifuGateway {
 
 #[cfg(test)]
 mod tests {
-    use super::{GatewayError, huifu_request_type, require_accepted};
+    use std::sync::{Arc, Mutex};
+
+    use super::{GatewayError, HuifuGateway, huifu_request_type, require_accepted};
     use huifu_pay::ApiResponse;
-    use serde_json::{Map, Value};
+    use serde_json::{Map, Value, json};
+    use zs_domain::payment::channel::ChannelConfig;
+    use zs_domain::payment::gateway::{GatewayRefundInput, PaymentGateway};
+    use zs_domain::payment::types::PaymentStatus;
+    use zs_shared::money::Amount;
+
+    use crate::payment::http::{HttpResponse, MockTransport};
+    use crate::payment::test_support::{PRIV_PEM, PUB_PEM, env_with};
 
     fn response(code: &str, desc: &str) -> ApiResponse {
         let mut data = Map::new();
@@ -531,5 +555,65 @@ mod tests {
 
         let other = require_accepted(&response("OTHER", "some other rejection"));
         assert!(matches!(other, Err(GatewayError::ResponseInvalid(_))));
+    }
+
+    #[tokio::test]
+    async fn refund_uses_persisted_request_date_after_midnight_retry() {
+        let captured = Arc::new(Mutex::new(None::<Value>));
+        let captured_request = captured.clone();
+        let transport = MockTransport::new(move |request| {
+            assert!(request.url.ends_with(huifu_pay::REFUND_PATH));
+            let body: Value =
+                serde_json::from_slice(&request.body).map_err(|error| error.to_string())?;
+            *captured_request.lock().map_err(|error| error.to_string())? = Some(body.clone());
+            let data = json!({
+                "resp_code": "00000000",
+                "resp_desc": "success",
+                "trans_stat": "P"
+            });
+            let sign = huifu_pay::sign_value(PRIV_PEM, &data).map_err(|error| error.to_string())?;
+            Ok(HttpResponse::new(
+                200,
+                json!({"data": data, "sign": sign}).to_string(),
+            ))
+        });
+        let gateway = HuifuGateway::new(env_with(transport));
+        let config: ChannelConfig = serde_json::from_value(json!({
+            "sys_id": "SYS-1",
+            "product_id": "PROD-1",
+            "huifu_id": "HU-1",
+            "merchant_private_key": PRIV_PEM,
+            "huifu_public_key": PUB_PEM,
+            "project_id": "PROJECT-1",
+            "notify_url": "https://shop.example.com/api/v1/payments/callback",
+            "return_url": "https://shop.example.com/pay"
+        }))
+        .map_err(|error| error.to_string())
+        .expect("test config is valid");
+        let result = gateway
+            .refund_payment(
+                &config,
+                &GatewayRefundInput {
+                    provider_ref: "20260930:PAYMENT-1".into(),
+                    request_date: "20261001".into(),
+                    refund_no: "REFUND-1".into(),
+                    amount: Amount::new("0.01".parse().expect("valid amount")),
+                    notify_url: String::new(),
+                    remark: "midnight retry".into(),
+                    client_ip: String::new(),
+                },
+            )
+            .await
+            .expect("refund request is accepted");
+
+        assert_eq!(result.status, Some(PaymentStatus::Pending));
+        let body = captured
+            .lock()
+            .expect("captured request")
+            .clone()
+            .expect("body");
+        assert_eq!(body["data"]["req_date"], "20261001");
+        assert_eq!(body["data"]["org_req_date"], "20260930");
+        assert_eq!(body["data"]["req_seq_id"], "REFUND-1");
     }
 }

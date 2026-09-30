@@ -578,6 +578,9 @@ impl ProcurementLifecycle for OrderIntegrationPorts {
                 remark: reason.to_owned(),
                 to_wallet,
                 payment_fee_refunded: false,
+                gateway_refund_attempt_id: None,
+                gateway_refund_provider_ref: String::new(),
+                gateway_refund_payload: Default::default(),
                 // The buyer never received the goods: no refund window.
                 max_refund_days: 0,
                 reseller_confirm_days: self.0.deps.reseller_confirm_days,

@@ -21,6 +21,7 @@ pub mod coupons;
 pub mod downstream_order_refs;
 pub mod email_verify_codes;
 pub mod fulfillments;
+pub mod gateway_refund_attempts;
 pub mod gift_card_batches;
 pub mod gift_cards;
 pub mod media;

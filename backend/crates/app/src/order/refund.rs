@@ -3,12 +3,18 @@
 
 use std::collections::HashMap;
 
+use chrono::{FixedOffset, Offset, Utc};
 use serde::Serialize;
+use serde_json::Map;
 use zs_domain::order::model::{Order, OrderItem, RefundRecord, keys};
 use zs_domain::order::ports::{RefundDone, RefundFilter, RefundRequest};
-use zs_domain::order::refund::parse_refund_amount;
+use zs_domain::order::refund::{parse_refund_amount, plan_refund};
 use zs_domain::payment::gateway::{GatewayRefundInput, GatewayRefundResult};
 use zs_domain::payment::model::AdminPaymentFilter;
+use zs_domain::payment::refund::{
+    GatewayRefundAttempt, GatewayRefundAttemptUpdate, NewGatewayRefundAttempt,
+    status as gateway_refund_status,
+};
 use zs_domain::payment::types::PaymentStatus;
 use zs_domain::{Error, Id, Result};
 use zs_shared::page::{Page, PageRequest};
@@ -36,6 +42,7 @@ pub struct AdminRefundItem {
 #[derive(Debug, Clone)]
 pub struct OriginalRefundResult {
     pub gateway: GatewayRefundResult,
+    pub attempt: GatewayRefundAttempt,
     pub completed: Option<RefundDone>,
 }
 
@@ -80,33 +87,195 @@ impl OrderService {
             .registry
             .lookup(&channel.provider_type, &channel.channel_type)
             .ok_or_else(|| Error::bad_request("error.payment_provider_not_supported"))?;
-        let refund_no = format!("R{}{}", order_id, self.deps.clock.now().timestamp_millis());
-        let gateway_result = gateway
-            .refund_payment(
-                &channel.config_json,
-                &GatewayRefundInput {
-                    provider_ref: payment.provider_ref,
-                    refund_no,
-                    amount,
-                    notify_url: String::new(),
-                    remark: remark.to_owned(),
-                    client_ip: client_ip.to_owned(),
-                },
-            )
-            .await
-            .map_err(Error::from)?;
-        let completed = if gateway_result.status == Some(PaymentStatus::Success) {
-            Some(
-                self.apply_refund(order_id, raw_amount, remark, false, fee_refunded)
-                    .await?,
-            )
+        let previous_attempts = self.deps.store.gateway_refund_attempts(order_id).await?;
+        let previous_attempt = previous_attempts
+            .into_iter()
+            .find(|attempt| attempt.payment_id == payment.id);
+        if let Some(attempt) = previous_attempt.as_ref()
+            && attempt.status == gateway_refund_status::PENDING
+            && (attempt.amount != amount
+                || attempt.payment_fee_refunded != fee_refunded
+                || attempt.remark != remark)
+        {
+            return Err(Error::bad_request("error.gateway_refund_pending"));
+        }
+        if let Some(attempt) = previous_attempt.as_ref()
+            && attempt.status == gateway_refund_status::SUCCEEDED
+            && attempt.amount == amount
+            && attempt.payment_fee_refunded == fee_refunded
+            && attempt.remark == remark
+        {
+            let result = GatewayRefundResult {
+                provider_ref: attempt.provider_ref.clone(),
+                status: Some(PaymentStatus::Success),
+                payload: attempt.payload.clone(),
+            };
+            let completed = Some(self.apply_gateway_refund(attempt, &result).await?);
+            return Ok(OriginalRefundResult {
+                gateway: result,
+                attempt: attempt.clone(),
+                completed,
+            });
+        }
+        if previous_attempt
+            .as_ref()
+            .is_none_or(|attempt| attempt.status != gateway_refund_status::PENDING)
+        {
+            self.preflight_gateway_refund(order_id, amount).await?;
+        }
+        let now = self.deps.clock.now();
+        let request_date = now
+            .with_timezone(&FixedOffset::east_opt(8 * 3600).unwrap_or_else(|| Utc.fix()))
+            .format("%Y%m%d")
+            .to_string();
+        let refund_no = format!("R{}{}", order_id, now.timestamp_millis());
+        let reservation = self
+            .deps
+            .store
+            .reserve_gateway_refund(&NewGatewayRefundAttempt {
+                order_id,
+                payment_id: payment.id,
+                channel_id: payment.channel_id,
+                request_date: request_date.clone(),
+                refund_no: refund_no.clone(),
+                provider_ref: format!("{request_date}:{refund_no}"),
+                amount,
+                remark: remark.to_owned(),
+                payment_fee_refunded: fee_refunded,
+                now,
+            })
+            .await?;
+        let attempt = reservation.attempt;
+
+        if attempt.status == gateway_refund_status::SUCCEEDED {
+            let result = GatewayRefundResult {
+                provider_ref: attempt.provider_ref.clone(),
+                status: Some(PaymentStatus::Success),
+                payload: attempt.payload.clone(),
+            };
+            let completed = Some(self.apply_gateway_refund(&attempt, &result).await?);
+            return Ok(OriginalRefundResult {
+                gateway: result,
+                attempt,
+                completed,
+            });
+        }
+
+        let gateway_result = if reservation.created {
+            gateway
+                .refund_payment(
+                    &channel.config_json,
+                    &GatewayRefundInput {
+                        provider_ref: payment.provider_ref,
+                        request_date: attempt.request_date.clone(),
+                        refund_no: attempt.refund_no.clone(),
+                        amount: attempt.amount,
+                        notify_url: String::new(),
+                        remark: attempt.remark.clone(),
+                        client_ip: client_ip.to_owned(),
+                    },
+                )
+                .await
+                .map_err(Error::from)?
         } else {
-            None
+            if attempt.amount != amount
+                || attempt.payment_fee_refunded != fee_refunded
+                || attempt.remark != remark
+            {
+                return Err(Error::bad_request("error.gateway_refund_pending"));
+            }
+            gateway
+                .query_refund(&channel.config_json, &attempt.provider_ref)
+                .await
+                .map_err(Error::from)?
         };
+
+        let gateway_status = gateway_result.status.unwrap_or(PaymentStatus::Pending);
+        let completed = if gateway_status == PaymentStatus::Success {
+            Some(self.apply_gateway_refund(&attempt, &gateway_result).await?)
+        } else {
+            let status = if gateway_status == PaymentStatus::Failed {
+                gateway_refund_status::FAILED
+            } else {
+                gateway_refund_status::PENDING
+            };
+            let updated = self
+                .deps
+                .store
+                .update_gateway_refund_attempt(
+                    attempt.id,
+                    &GatewayRefundAttemptUpdate {
+                        status: status.to_owned(),
+                        payload: gateway_result.payload.clone(),
+                        error: String::new(),
+                        now: self.deps.clock.now(),
+                    },
+                )
+                .await?;
+            return Ok(OriginalRefundResult {
+                gateway: gateway_result,
+                attempt: updated,
+                completed: None,
+            });
+        };
+        let attempt = self
+            .deps
+            .store
+            .gateway_refund_attempt(attempt.id)
+            .await?
+            .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
         Ok(OriginalRefundResult {
             gateway: gateway_result,
+            attempt,
             completed,
         })
+    }
+
+    async fn preflight_gateway_refund(
+        &self,
+        order_id: Id,
+        amount: zs_shared::money::Amount,
+    ) -> Result<()> {
+        let order = self
+            .deps
+            .repo
+            .get(order_id)
+            .await?
+            .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
+        let setting = self.order_setting().await;
+        plan_refund(
+            &order,
+            amount,
+            setting.max_refund_days,
+            self.deps.clock.now(),
+        )?;
+        if let Some(parent_id) = order.parent_id
+            && let Some(parent) = self.deps.repo.get(parent_id).await?
+            && amount > parent.total_amount - parent.refunded_amount
+        {
+            return Err(zs_domain::order::refund::refund_exceeded());
+        }
+        Ok(())
+    }
+
+    async fn apply_gateway_refund(
+        &self,
+        attempt: &GatewayRefundAttempt,
+        result: &GatewayRefundResult,
+    ) -> Result<RefundDone> {
+        self.apply_refund(
+            attempt.order_id,
+            &attempt.amount.to_string(),
+            &attempt.remark,
+            false,
+            attempt.payment_fee_refunded,
+            Some((
+                attempt.id,
+                result.provider_ref.clone(),
+                result.payload.clone(),
+            )),
+        )
+        .await
     }
 
     async fn apply_refund(
@@ -116,6 +285,7 @@ impl OrderService {
         remark: &str,
         to_wallet: bool,
         fee: bool,
+        gateway_attempt: Option<(Id, String, Map<String, serde_json::Value>)>,
     ) -> Result<RefundDone> {
         let amount = parse_refund_amount(raw_amount)?;
         if order_id <= 0 {
@@ -131,6 +301,11 @@ impl OrderService {
                 remark: remark.to_owned(),
                 to_wallet,
                 payment_fee_refunded: fee,
+                gateway_refund_attempt_id: gateway_attempt.as_ref().map(|attempt| attempt.0),
+                gateway_refund_provider_ref: gateway_attempt
+                    .as_ref()
+                    .map_or_else(String::new, |attempt| attempt.1.clone()),
+                gateway_refund_payload: gateway_attempt.map_or_else(Map::new, |attempt| attempt.2),
                 max_refund_days: setting.max_refund_days,
                 reseller_confirm_days: self.deps.reseller_confirm_days,
                 now: self.deps.clock.now(),
@@ -171,7 +346,7 @@ impl OrderService {
         amount: &str,
         remark: &str,
     ) -> Result<RefundDone> {
-        self.apply_refund(order_id, amount, remark, true, false)
+        self.apply_refund(order_id, amount, remark, true, false, None)
             .await
     }
 
@@ -183,7 +358,7 @@ impl OrderService {
         remark: &str,
         fee_refunded: bool,
     ) -> Result<RefundDone> {
-        self.apply_refund(order_id, amount, remark, false, fee_refunded)
+        self.apply_refund(order_id, amount, remark, false, fee_refunded, None)
             .await
     }
 

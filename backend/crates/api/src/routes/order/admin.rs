@@ -193,6 +193,7 @@ async fn original_refund(
         .await?;
     ok(json!({
         "gateway": result.gateway,
+        "attempt": result.attempt,
         "order": result.completed.as_ref().map(|done| &done.order),
         "refund_record": result.completed.as_ref().map(|done| &done.record),
     }))

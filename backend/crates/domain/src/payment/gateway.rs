@@ -152,6 +152,8 @@ pub struct GatewayQueryResult {
 #[derive(Debug, Clone, Default)]
 pub struct GatewayRefundInput {
     pub provider_ref: String,
+    /// Stable request date stored before contacting the provider.
+    pub request_date: String,
     pub refund_no: String,
     pub amount: Amount,
     pub notify_url: String,

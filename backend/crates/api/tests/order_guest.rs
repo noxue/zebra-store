@@ -15,7 +15,7 @@ use axum::response::IntoResponse;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use order_common::{Auth, OrderApp};
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter, Set};
 use serde_json::{Value, json};
 use std::sync::Mutex;
 use std::sync::{
@@ -23,6 +23,7 @@ use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 use zs_domain::queue::kinds;
+use zs_infra::db::entity::{orders, payments};
 use zs_infra::payment::http::{HttpResponse, MockTransport};
 
 const EMAIL: &str = "Buyer@Example.com";
@@ -244,14 +245,18 @@ async fn huifu_multi_method_selection_is_sent_and_persisted_per_payment() {
     let transport = MockTransport::new(move |request| {
         assert_eq!(
             request.header_value("jpt-x-skill-source"),
-            Some("hfps/1.3.5"),
-            "Huifu skill source must be fixed by the integration"
+            Some("hfps/1.3.1;sandbox/1.0.0"),
+            "Loopback Huifu sandbox calls must use the sandbox-specific source"
         );
         let body: Value =
             serde_json::from_slice(&request.body).map_err(|error| error.to_string())?;
         assert_eq!(
             body["data"]["trans_amt"], "0.01",
             "the minimum supported amount must be sent without rounding up"
+        );
+        assert!(
+            body["data"].get("appid").is_none() && body["data"].get("app_id").is_none(),
+            "WeChat AppID is bound in Huifu merchant configuration, not supplied by Zebra Store"
         );
         observed.lock().map_err(|error| error.to_string())?.push(
             body["data"]["trans_type"]
@@ -364,6 +369,160 @@ async fn huifu_multi_method_selection_is_sent_and_persisted_per_payment() {
         2,
         "invalid method must not contact Huifu"
     );
+}
+
+/// Original-route refunds persist the submitted refund locator before the gateway call. A retry
+/// queries that locator instead of issuing a second refund, then commits one local refund record.
+#[tokio::test]
+async fn huifu_pending_original_refund_is_queried_and_applied_once() {
+    let refund_calls = Arc::new(AtomicUsize::new(0));
+    let query_calls = Arc::new(AtomicUsize::new(0));
+    let refunds = refund_calls.clone();
+    let queries = query_calls.clone();
+    let transport = MockTransport::new(move |request| {
+        let path = request.url.as_str();
+        let status = if path.ends_with(huifu_pay::REFUND_PATH) {
+            refunds.fetch_add(1, Ordering::SeqCst);
+            "P"
+        } else if path.ends_with(huifu_pay::REFUND_QUERY_PATH) {
+            queries.fetch_add(1, Ordering::SeqCst);
+            "S"
+        } else if path.ends_with(huifu_pay::PREORDER_PATH) {
+            "S"
+        } else {
+            return Err(format!("unexpected Huifu endpoint: {path}"));
+        };
+        let data = if path.ends_with(huifu_pay::PREORDER_PATH) {
+            json!({
+                "resp_code": "00000000",
+                "resp_desc": "success",
+                "jump_url": "https://pay.example.com/huifu"
+            })
+        } else {
+            json!({
+                "resp_code": "00000000",
+                "resp_desc": "success",
+                "trans_stat": status
+            })
+        };
+        let sign = huifu_pay::sign_value(payment_common::PRIV_PEM, &data)
+            .map_err(|error| error.to_string())?;
+        Ok(HttpResponse::new(
+            200,
+            json!({"data": data, "sign": sign}).to_string(),
+        ))
+    });
+    let app = OrderApp::with_transport(Arc::new(transport)).await;
+    let (product, sku) = app
+        .product("huifu-refund-card", json!({"price_amount": "0.01"}))
+        .await;
+    app.secrets(product, sku, 1).await;
+    let channel = app
+        .admin_call(
+            "POST",
+            "/api/v1/admin/payment-channels",
+            Some(json!({
+                "name": "Huifu",
+                "provider_type": "huifu",
+                "channel_type": "alipay",
+                "interaction_mode": "redirect",
+                "payment_roles": ["guest"],
+                "payment_types": ["order"],
+                "config_json": {
+                    "sys_id": "SYS-1",
+                    "product_id": "PROD-1",
+                    "huifu_id": "HU-1",
+                    "merchant_private_key": payment_common::PRIV_PEM,
+                    "huifu_public_key": payment_common::PUB_PEM,
+                    "project_id": "PROJECT-1",
+                    "notify_url": "https://shop.example.com/api/v1/payments/callback",
+                    "return_url": "https://shop.example.com/pay",
+                    "supported_channel_types": ["alipay"]
+                }
+            })),
+        )
+        .await["data"]["id"]
+        .as_i64()
+        .unwrap();
+    let created = app
+        .call(
+            "POST",
+            "/api/v1/guest/orders/create-and-pay",
+            Some(json!({
+                "email": "huifu-refund@example.com",
+                "order_password": PASSWORD,
+                "items": [{"product_id": product, "sku_id": sku, "quantity": 1}],
+                "channel_id": channel,
+                "channel_type": "alipay"
+            })),
+            &Auth::None,
+        )
+        .await;
+    assert_eq!(created["status_code"], 0, "{created}");
+    let payment_id = created["data"]["payment_id"].as_i64().unwrap();
+    let payment = payments::Entity::find_by_id(payment_id)
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let order_id = payment.order_id;
+    let paid_at = chrono::Utc::now();
+    let mut payment = payment.into_active_model();
+    payment.status = Set("success".into());
+    payment.paid_at = Set(Some(paid_at));
+    payment.update(&app.db).await.unwrap();
+    let order = orders::Entity::find_by_id(order_id)
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut order = order.into_active_model();
+    order.status = Set("paid".into());
+    order.paid_at = Set(Some(paid_at));
+    order.update(&app.db).await.unwrap();
+
+    let request = json!({"amount": "0.01", "remark": "refund retry"});
+    let first = app
+        .admin_call(
+            "POST",
+            &format!("/api/v1/admin/orders/{order_id}/original-refund"),
+            Some(request.clone()),
+        )
+        .await;
+    assert_eq!(first["status_code"], 0, "{first}");
+    assert_eq!(first["data"]["attempt"]["status"], "pending");
+    assert_eq!(first["data"]["order"], Value::Null);
+
+    let second = app
+        .admin_call(
+            "POST",
+            &format!("/api/v1/admin/orders/{order_id}/original-refund"),
+            Some(request),
+        )
+        .await;
+    assert_eq!(second["status_code"], 0, "{second}");
+    assert_eq!(second["data"]["attempt"]["status"], "succeeded");
+    assert_eq!(second["data"]["order"]["refunded_amount"], "0.01");
+
+    let replay = app
+        .admin_call(
+            "POST",
+            &format!("/api/v1/admin/orders/{order_id}/original-refund"),
+            Some(json!({"amount": "0.01", "remark": "refund retry"})),
+        )
+        .await;
+    assert_eq!(
+        replay["status_code"], 0,
+        "successful refund replay: {replay}"
+    );
+    assert_eq!(replay["data"]["attempt"]["status"], "succeeded");
+    assert_eq!(replay["data"]["order"]["refunded_amount"], "0.01");
+    assert_eq!(
+        replay["data"]["refund_record"]["id"], second["data"]["refund_record"]["id"],
+        "idempotent replay must return the original refund record"
+    );
+    assert_eq!(refund_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(query_calls.load(Ordering::SeqCst), 1);
 }
 
 #[derive(Default)]
