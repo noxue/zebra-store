@@ -1508,7 +1508,7 @@ const messages = {
         huifuReturnUrl: 'Payment Return URL',
         huifuReturnUrlPlaceholder: 'https://example.com/pay',
         huifuApplicationHint: 'Individuals can apply. Typically prepare your name, mobile number, email address, both sides of your bank card, and both sides of your identity document. Contacting Huifu\'s website WeChat support or official WeChat group is usually faster. Final eligibility and any extra material are subject to Huifu review.',
-        huifuWechatConfigHint: 'For WeChat, configure a verified Official Account AppID, AppSecret, and payment authorization directory in Huifu merchant settings. Hosted checkout keeps these details on Huifu; do not enter them here. Alipay does not need WeChat Official Account details.',
+        huifuWechatConfigHint: 'For WeChat, bind a payment-enabled WeChat AppID and configure its app secret and payment authorization directory in Huifu merchant settings. A verified Official Account is the usual choice; confirm other supported app types with Huifu. Keep these details in Huifu; do not enter them here. Alipay does not need WeChat Official Account details.',
         huifuApplicationLink: 'Apply on the Huifu website',
         huifuHint: 'Supports hosted Alipay and WeChat H5/PC payments. QR is the default interaction: an inline payment code on desktop and app invocation on mobile. Redirect to the hosted checkout is also available. Hosted payment and the corresponding channel must be enabled, and goods must match the approved business scope. The notification URL must point to the public /api/v1/payments/callback endpoint.',
         dujiaopaySection: 'DujiaoPay Config',

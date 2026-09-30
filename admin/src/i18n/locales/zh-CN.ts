@@ -1507,7 +1507,7 @@ const messages = {
         huifuReturnUrl: '支付完成回跳地址',
         huifuReturnUrlPlaceholder: 'https://example.com/pay',
         huifuApplicationHint: '个人身份也可以申请。通常准备姓名、手机号、邮箱、银行卡正反面和身份证正反面照片；直接联系汇付官网微信客服或官方微信群通常更快。实际准入与补充材料以汇付审核为准。',
-        huifuWechatConfigHint: '微信需在汇付商户控台配置已认证服务号的 AppID、AppSecret 和支付授权目录；托管支付使用汇付收银台，以上信息只配置在汇付，不需要填入本系统。支付宝不需要微信服务号信息。',
+        huifuWechatConfigHint: '微信需在汇付商户控台绑定可用于支付的微信 AppID，并配置对应应用密钥和支付授权目录。通常使用已认证服务号；其他可绑定的应用类型以汇付确认为准。这些资料只配置在汇付，不要填入本系统。支付宝不需要微信服务号信息。',
         huifuApplicationLink: '前往汇付官网申请',
         huifuHint: '支持支付宝、微信 H5 和 PC 托管收款。交互方式默认为“二维码”：PC 页内展示付款码，移动端调起支付应用；也可改为“跳转”托管收银台。需先开通支付托管和对应通道权限，商品与经营范围必须一致。异步通知必须指向公开可访问的 /api/v1/payments/callback。',
         dujiaopaySection: 'DujiaoPay 配置',
