@@ -46,7 +46,7 @@ Zebra Store 通过汇付托管支付页面支持 **支付宝和微信 H5 / PC �
 
 ### 微信服务号与支付宝配置
 
-使用微信 `T_JSAPI` 时，汇付要求微信商户号绑定可用于支付的公众号 AppID，并配置支付授权目录。通常需要商户提供**已认证的微信服务号**，在汇付商户控台的微信配置中填写 AppID、AppSecret 和支付授权目录；汇付托管 H5/PC 产品资料列出的授权域名为 `api.huifu.com/hostingH5/`，请以控台校验和汇付客服确认的配置为准。根据当前托管预下单接口，AppID/AppSecret 不属于 Zebra Store 发送的请求字段，所以不要在 Zebra Store 后台重复填写或保存。支付宝 `A_NATIVE` 不需要微信服务号或微信 AppID/AppSecret。
+使用微信 `T_JSAPI` 时，汇付要求微信商户号绑定可用于支付的公众号 AppID，并配置支付授权目录。通常需要商户提供**已认证的微信服务号**，在汇付商户控台的微信配置中填写 AppID、AppSecret 和支付授权目录；汇付托管 H5/PC 产品资料列出的授权域名为 `api.huifu.com/hostingH5/`，请以控台校验和汇付客服确认的配置为准。汇付的 [AppID/授权目录常见问题](https://paas.huifu.com/bbs/category/9/appid-%E6%8E%88%E6%9D%83%E7%9B%AE%E5%BD%95) 说明了可绑定的微信应用类型和控台配置路径。根据当前托管预下单接口，AppID/AppSecret 不属于 Zebra Store 发送的请求字段，所以不要在 Zebra Store 后台重复填写或保存。支付宝 `A_NATIVE` 不需要微信服务号或微信 AppID/AppSecret。
 
 API 地址、Skill Source、项目名称和两个回调地址有默认值；系统号、产品号、商户号与两项 RSA 密钥从汇付开发者密钥管理页取得。H5/PC 托管项目 ID 需要在合作伙伴控台另行创建对应的支付托管项目后取得，因此不一定会出现在密钥管理页。不要把产品号 `product_id` 填入托管项目 ID。系统不会猜测密钥、商户身份或托管项目 ID。
 
