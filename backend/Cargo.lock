@@ -1434,9 +1434,9 @@ checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
 
 [[package]]
 name = "huifu-pay"
-version = "0.2.0"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f008baa55d6dc8549531c03acafe2196d37b67146573ab329c5339b05c0acfac"
+checksum = "2fdd1743134c48eec670b496df2e10b2c28c4c9a54cb7444e61687d2db7a3a87"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
