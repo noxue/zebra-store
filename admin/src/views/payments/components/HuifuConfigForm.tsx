@@ -36,8 +36,7 @@ export const HuifuConfigForm = defineComponent({
           {text(c, 'sys_id', 'huifuSysId', { required: true })}
           {text(c, 'product_id', 'huifuProductId', { required: true })}
           {text(c, 'huifu_id', 'huifuMerchantId', { required: true })}
-          {text(c, 'skill_source', 'huifuSkillSource')}
-          {text(c, 'project_id', 'huifuProjectId', { required: true })}
+          {text(c, 'project_id', 'huifuProjectId', { required: true, hint: 'huifuProjectIdHint' })}
           {text(c, 'project_title', 'huifuProjectTitle')}
           {text(c, 'merchant_private_key', 'huifuMerchantPrivateKey', { wide: true, rows: 5, required: true })}
           {text(c, 'huifu_public_key', 'huifuPublicKey', { wide: true, rows: 5, required: true })}

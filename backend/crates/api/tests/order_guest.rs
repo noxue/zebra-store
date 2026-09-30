@@ -200,8 +200,17 @@ async fn huifu_multi_method_selection_is_sent_and_persisted_per_payment() {
     let methods = Arc::new(Mutex::new(Vec::new()));
     let observed = methods.clone();
     let transport = MockTransport::new(move |request| {
+        assert_eq!(
+            request.header_value("jpt-x-skill-source"),
+            Some("hfps/1.3.5"),
+            "Huifu skill source must be fixed by the integration"
+        );
         let body: Value =
             serde_json::from_slice(&request.body).map_err(|error| error.to_string())?;
+        assert_eq!(
+            body["data"]["trans_amt"], "0.01",
+            "the minimum supported amount must be sent without rounding up"
+        );
         observed.lock().map_err(|error| error.to_string())?.push(
             body["data"]["trans_type"]
                 .as_str()
@@ -222,7 +231,7 @@ async fn huifu_multi_method_selection_is_sent_and_persisted_per_payment() {
     });
     let app = OrderApp::with_transport(Arc::new(transport)).await;
     let (product, sku) = app
-        .product("huifu-methods-card", json!({"price_amount": "9.90"}))
+        .product("huifu-methods-card", json!({"price_amount": "0.01"}))
         .await;
     app.secrets(product, sku, 2).await;
     let created = app
@@ -244,6 +253,7 @@ async fn huifu_multi_method_selection_is_sent_and_persisted_per_payment() {
                     "merchant_private_key": payment_common::PRIV_PEM,
                     "huifu_public_key": payment_common::PUB_PEM,
                     "project_id": "PROJECT-1",
+                    "skill_source": "caller-controlled/9",
                     "notify_url": "https://shop.example.com/api/v1/payments/callback",
                     "return_url": "https://shop.example.com/pay",
                     "supported_channel_types": ["wechat", "alipay"]

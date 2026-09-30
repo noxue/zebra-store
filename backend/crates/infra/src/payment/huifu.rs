@@ -26,7 +26,6 @@ use super::common::{GatewayEnv, callback_amount, parse_config};
 use super::http::{HttpRequest, HttpTransport};
 
 const DEFAULT_API: &str = huifu_pay::DEFAULT_BASE_URL;
-const DEFAULT_SOURCE: &str = huifu_pay::DEFAULT_SKILL_SOURCE;
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default)]
@@ -37,7 +36,6 @@ pub struct Config {
     pub huifu_id: String,
     pub merchant_private_key: String,
     pub huifu_public_key: String,
-    pub skill_source: String,
     pub project_id: String,
     pub project_title: String,
     pub notify_url: String,
@@ -49,9 +47,6 @@ impl Config {
         let mut c: Self = parse_config(raw, "huifu")?;
         if c.api_base_url.trim().is_empty() {
             c.api_base_url = DEFAULT_API.into();
-        }
-        if c.skill_source.trim().is_empty() {
-            c.skill_source = DEFAULT_SOURCE.into();
         }
         if c.project_title.trim().is_empty() {
             c.project_title = "Zebra Store".into();
@@ -88,7 +83,7 @@ impl Config {
             huifu_id: self.huifu_id.trim().to_owned(),
             merchant_private_key: self.merchant_private_key.trim().to_owned(),
             huifu_public_key: self.huifu_public_key.trim().to_owned(),
-            skill_source: self.skill_source.trim().to_owned(),
+            skill_source: huifu_pay::DEFAULT_SKILL_SOURCE.to_owned(),
         };
         c.validate().map_err(map_error)?;
         Ok(c)

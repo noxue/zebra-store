@@ -250,7 +250,6 @@ export interface HuifuConfig {
   huifu_id: string
   merchant_private_key: string
   huifu_public_key: string
-  skill_source: string
   project_id: string
   project_title: string
   notify_url: string
@@ -410,7 +409,6 @@ export const defaultConfigs = (siteOrigin = ''): ProviderConfigs => {
     huifu_id: '',
     merchant_private_key: '',
     huifu_public_key: '',
-    skill_source: 'hfps/1.3.5',
     project_id: '',
     project_title: 'Zebra Store',
     notify_url: inferredNotifyUrl,
@@ -562,7 +560,6 @@ export const applyConfigs = (raw: Raw, siteOrigin = ''): ProviderConfigs => {
       huifu_id: str(raw, 'huifu_id'),
       merchant_private_key: str(raw, 'merchant_private_key'),
       huifu_public_key: str(raw, 'huifu_public_key'),
-      skill_source: str(raw, 'skill_source', 'hfps/1.3.5'),
       project_id: str(raw, 'project_id'),
       project_title: str(raw, 'project_title', 'Zebra Store'),
       notify_url: str(raw, 'notify_url', inferred.huifu.notify_url),
@@ -732,7 +729,6 @@ export const buildHuifuConfig = (c: HuifuConfig): Raw =>
       'huifu_id',
       'merchant_private_key',
       'huifu_public_key',
-      'skill_source',
       'project_id',
       'project_title',
       'notify_url',

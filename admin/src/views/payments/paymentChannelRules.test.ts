@@ -97,7 +97,6 @@ describe('Huifu defaults', () => {
   it('prefills callback URLs from the current shop origin', () => {
     const config = defaultConfigs('https://store.example.com/').huifu
     expect(config.api_base_url).toBe('https://api.huifu.com')
-    expect(config.skill_source).toBe('hfps/1.3.5')
     expect(config.project_title).toBe('Zebra Store')
     expect(config.notify_url).toBe('https://store.example.com/api/v1/payments/callback')
     expect(config.return_url).toBe('https://store.example.com/pay')
@@ -119,6 +118,7 @@ describe('Huifu defaults', () => {
     if (built.ok) {
       expect(built.payload.channel_type).toBe('alipay')
       expect(built.payload.config_json).toMatchObject({ supported_channel_types: ['alipay', 'wechat'] })
+      expect(built.payload.config_json).not.toHaveProperty('skill_source')
     }
     const legacy = channelToState({
       id: 4,
