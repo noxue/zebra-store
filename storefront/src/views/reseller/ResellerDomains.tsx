@@ -16,6 +16,7 @@ export default defineComponent({
     const d = useResellerDomains()
     onMounted(() => {
       if (!d.profile.snapshot.value) void d.profile.load()
+      void d.loadSetup()
     })
 
     const statusLabel = (s?: string) => t(`personalCenter.reseller.domainStatus.${getResellerDomainStatusKey(s)}`)
@@ -186,7 +187,14 @@ export default defineComponent({
                   ) : (
                     <p class="rounded-zs border border-dashed border-line-strong bg-surface-muted px-4 py-3 text-sm text-muted">{t('resellerConsole.domains.submitDisabledDesc')}</p>
                   )}
-                  <p class="mt-2 text-xs leading-relaxed text-muted">{t('resellerConsole.domains.verifyDesc')}</p>
+                  <p class="mt-2 text-xs leading-relaxed text-muted">{t(d.cnameTarget.value ? (d.reviewMode.value === 'auto' ? 'resellerConsole.domains.cnameAutoDesc' : 'resellerConsole.domains.cnameVerifyDesc') : 'resellerConsole.domains.verifyDesc')}</p>
+                  {d.cnameTarget.value && (
+                    <div class="mt-3 rounded-zs border border-line bg-surface-muted px-4 py-3 text-sm text-fg">
+                      <span>{t('resellerConsole.domains.cnameInstruction')}</span>
+                      <code class="ml-2 break-all font-mono font-bold">{d.cnameTarget.value}</code>
+                      <CopyButton value={d.cnameTarget.value} size="xs" label={t('resellerConsole.common.copy')} />
+                    </div>
+                  )}
                 </div>
               </div>
             </Card>

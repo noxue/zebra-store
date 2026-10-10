@@ -47,6 +47,7 @@ bcrypt = "0.17"
 totp-rs = { version = "5", features = ["otpauth", "gen_secret"] }
 casbin = { version = "2", default-features = false, features = ["runtime-tokio", "incremental"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "multipart"] }
+hickory-resolver = { version = "0.25", features = ["tokio", "system-config"] }
 lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "tokio1", "tokio1-rustls-tls", "hostname"] }
 moka = { version = "0.12", features = ["future"] }
 config = { version = "0.15", default-features = false, features = ["yaml"] }

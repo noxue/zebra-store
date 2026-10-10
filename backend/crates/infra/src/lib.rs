@@ -2,6 +2,7 @@
 
 pub mod content;
 pub mod db;
+pub mod dns;
 pub mod identity;
 pub mod integration;
 pub mod notify;

@@ -3843,6 +3843,15 @@ const messages = {
     },
     resellerDomains: {
       title: '分銷域名管理',
+      review: {
+        title: '自訂網域審核模式',
+        description: '設定共用 CNAME 接入目標（可填入 CDN 提供的網域）。審核模式只影響新提交的網域。',
+        cnamePlaceholder: '共用 CNAME 目標，例如 connect.example.com',
+        manual: '管理員審核',
+        auto: '驗證後自動通過',
+        save: '儲存',
+        saved: '審核模式已儲存',
+      },
       empty: '暫無分銷域名',
       filters: {
         keyword: '域名 / 用戶 / 分銷商ID',

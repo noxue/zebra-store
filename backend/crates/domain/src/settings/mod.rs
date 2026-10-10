@@ -34,6 +34,16 @@ pub mod keys {
     pub const CALLBACK_ROUTES_CONFIG: &str = "callback_routes_config";
     pub const HOME_ANNOUNCEMENT: &str = "home_announcement";
     pub const COMPLIANCE_ACK: &str = "compliance_acknowledgement";
+    pub const RESELLER_DOMAIN_REVIEW_CONFIG: &str = "reseller_domain_review_config";
+}
+
+/// Review policy for newly submitted reseller custom domains.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ResellerDomainReviewMode {
+    #[default]
+    Manual,
+    Auto,
 }
 
 /// Raw JSON settings storage.

@@ -30,6 +30,7 @@ pub(super) fn routes() -> Routes {
         .get("/reseller/profile", profile)
         .post("/reseller/apply", apply)
         .get("/reseller/domains", list_domains)
+        .get("/reseller/domain-setup", domain_setup)
         .post("/reseller/domains", submit_domain)
         .get("/reseller/site-config", get_site_config)
         .put("/reseller/site-config", put_site_config)
@@ -122,6 +123,20 @@ async fn list_domains(
         return Err(not_opened().into());
     }
     ok(dto::domains(&snap.domains))
+}
+
+async fn domain_setup(
+    State(s): State<AppState>,
+    ConsoleUser(_uid): ConsoleUser,
+) -> ApiResult<Data<Value>> {
+    let (cname_target, review_mode) = s
+        .svc
+        .reseller
+        .management
+        .domain_settings()
+        .await
+        .map_err(user_fetch)?;
+    ok(json!({ "cname_target": cname_target, "review_mode": review_mode }))
 }
 
 #[derive(Debug, Deserialize)]

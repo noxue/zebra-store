@@ -3844,6 +3844,15 @@ const messages = {
     },
     resellerDomains: {
       title: 'Reseller Domain Management',
+      review: {
+        title: 'Custom domain review mode',
+        description: 'Set a shared CNAME target, including a CDN hostname. Review mode affects new submissions only.',
+        cnamePlaceholder: 'Shared CNAME target, e.g. connect.example.com',
+        manual: 'Administrator review',
+        auto: 'Approve after verification',
+        save: 'Save',
+        saved: 'Review mode saved',
+      },
       empty: 'No reseller domains',
       filters: {
         keyword: 'Domain / User / Reseller ID',

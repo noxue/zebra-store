@@ -3,6 +3,7 @@
 
 mod admin;
 mod dto;
+mod edge;
 mod user;
 
 use std::collections::HashMap;
@@ -23,6 +24,7 @@ pub fn routes() -> RouteSet {
     RouteSet {
         user: user::routes(),
         admin: admin::routes(),
+        user_open: edge::routes(),
         ..RouteSet::default()
     }
 }

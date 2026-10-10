@@ -3,6 +3,10 @@
 这份手册本身是用 [VitePress](https://vitepress.dev) 写的静态网站，源码在仓库的 `handbook/` 目录。
 你也可以把它部署成自己的文档站，比如给你的客服或分销商看。
 
+官方文档由 `noxue/zebra-store` 仓库的 GitHub Actions 发布到 GitHub Pages，地址为
+[zebra-store-docs.noxue.com](https://zebra-store-docs.noxue.com)。文档域名应在 DNS 中
+设置为指向 `noxue.github.io` 的 CNAME 记录，不需要指向商城服务器。
+
 ## 本地预览
 
 ```bash

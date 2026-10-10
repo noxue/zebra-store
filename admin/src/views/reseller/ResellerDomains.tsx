@@ -3,6 +3,7 @@ import { useI18n } from 'vue-i18n'
 import { Search } from 'lucide-vue-next'
 import { Badge, Button, DataTable, FilterBar, IdCell, Input, ListPagination, PageHeader, Select, type DataTableColumn } from '@/components/ui'
 import type { AdminResellerDomain } from '@/api/types'
+import { useAdminAuthStore } from '@/stores/auth'
 import { formatDate } from '@/utils/format'
 import { getResellerDomainActionState } from '@/utils/resellerManagement'
 import { CreatedRange } from './components/CreatedRange'
@@ -10,6 +11,7 @@ import { RefreshButton } from './components/RefreshButton'
 import { ResellerCell } from './components/ResellerCell'
 import { RESELLER_DOMAIN_STATUSES, RESELLER_DOMAIN_TYPES, RESELLER_DOMAIN_VERIFICATIONS, domainStatusTone, verificationTone } from './resellerUtils'
 import { useResellerDomains } from './useResellerDomains'
+import { useResellerDomainReview } from './useResellerDomainReview'
 
 const STATUS_KEY: Record<string, string> = {
   pending_review: 'pendingReview',
@@ -22,7 +24,14 @@ export default defineComponent({
   setup() {
     const { t } = useI18n()
     const { filters, list, refreshing, refresh, operatingId, approve, disable } = useResellerDomains()
-    onMounted(() => void list.fetchData(1))
+    const review = useResellerDomainReview()
+    const auth = useAdminAuthStore()
+    const canReadReview = auth.hasPermission('GET:/admin/settings')
+    const canSaveReview = auth.hasPermission('PUT:/admin/settings')
+    onMounted(() => {
+      void list.fetchData(1)
+      if (canReadReview) void review.load()
+    })
 
     const typeLabel = (v?: string) => (v && (RESELLER_DOMAIN_TYPES as readonly string[]).includes(v) ? t(`admin.resellerDomains.type.${v}`) : v || '-')
     const statusLabel = (v?: string) => (v && STATUS_KEY[v] ? t(`admin.resellerDomains.status.${STATUS_KEY[v]}`) : v || '-')
@@ -108,6 +117,30 @@ export default defineComponent({
     return () => (
       <div class="space-y-6">
         <PageHeader title={t('admin.resellerDomains.title')} />
+        {canReadReview && <section class="rounded-xl border border-line bg-surface px-5 py-4">
+          <h2 class="text-sm font-semibold text-fg">{t('admin.resellerDomains.review.title')}</h2>
+          <p class="mt-1 text-xs text-muted">{t('admin.resellerDomains.review.description')}</p>
+          <div class="mt-3 max-w-md">
+            <Input
+              v-model={review.cnameTarget.value}
+              disabled={!canSaveReview || review.loading.value || review.saving.value}
+              placeholder={t('admin.resellerDomains.review.cnamePlaceholder')}
+            />
+          </div>
+          <div class="mt-3 flex max-w-md items-center gap-3">
+            <Select
+              v-model={review.mode.value}
+              disabled={!canSaveReview || review.loading.value || review.saving.value}
+              options={[
+                { label: t('admin.resellerDomains.review.manual'), value: 'manual' },
+                { label: t('admin.resellerDomains.review.auto'), value: 'auto' },
+              ]}
+            />
+            <Button variant="primary" disabled={!canSaveReview || review.loading.value} loading={review.saving.value} onClick={review.save}>
+              {t('admin.resellerDomains.review.save')}
+            </Button>
+          </div>
+        </section>}
         <FilterBar cols={4}>
           {{
             default: () => (

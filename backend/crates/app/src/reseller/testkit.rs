@@ -11,6 +11,7 @@ use zs_domain::reseller::pricing::{PricedProduct, PricedSku};
 use zs_domain::reseller::rules::{SystemDomainPlan, plan_system_domain};
 use zs_domain::reseller::site::SiteConfigDraft;
 use zs_domain::reseller::*;
+use zs_domain::settings::SettingsStore;
 use zs_domain::{Error, Id, Result};
 use zs_shared::clock::{Clock, FixedClock};
 use zs_shared::money::Amount;
@@ -31,6 +32,39 @@ pub fn config() -> ResellerConfig {
         enabled: true,
         subdomain_base: "shop.example.com".into(),
         ..ResellerConfig::default()
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct MockDomainDns {
+    pub answer: Mutex<Option<String>>,
+    pub fail: Mutex<bool>,
+}
+
+#[derive(Debug, Default)]
+pub struct MockReviewSettings {
+    pub value: Mutex<Option<Value>>,
+}
+
+#[async_trait]
+impl SettingsStore for MockReviewSettings {
+    async fn get(&self, _key: &str) -> Result<Option<Value>> {
+        Ok(self.value.lock().unwrap().clone())
+    }
+
+    async fn set(&self, _key: &str, value: &Value) -> Result<()> {
+        *self.value.lock().unwrap() = Some(value.clone());
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl DomainDns for MockDomainDns {
+    async fn cname_target(&self, _domain: &str) -> Result<Option<String>> {
+        if *self.fail.lock().unwrap() {
+            return Err(Error::internal_msg("DNS lookup failed"));
+        }
+        Ok(self.answer.lock().unwrap().clone())
     }
 }
 
@@ -243,6 +277,22 @@ impl ProfileRepo for MemStore {
             }
             _ => Ok(None),
         }
+    }
+    async fn live_domains(&self) -> Result<Vec<String>> {
+        let domains = self.domains.lock().unwrap().clone();
+        let mut live = Vec::new();
+        for domain in domains.into_iter().filter(ResellerDomain::is_live) {
+            if self
+                .profile_by_id(domain.reseller_id)
+                .await?
+                .is_some_and(|profile| profile.is_active())
+            {
+                live.push(domain.domain);
+            }
+        }
+        live.sort();
+        live.dedup();
+        Ok(live)
     }
     async fn add_custom_domain(
         &self,

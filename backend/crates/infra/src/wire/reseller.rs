@@ -24,6 +24,7 @@ use zs_domain::queue::kinds;
 
 use super::WireCtx;
 use crate::db::repo::reseller::SeaResellerStore;
+use crate::dns::SystemDomainDns;
 use crate::queue::JobRegistry;
 
 /// Interval of `reseller:confirm_ledger` (original: `@every 1m`).
@@ -36,7 +37,14 @@ pub fn build(ctx: &WireCtx) -> ResellerServices {
     let cache = Arc::new(TenantCache::default());
     ResellerServices {
         tenant: TenantResolver::new(store.clone(), cfg, cache.clone(), ctx.clock.clone()),
-        management: ManagementService::new(store.clone(), cfg, cache, ctx.clock.clone()),
+        management: ManagementService::new(
+            store.clone(),
+            Arc::new(SystemDomainDns),
+            ctx.settings.clone(),
+            cfg,
+            cache,
+            ctx.clock.clone(),
+        ),
         site_config: SiteConfigService::new(store.clone(), store.clone(), ctx.clock.clone()),
         product_settings: ProductSettingService::new(
             store.clone(),

@@ -3843,6 +3843,15 @@ const messages = {
     },
     resellerDomains: {
       title: '分销域名管理',
+      review: {
+        title: '自定义域名审核模式',
+        description: '设置共享 CNAME 接入目标（可填写 CDN 提供的域名）。审核模式只影响新提交的域名。',
+        cnamePlaceholder: '共享 CNAME 目标，如 connect.example.com',
+        manual: '管理员审核',
+        auto: '验证后自动通过',
+        save: '保存',
+        saved: '审核模式已保存',
+      },
       empty: '暂无分销域名',
       filters: {
         keyword: '域名 / 用户 / 分销商ID',

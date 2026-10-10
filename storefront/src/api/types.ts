@@ -897,6 +897,11 @@ export interface ResellerManagementProfileData {
   updated_at: string
 }
 
+export interface ResellerDomainSetupData {
+  cname_target: string
+  review_mode: 'manual' | 'auto'
+}
+
 export interface ResellerDomainData {
   id: number
   domain: string

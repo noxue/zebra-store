@@ -50,6 +50,7 @@ pub const KNOWN_KEYS: &[&str] = &[
     keys::CALLBACK_ROUTES_CONFIG,
     keys::HOME_ANNOUNCEMENT,
     keys::COMPLIANCE_ACK,
+    keys::RESELLER_DOMAIN_REVIEW_CONFIG,
     crate::identity::compliance::SETTING_KEY,
 ];
 
@@ -97,6 +98,25 @@ pub fn validate(key: &str, value: &Value) -> crate::Result<()> {
     match key {
         keys::CALLBACK_ROUTES_CONFIG => integration::validate_callback_routes(value),
         keys::HOME_ANNOUNCEMENT => storefront::validate_announcement(value),
+        keys::RESELLER_DOMAIN_REVIEW_CONFIG => {
+            let valid = value.as_object().is_some_and(|object| {
+                object
+                    .keys()
+                    .all(|key| matches!(key.as_str(), "mode" | "cname_target"))
+                    && matches!(
+                        object.get("mode").and_then(Value::as_str),
+                        Some("manual" | "auto")
+                    )
+                    && object
+                        .get("cname_target")
+                        .is_none_or(|target| target.as_str().is_some_and(valid_dns_target))
+            });
+            if valid {
+                Ok(())
+            } else {
+                Err(crate::Error::invalid())
+            }
+        }
         _ => Ok(()),
     }
 }
@@ -150,14 +170,74 @@ pub fn normalize(key: &str, value: &Value) -> Value {
             .deduplicated()
             .encode(),
         keys::HOME_ANNOUNCEMENT => storefront::normalize_announcement(value),
+        keys::RESELLER_DOMAIN_REVIEW_CONFIG => {
+            let mut normalized = value.clone();
+            if let Some(target) = value.get("cname_target").and_then(Value::as_str) {
+                normalized["cname_target"] =
+                    json!(target.trim().trim_end_matches('.').to_ascii_lowercase());
+            }
+            normalized
+        }
         keys::PAYMENT_CONFIG => json!(site::PaymentFeeSetting::decode(raw)),
         _ => value.clone(),
     }
 }
 
+fn valid_dns_target(raw: &str) -> bool {
+    let target = raw.trim().trim_end_matches('.');
+    if target.is_empty() {
+        return raw.trim().is_empty();
+    }
+    if target.len() > 253 {
+        return false;
+    }
+    let labels: Vec<&str> = target.split('.').collect();
+    labels.len() >= 2
+        && labels.iter().all(|label| {
+            let bytes = label.as_bytes();
+            !bytes.is_empty()
+                && bytes.len() <= 63
+                && bytes.first().is_some_and(u8::is_ascii_alphanumeric)
+                && bytes.last().is_some_and(u8::is_ascii_alphanumeric)
+                && bytes
+                    .iter()
+                    .all(|byte| byte.is_ascii_alphanumeric() || *byte == b'-')
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reseller_review_requires_valid_mode_and_dns_target() {
+        let key = keys::RESELLER_DOMAIN_REVIEW_CONFIG;
+        assert!(validate(key, &json!({"mode": "manual", "cname_target": ""})).is_ok());
+        assert!(
+            validate(
+                key,
+                &json!({"mode": "auto", "cname_target": "cdn.example.com"})
+            )
+            .is_ok()
+        );
+        assert!(validate(key, &json!({"mode": "automatic"})).is_err());
+        assert!(
+            validate(
+                key,
+                &json!({"mode": "auto", "cname_target": "http://cdn.example.com"})
+            )
+            .is_err()
+        );
+        assert!(validate(key, &json!({"mode": "auto", "extra": true})).is_err());
+        assert!(validate(key, &json!({"mode": "auto", "cname_target": "."})).is_err());
+        assert_eq!(
+            normalize(
+                key,
+                &json!({"mode": "auto", "cname_target": " CDN.Example.com. "})
+            ),
+            json!({"mode": "auto", "cname_target": "cdn.example.com"})
+        );
+    }
 
     #[test]
     fn registered_keys_are_normalized_and_unknown_pass_through() {

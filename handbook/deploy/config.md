@@ -150,6 +150,8 @@ SMTP 的**初始值**。后台 **系统设置 → 邮件配置 (SMTP)** 保存�
 | `reseller.enabled` | `false` | 是否开启分销功能 |
 | `reseller.main_hosts` | `[localhost, 127.0.0.1, "::1"]` | **主站**的域名列表。用这些域名访问时是主站，其他已登记的域名是分站。**记得加上你的主域名** |
 | `reseller.subdomain_base` | 空 | 分站子域名的基础域名，例如 `example.com`，分销商就能用 `xxx.example.com` |
+| `reseller.domain_sync_token` | 空 | 可选：Nginx 域名同步接口的 Bearer 密钥；不设置时清单接口不可用。建议使用随机生成的长密钥 |
+| `reseller.cname_target` | 空 | 可选共享接入域名的预设值，例如 `connect.example.com`；后台「分销域名管理」可动态配置并覆盖它，也可填写 CDN 接入域名。自动模式要求有效目标；无目标时保持原有人工审核流程 |
 | `reseller.self_apply_enabled` | `true` | 是否允许用户在前台自助申请成为分销商 |
 | `reseller.settlement_confirm_days` | `7` | 分站利润的结算确认天数（0–3650），过了这么多天才能提现 |
 | `reseller.trusted_forwarded_host` | `false` | 是否信任反向代理传来的 `X-Forwarded-Host`。只有反向代理会改写 Host 时才需要打开 |

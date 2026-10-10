@@ -992,6 +992,16 @@ export interface AdminResellerDomain {
   profile?: AdminResellerProfileRef
 }
 
+/** Internal reverse-proxy inventory response data (the route requires a sync token). */
+export interface ResellerDomainInventory {
+  domains: string[]
+}
+
+export interface ResellerDomainReviewSetting {
+  mode: 'manual' | 'auto'
+  cname_target: string
+}
+
 export interface AdminResellerLocalizedText {
   'zh-CN'?: string
   'zh-TW'?: string

@@ -28,6 +28,7 @@ pub mod keys {
     pub const PROFILE_INACTIVE: &str = "error.reseller_profile_inactive";
     pub const SETTLEMENT_UNAVAILABLE: &str = "error.reseller_settlement_unavailable";
     pub const DOMAIN_INVALID: &str = "error.reseller_domain_invalid";
+    pub const DOMAIN_CNAME_MISMATCH: &str = "error.reseller_domain_cname_mismatch";
     pub const DOMAIN_CONFLICT: &str = "error.reseller_domain_conflict";
     pub const DOMAIN_MAIN_HOST: &str = "error.reseller_domain_main_host_not_allowed";
     pub const SUBDOMAIN_BASE_MISSING: &str = "error.reseller_subdomain_base_missing";

@@ -269,6 +269,30 @@ impl ProfileRepo for SeaResellerStore {
         }
     }
 
+    async fn live_domains(&self) -> Result<Vec<String>> {
+        let rows = domains::Entity::find()
+            .filter(domains::Column::Status.eq(DomainStatus::Active.as_str()))
+            .filter(domains::Column::VerificationStatus.eq(VerificationStatus::Verified.as_str()))
+            .filter(domains::Column::DeletedAt.is_null())
+            .all(&self.db)
+            .await
+            .dom()?;
+        let ids: Vec<Id> = rows.iter().map(|row| row.reseller_id).collect();
+        let profiles = load_profiles(&self.db, &ids).await?;
+        let mut names: Vec<String> = rows
+            .into_iter()
+            .filter(|row| {
+                profiles
+                    .get(&row.reseller_id)
+                    .is_some_and(|profile| profile.is_active())
+            })
+            .map(|row| row.domain)
+            .collect();
+        names.sort();
+        names.dedup();
+        Ok(names)
+    }
+
     async fn add_custom_domain(
         &self,
         reseller_id: Id,

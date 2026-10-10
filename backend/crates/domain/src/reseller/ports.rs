@@ -29,6 +29,13 @@ pub type ProfilePlan<'a> = dyn Fn(Profile) -> Result<Profile> + Send + Sync + 'a
 pub type DomainPlan<'a> =
     dyn Fn(&ResellerDomain, &[ResellerDomain]) -> Result<Vec<ResellerDomain>> + Send + Sync + 'a;
 
+/// DNS lookup boundary used before accepting a custom domain for review.
+#[async_trait]
+pub trait DomainDns: Send + Sync {
+    /// Direct CNAME target, or `None` when no CNAME record exists.
+    async fn cname_target(&self, domain: &str) -> Result<Option<String>>;
+}
+
 /// Admin profile list filter.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ProfileFilter {
@@ -86,6 +93,8 @@ pub trait ProfileRepo: Send + Sync {
     async fn domain_by_id(&self, id: Id) -> Result<Option<ResellerDomain>>;
     /// Active + verified domain whose profile is active (RSL-03), profile attached.
     async fn live_domain(&self, host: &str) -> Result<Option<ResellerDomain>>;
+    /// All live domains of active profiles, for reverse-proxy certificate sync.
+    async fn live_domains(&self) -> Result<Vec<String>>;
     /// Adds a pending custom domain, reviving a soft-deleted row of the same name;
     /// a live duplicate fails with `error.reseller_domain_conflict`.
     async fn add_custom_domain(

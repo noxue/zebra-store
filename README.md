@@ -5,7 +5,8 @@
 Zebra Store 是一个可自行部署的数字商品商城，后端使用 **Rust（axum + SeaORM）**，用户前台和管理后台使用 **Vue 3 + TSX**。
 
 - 项目地址：[github.com/noxue/zebra-store](https://github.com/noxue/zebra-store)
-- 使用文档：[zebra-store-docs.noxue.com](https://zebra-store-docs.noxue.com)
+- 使用文档：[zebra-store-docs.noxue.com](https://zebra-store-docs.noxue.com)（GitHub Pages 托管）
+- 在线演示：[ai.xiaodianpu.cc](https://ai.xiaodianpu.cc)
 - 版本下载：[GitHub Releases](https://github.com/noxue/zebra-store/releases)
 - 汇付支付 SDK：[huifu-pay](https://github.com/noxue/huifu-pay)（crates.io：[`huifu-pay`](https://crates.io/crates/huifu-pay)）
 - 卡密转换器开发协议：[中文](docs/protocol/card-converter-v1.md) / [English](docs/protocol/card-converter-v1.en.md)

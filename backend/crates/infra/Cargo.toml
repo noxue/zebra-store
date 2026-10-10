@@ -20,6 +20,7 @@ tracing.workspace = true
 sea-orm.workspace = true
 tokio.workspace = true
 reqwest.workspace = true
+hickory-resolver.workspace = true
 rust_decimal.workspace = true
 lettre.workspace = true
 png.workspace = true

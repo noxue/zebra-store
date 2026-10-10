@@ -394,6 +394,10 @@ impl Default for OrderConfig {
 #[serde(default)]
 pub struct ResellerConfig {
     pub enabled: bool,
+    /// Shared secret for the optional reverse-proxy domain inventory endpoint.
+    pub domain_sync_token: String,
+    /// Shared CNAME destination for reseller-owned custom subdomains. Empty disables DNS precheck.
+    pub cname_target: String,
     pub main_hosts: Vec<String>,
     pub trusted_forwarded_host: bool,
     pub subdomain_base: String,
@@ -405,6 +409,8 @@ impl Default for ResellerConfig {
     fn default() -> Self {
         Self {
             enabled: false,
+            domain_sync_token: String::new(),
+            cname_target: String::new(),
             main_hosts: vec!["localhost".into(), "127.0.0.1".into(), "::1".into()],
             trusted_forwarded_host: false,
             subdomain_base: String::new(),

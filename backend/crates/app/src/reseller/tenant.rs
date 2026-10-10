@@ -87,6 +87,31 @@ impl std::fmt::Debug for TenantResolver {
 }
 
 impl TenantResolver {
+    /// Certificate eligibility uses the same live-domain rule as storefront routing.
+    /// The proxy passes a DNS name, not an HTTP Host value with a port.
+    pub async fn allows_certificate(&self, raw_domain: &str) -> Result<bool> {
+        if !self.enabled {
+            return Ok(false);
+        }
+        let domain = raw_domain.trim().trim_end_matches('.').to_ascii_lowercase();
+        if !is_dns_name(&domain) || self.main_hosts.contains(&domain) {
+            return Ok(false);
+        }
+        Ok(self.profiles.live_domain(&domain).await?.is_some())
+    }
+
+    /// Inventory for proxies that provision certificates ahead of time.
+    pub async fn certificate_domains(&self) -> Result<Vec<String>> {
+        if !self.enabled {
+            return Ok(Vec::new());
+        }
+        let mut domains = self.profiles.live_domains().await?;
+        domains.retain(|domain| is_dns_name(domain) && !self.main_hosts.contains(domain));
+        domains.sort();
+        domains.dedup();
+        Ok(domains)
+    }
+
     pub fn new(
         profiles: Arc<dyn ProfileRepo>,
         cfg: &ResellerConfig,
@@ -179,6 +204,20 @@ impl TenantResolver {
             }
         }
     }
+}
+
+fn is_dns_name(domain: &str) -> bool {
+    domain.len() <= 253
+        && domain.contains('.')
+        && domain.split('.').all(|label| {
+            !label.is_empty()
+                && label.len() <= 63
+                && !label.starts_with('-')
+                && !label.ends_with('-')
+                && label
+                    .bytes()
+                    .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+        })
 }
 
 #[cfg(test)]

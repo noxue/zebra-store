@@ -16,6 +16,8 @@ export const useResellerDomains = () => {
   const profile = useResellerProfileContext()
   const domainInput = ref('')
   const submitting = ref(false)
+  const cnameTarget = ref('')
+  const reviewMode = ref<'manual' | 'auto'>('manual')
   const alert = ref<{ tone: AlertTone; message: string } | null>(null)
 
   const domains = computed(() => profile.snapshot.value?.domains || [])
@@ -25,6 +27,17 @@ export const useResellerDomains = () => {
   const primaryDomain = computed(() => activeDomains.value.find((d) => d.is_primary) || null)
   const pendingDomains = computed(() => domains.value.filter(isPendingDomain))
   const canSubmitDomain = computed(() => isResellerProfileActive(profile.snapshot.value?.profile))
+
+  const loadSetup = async () => {
+    try {
+      const setup = (await resellerAPI.domainSetup()).data
+      cnameTarget.value = setup.cname_target
+      reviewMode.value = setup.review_mode
+    } catch {
+      cnameTarget.value = ''
+      reviewMode.value = 'manual'
+    }
+  }
 
   const submitDomain = async () => {
     const domain = domainInput.value.trim()
@@ -38,7 +51,7 @@ export const useResellerDomains = () => {
       await resellerAPI.submitDomain({ domain })
       domainInput.value = ''
       await profile.load()
-      alert.value = { tone: 'success', message: t('personalCenter.reseller.domainSubmitSuccess') }
+      alert.value = { tone: 'success', message: t(reviewMode.value === 'auto' ? 'personalCenter.reseller.domainAutoSuccess' : 'personalCenter.reseller.domainSubmitSuccess') }
     } catch (err) {
       alert.value = { tone: 'error', message: errorMessage(err, t('personalCenter.reseller.errors.domainSubmitFailed')) }
     } finally {
@@ -46,5 +59,5 @@ export const useResellerDomains = () => {
     }
   }
 
-  return { profile, domainInput, submitting, alert, domains, systemDomain, customDomains, activeDomains, primaryDomain, pendingDomains, canSubmitDomain, submitDomain }
+  return { profile, domainInput, submitting, cnameTarget, reviewMode, alert, domains, systemDomain, customDomains, activeDomains, primaryDomain, pendingDomains, canSubmitDomain, loadSetup, submitDomain }
 }

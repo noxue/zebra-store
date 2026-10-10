@@ -3,14 +3,16 @@
 use std::sync::Arc;
 
 use rust_decimal::Decimal;
-use zs_domain::reseller::ports::{DomainFilter, ProfileFilter, ProfileRepo};
+use zs_domain::reseller::ports::{DomainDns, DomainFilter, ProfileFilter, ProfileRepo};
 use zs_domain::reseller::rules::{
     self, ApplyOutcome, DomainAction, DomainPolicy, apply_approval, apply_outcome, apply_review,
     validate_custom_domain, validate_markup, validate_system_subdomain,
 };
 use zs_domain::reseller::{
-    Profile, ProfileStatus, ResellerDomain, SettlementStatus, keys, not_found, profile_inactive,
+    DomainType, Profile, ProfileStatus, ResellerDomain, SettlementStatus, keys, not_found,
+    profile_inactive,
 };
+use zs_domain::settings::{ResellerDomainReviewMode, SettingsStore, keys as setting_keys};
 use zs_domain::{Error, Id, Result};
 use zs_shared::clock::Clock;
 use zs_shared::money::Amount;
@@ -41,6 +43,9 @@ pub struct ProfileUpdate {
 #[derive(Clone)]
 pub struct ManagementService {
     profiles: Arc<dyn ProfileRepo>,
+    dns: Arc<dyn DomainDns>,
+    settings: Arc<dyn SettingsStore>,
+    default_cname_target: String,
     policy: DomainPolicy,
     apply_enabled: bool,
     cache: Arc<TenantCache>,
@@ -59,12 +64,21 @@ impl std::fmt::Debug for ManagementService {
 impl ManagementService {
     pub fn new(
         profiles: Arc<dyn ProfileRepo>,
+        dns: Arc<dyn DomainDns>,
+        settings: Arc<dyn SettingsStore>,
         cfg: &ResellerConfig,
         cache: Arc<TenantCache>,
         clock: Arc<dyn Clock>,
     ) -> Self {
         Self {
             profiles,
+            dns,
+            settings,
+            default_cname_target: cfg
+                .cname_target
+                .trim()
+                .trim_end_matches('.')
+                .to_ascii_lowercase(),
             policy: DomainPolicy {
                 main_hosts: cfg.main_hosts.clone(),
                 subdomain_base: cfg.subdomain_base.clone(),
@@ -122,16 +136,62 @@ impl ManagementService {
         }
     }
 
-    /// Submits a custom domain for manual review (no DNS verification yet, like the original).
+    /// Submits a custom domain, activating it after CNAME validation in auto mode.
     pub async fn submit_custom_domain(&self, user_id: Id, raw: &str) -> Result<ResellerDomain> {
         let profile = profile_of_user(self.profiles.as_ref(), user_id).await?;
         if !profile.is_active() {
             return Err(profile_inactive());
         }
         let domain = validate_custom_domain(raw, &self.policy)?;
-        self.profiles
+        let (target, mode) = self.domain_settings().await?;
+        let auto = mode == ResellerDomainReviewMode::Auto;
+        if auto {
+            self.verify_cname(&domain, &target).await?;
+        }
+        let row = self
+            .profiles
             .add_custom_domain(profile.id, &domain, self.clock.now())
-            .await
+            .await?;
+        if auto {
+            self.apply_domain_action(row.id, DomainAction::Approve)
+                .await
+        } else {
+            Ok(row)
+        }
+    }
+
+    /// Auto mode is effective only while a shared CNAME target is configured.
+    pub async fn domain_settings(&self) -> Result<(String, ResellerDomainReviewMode)> {
+        let stored = self
+            .settings
+            .get(setting_keys::RESELLER_DOMAIN_REVIEW_CONFIG)
+            .await?
+            .and_then(|value| serde_json::from_value::<ResellerDomainReviewSetting>(value).ok());
+        let target = stored
+            .as_ref()
+            .and_then(|setting| setting.cname_target.as_deref())
+            .unwrap_or(&self.default_cname_target)
+            .trim()
+            .trim_end_matches('.')
+            .to_ascii_lowercase();
+        let mode = if target.is_empty() {
+            ResellerDomainReviewMode::Manual
+        } else {
+            stored.map_or(ResellerDomainReviewMode::Manual, |setting| setting.mode)
+        };
+        Ok((target, mode))
+    }
+
+    async fn verify_cname(&self, domain: &str, target: &str) -> Result<()> {
+        let actual = self.dns.cname_target(domain).await?;
+        if actual
+            .as_deref()
+            .map(|value| value.trim_end_matches('.').to_ascii_lowercase())
+            != Some(target.to_owned())
+        {
+            return Err(Error::bad_request(keys::DOMAIN_CNAME_MISMATCH));
+        }
+        Ok(())
     }
 
     pub async fn profile(&self, id: Id) -> Result<Option<Profile>> {
@@ -247,6 +307,23 @@ impl ManagementService {
 
     /// Approve / disable / set-primary on a domain.
     pub async fn domain_action(&self, id: Id, action: DomainAction) -> Result<ResellerDomain> {
+        if action == DomainAction::Approve {
+            let (cname_target, _) = self.domain_settings().await?;
+            if !cname_target.is_empty() {
+                let domain = self
+                    .profiles
+                    .domain_by_id(id)
+                    .await?
+                    .ok_or_else(not_found)?;
+                if domain.kind == DomainType::Custom {
+                    self.verify_cname(&domain.domain, &cname_target).await?;
+                }
+            }
+        }
+        self.apply_domain_action(id, action).await
+    }
+
+    async fn apply_domain_action(&self, id: Id, action: DomainAction) -> Result<ResellerDomain> {
         let now = self.clock.now();
         let plan = move |target: &ResellerDomain, all: &[ResellerDomain]| {
             rules::plan_domain_action(action, target, all, now)
@@ -261,15 +338,23 @@ impl ManagementService {
     }
 }
 
+#[derive(serde::Deserialize)]
+struct ResellerDomainReviewSetting {
+    mode: ResellerDomainReviewMode,
+    cname_target: Option<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::reseller::testkit::{MemStore, clock, config};
+    use crate::reseller::testkit::{MemStore, MockDomainDns, MockReviewSettings, clock, config};
     use zs_domain::reseller::DomainStatus;
 
     fn service(store: &Arc<MemStore>, cfg: &ResellerConfig) -> ManagementService {
         ManagementService::new(
             store.clone(),
+            Arc::new(MockDomainDns::default()),
+            Arc::new(MockReviewSettings::default()),
             cfg,
             Arc::new(TenantCache::default()),
             clock(),
@@ -358,6 +443,147 @@ mod tests {
                 .unwrap_err()
                 .key(),
             keys::DOMAIN_CONFLICT
+        );
+    }
+
+    #[tokio::test]
+    async fn cname_check_runs_during_admin_approval() {
+        let store = Arc::new(MemStore::default());
+        let profile_id = store.add_profile(8, ProfileStatus::Active);
+        let dns = Arc::new(MockDomainDns::default());
+        let mut cfg = config();
+        cfg.cname_target = "Connect.Example.com.".into();
+        let svc = ManagementService::new(
+            store.clone(),
+            dns.clone(),
+            Arc::new(MockReviewSettings::default()),
+            &cfg,
+            Arc::new(TenantCache::default()),
+            clock(),
+        );
+        assert_eq!(
+            svc.domain_settings().await.unwrap().0,
+            "connect.example.com"
+        );
+        let domain = svc
+            .submit_custom_domain(8, "shop.agent.test")
+            .await
+            .unwrap();
+        assert_eq!(domain.status, DomainStatus::PendingReview);
+        assert_eq!(store.domains_of(profile_id).await.unwrap().len(), 1);
+        assert_eq!(
+            svc.domain_action(domain.id, DomainAction::Approve)
+                .await
+                .unwrap_err()
+                .key(),
+            keys::DOMAIN_CNAME_MISMATCH
+        );
+        *dns.answer.lock().unwrap() = Some("other.example.com.".into());
+        assert_eq!(
+            svc.domain_action(domain.id, DomainAction::Approve)
+                .await
+                .unwrap_err()
+                .key(),
+            keys::DOMAIN_CNAME_MISMATCH
+        );
+        assert_eq!(
+            store.domain_by_id(domain.id).await.unwrap().unwrap().status,
+            DomainStatus::PendingReview
+        );
+        *dns.fail.lock().unwrap() = true;
+        assert_eq!(
+            svc.domain_action(domain.id, DomainAction::Approve)
+                .await
+                .unwrap_err()
+                .kind(),
+            zs_domain::ErrorKind::Internal
+        );
+        assert_eq!(
+            store.domain_by_id(domain.id).await.unwrap().unwrap().status,
+            DomainStatus::PendingReview
+        );
+        *dns.fail.lock().unwrap() = false;
+        *dns.answer.lock().unwrap() = Some("CONNECT.EXAMPLE.COM.".into());
+        let approved = svc
+            .domain_action(domain.id, DomainAction::Approve)
+            .await
+            .unwrap();
+        assert_eq!(approved.status, DomainStatus::Active);
+        assert_eq!(store.domains_of(profile_id).await.unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn automatic_review_requires_matching_cname_before_creating_domain() {
+        let store = Arc::new(MemStore::default());
+        let profile_id = store.add_profile(9, ProfileStatus::Active);
+        let dns = Arc::new(MockDomainDns::default());
+        let settings = Arc::new(MockReviewSettings::default());
+        *settings.value.lock().unwrap() = Some(serde_json::json!({
+            "mode": "auto", "cname_target": "connect.example.com"
+        }));
+        let cfg = config();
+        let svc = ManagementService::new(
+            store.clone(),
+            dns.clone(),
+            settings,
+            &cfg,
+            Arc::new(TenantCache::default()),
+            clock(),
+        );
+        assert_eq!(
+            svc.domain_settings().await.unwrap().1,
+            ResellerDomainReviewMode::Auto
+        );
+        assert_eq!(
+            svc.submit_custom_domain(9, "shop.agent.test")
+                .await
+                .unwrap_err()
+                .key(),
+            keys::DOMAIN_CNAME_MISMATCH
+        );
+        assert!(store.domains_of(profile_id).await.unwrap().is_empty());
+        *dns.answer.lock().unwrap() = Some("other.example.com".into());
+        assert_eq!(
+            svc.submit_custom_domain(9, "shop.agent.test")
+                .await
+                .unwrap_err()
+                .key(),
+            keys::DOMAIN_CNAME_MISMATCH
+        );
+        assert!(store.domains_of(profile_id).await.unwrap().is_empty());
+        *dns.answer.lock().unwrap() = Some("CONNECT.EXAMPLE.COM.".into());
+        let approved = svc
+            .submit_custom_domain(9, "shop.agent.test")
+            .await
+            .unwrap();
+        assert_eq!(approved.status, DomainStatus::Active);
+        assert_eq!(store.domains_of(profile_id).await.unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn missing_shared_target_keeps_manual_review_even_with_stored_auto_mode() {
+        let store = Arc::new(MemStore::default());
+        store.add_profile(10, ProfileStatus::Active);
+        let settings = Arc::new(MockReviewSettings::default());
+        *settings.value.lock().unwrap() = Some(serde_json::json!({"mode": "auto"}));
+        let svc = ManagementService::new(
+            store,
+            Arc::new(MockDomainDns::default()),
+            settings,
+            &config(),
+            Arc::new(TenantCache::default()),
+            clock(),
+        );
+        assert_eq!(
+            svc.domain_settings().await.unwrap().1,
+            ResellerDomainReviewMode::Manual
+        );
+        assert_eq!(
+            svc.submit_custom_domain(10, "shop.agent.test")
+                .await
+                .unwrap()
+                .status,
+            DomainStatus::PendingReview
         );
     }
 

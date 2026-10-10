@@ -85,6 +85,7 @@ impl PublicConfigCache {
 /// `config.yml` values used when a setting has never been saved.
 #[derive(Debug, Clone)]
 struct Defaults {
+    reseller_cname_target: String,
     smtp: SmtpSetting,
     telegram_auth: TelegramAuthSetting,
     google_auth: GoogleAuthSetting,
@@ -97,6 +98,12 @@ impl Defaults {
         let e = &cfg.email;
         let t = &cfg.telegram_auth;
         Self {
+            reseller_cname_target: cfg
+                .reseller
+                .cname_target
+                .trim()
+                .trim_end_matches('.')
+                .to_ascii_lowercase(),
             smtp: SmtpSetting {
                 enabled: e.enabled,
                 host: e.host.clone(),
@@ -239,6 +246,16 @@ impl SettingsService {
             keys::CAPTCHA_CONFIG => self.captcha().await?.masked(),
             keys::TELEGRAM_AUTH_CONFIG => self.telegram_auth().await?.masked(),
             keys::NOTIFICATION_CENTER_CONFIG => self.notification_center().await?.masked(),
+            keys::RESELLER_DOMAIN_REVIEW_CONFIG => self
+                .get(key)
+                .await?
+                .map(|mut value| {
+                    if value.get("cname_target").is_none() {
+                        value["cname_target"] = serde_json::json!(self.defaults.reseller_cname_target);
+                    }
+                    value
+                })
+                .unwrap_or_else(|| serde_json::json!({"mode": "manual", "cname_target": self.defaults.reseller_cname_target})),
             _ => self
                 .get(key)
                 .await?
@@ -279,6 +296,18 @@ impl SettingsService {
             }
             _ => {
                 schema::validate(key, value)?;
+                if key == keys::RESELLER_DOMAIN_REVIEW_CONFIG
+                    && value["mode"] == "auto"
+                    && value
+                        .get("cname_target")
+                        .and_then(Value::as_str)
+                        .unwrap_or(&self.defaults.reseller_cname_target)
+                        .trim()
+                        .trim_end_matches('.')
+                        .is_empty()
+                {
+                    return Err(Error::bad_request("error.reseller_cname_target_required"));
+                }
                 self.update(key, value).await?
             }
         })
