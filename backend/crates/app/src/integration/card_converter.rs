@@ -3,10 +3,13 @@
 use std::sync::Arc;
 use std::time::Instant;
 
+use regex::Regex;
+use rust_decimal::Decimal;
 use serde_json::{Map, Value};
+use std::str::FromStr;
 use zs_domain::integration::card_converter::{
-    Binding, Converter, ConverterEvent, ConverterHttp, ConverterInput, ConverterRepo, ExchangeItem,
-    ExchangeRequest, ExchangeResponse, NewConverterEvent,
+    Binding, BindingDependencies, Converter, ConverterEvent, ConverterHttp, ConverterInput,
+    ConverterRepo, ExchangeItem, ExchangeRequest, ExchangeResponse, NewConverterEvent,
 };
 use zs_domain::integration::hooks::UpstreamDelivery;
 use zs_domain::notify::center::{NotifyEvent, events};
@@ -101,7 +104,7 @@ impl CardConverterService {
             return Err(invalid());
         }
         let now = self.clock.now();
-        let mut saved = self
+        let saved = self
             .repo
             .save(&Converter {
                 id,
@@ -119,11 +122,7 @@ impl CardConverterService {
                 updated_at: now,
             })
             .await?;
-        // A saved connection is immediately checked so its first visible status is useful.
-        if input.enabled {
-            let _ = self.refresh_types(saved.id).await;
-            saved = self.repo.get(saved.id).await?.ok_or_else(not_found)?;
-        }
+        // The connection is configured independently of converter-specific categories.
         Ok(mask(saved))
     }
 
@@ -140,62 +139,26 @@ impl CardConverterService {
         self.repo.delete(id).await
     }
 
-    pub async fn refresh_types(
-        &self,
-        id: Id,
-    ) -> Result<Vec<zs_domain::integration::card_converter::ConverterType>> {
-        let mut converter = self.repo.get(id).await?.ok_or_else(not_found)?;
+    pub async fn test(&self, id: Id) -> Result<Value> {
+        let converter = self.repo.get(id).await?.ok_or_else(not_found)?;
         let token = self
             .cipher
             .decrypt(&converter.token_enc)
             .map_err(Error::internal)?;
         let started = Instant::now();
-        match self.http.types(&converter.base_url, &token).await {
-            Ok(types) => {
-                converter.types = types.clone();
-                converter.health = "healthy".into();
-                converter.consecutive_failures = 0;
-                converter.last_checked_at = Some(self.clock.now());
-                converter.last_error.clear();
-                self.repo.save(&converter).await?;
-                self.repo
-                    .record_event(&NewConverterEvent {
-                        converter_id: id,
-                        event_type: "type_discovery".into(),
-                        status: "success".into(),
-                        error_code: String::new(),
-                        duration_ms: elapsed_ms(started),
-                        order_no: String::new(),
-                        created_at: self.clock.now(),
-                    })
-                    .await?;
-                Ok(types)
-            }
-            Err(error) => {
-                let safe = safe_error_code(&error);
-                self.repo
-                    .record_event(&NewConverterEvent {
-                        converter_id: id,
-                        event_type: "type_discovery".into(),
-                        status: "failed".into(),
-                        error_code: safe.into(),
-                        duration_ms: elapsed_ms(started),
-                        order_no: String::new(),
-                        created_at: self.clock.now(),
-                    })
-                    .await?;
-                Err(error)
-            }
-        }
-    }
-
-    pub async fn test(&self, id: Id) -> Result<Value> {
-        let types = self.refresh_types(id).await?;
-        Ok(serde_json::json!({"ok":true,"type_count":types.len()}))
+        self.http.health(&converter.base_url, &token).await?;
+        self.record_health(id, true, "", elapsed_ms(started))
+            .await?;
+        Ok(serde_json::json!({"ok":true}))
     }
 
     pub async fn bindings(&self, product_id: Option<Id>) -> Result<Vec<Binding>> {
-        self.repo.bindings(product_id).await
+        let mut bindings = self.repo.bindings(product_id).await?;
+        for binding in &mut bindings {
+            let dependencies = self.repo.binding_dependencies(binding).await?;
+            binding.issues = binding_issues(&binding.extra_template, &dependencies);
+        }
+        Ok(bindings)
     }
 
     pub async fn uses_converter(
@@ -221,31 +184,8 @@ impl CardConverterService {
             .get(binding.converter_id)
             .await?
             .ok_or_else(not_found)?;
-        if !converter.enabled || !converter.types.iter().any(|t| t.id == binding.type_id) {
-            return Err(Error::bad_request("error.card_converter_type_invalid"));
-        }
-        let allowed = [
-            "order.order_no",
-            "order.quantity",
-            "order.currency",
-            "site.domain",
-            "site.name",
-            "product.id",
-            "product.slug",
-            "product.title",
-            "product.variables",
-            "sku.id",
-            "sku.code",
-            "sku.specifications",
-        ];
-        binding.fields.sort();
-        binding.fields.dedup();
-        if binding
-            .fields
-            .iter()
-            .any(|field| !allowed.contains(&field.as_str()))
-        {
-            return Err(invalid());
+        if !converter.enabled {
+            return Err(Error::bad_request("error.card_converter_binding_invalid"));
         }
         if !binding.extra_template.is_object() && !binding.extra_template.is_null() {
             return Err(invalid());
@@ -253,6 +193,7 @@ impl CardConverterService {
         if !binding.extra_template.is_object() {
             binding.extra_template = Value::Object(Map::new());
         }
+        validate_template(&binding.extra_template)?;
         self.repo.save_binding(&binding).await
     }
 
@@ -391,10 +332,7 @@ impl CardConverterService {
                         status: "success".into(),
                         error_code: String::new(),
                         duration_ms: elapsed_ms(started),
-                        order_no: request.order["order_no"]
-                            .as_str()
-                            .unwrap_or_default()
-                            .to_owned(),
+                        order_no: request.order_no.clone(),
                         created_at: self.clock.now(),
                     })
                     .await?;
@@ -409,10 +347,7 @@ impl CardConverterService {
                         status: "failed".into(),
                         error_code: code.into(),
                         duration_ms: elapsed_ms(started),
-                        order_no: request.order["order_no"]
-                            .as_str()
-                            .unwrap_or_default()
-                            .to_owned(),
+                        order_no: request.order_no.clone(),
                         created_at: self.clock.now(),
                     })
                     .await?;
@@ -467,21 +402,17 @@ impl CardConverterService {
                 "error.card_converter_card_count_mismatch",
             ));
         }
+        let source = self.repo.source_for_order(order.id).await?;
         let context = serde_json::json!({
             "order": {"id":order.id,"order_no":order.order_no,"quantity":item.quantity,"total_amount":order.total_amount.to_string()},
             "site": site,
             "product": {"id":item.product_id,"title":item.title},
             "sku": {"id":item.sku_id,"specifications":item.sku_snapshot},
+            "source": source.map(|source| serde_json::json!({"id":source.id,"name":source.name,"protocol":source.protocol})),
         });
-        let extra = render_template(&binding.extra_template, &context)?;
+        let extra = render_extra(&binding.extra_template, &context, &cards)?;
         let request = ExchangeRequest {
-            protocol_version: "1".into(),
-            idempotency_key: format!("zebra-order-{}-item-{}", order.id, item.id),
-            type_id: binding.type_id.clone(),
-            order: context["order"].clone(),
-            site: context["site"].clone(),
-            product: context["product"].clone(),
-            sku: context["sku"].clone(),
+            order_no: order.order_no.clone(),
             items: cards
                 .iter()
                 .enumerate()
@@ -514,6 +445,7 @@ impl CardConverterService {
 fn render_template(value: &Value, context: &Value) -> Result<Value> {
     match value {
         Value::String(raw) => {
+            validate_placeholder_text(raw)?;
             let mut rendered = String::new();
             let mut rest = raw.as_str();
             while let Some(start) = rest.find("{{") {
@@ -523,7 +455,7 @@ fn render_template(value: &Value, context: &Value) -> Result<Value> {
                     return Err(invalid());
                 };
                 let key = after[..end].trim();
-                if key.is_empty() || key.split('.').any(|part| part.is_empty()) {
+                if !valid_variable(key) {
                     return Err(invalid());
                 }
                 let replacement = key
@@ -553,6 +485,335 @@ fn render_template(value: &Value, context: &Value) -> Result<Value> {
             .map(Value::Object),
         _ => Ok(value.clone()),
     }
+}
+
+/// A rule is a JSON decision table. The first matching case wins.
+const MAX_EXTRA_RULE_CASES: usize = 20;
+const MAX_EXTRA_COMPARISON_BYTES: usize = 512;
+
+fn validate_template(value: &Value) -> Result<()> {
+    match value {
+        Value::Object(map) if map.contains_key("$zs_rule") => {
+            if map.len() != 1 {
+                return Err(invalid());
+            }
+            let rule = map["$zs_rule"].as_object().ok_or_else(invalid)?;
+            if rule.len() != 2 || !rule.contains_key("cases") || !rule.contains_key("else") {
+                return Err(invalid());
+            }
+            let cases = rule["cases"].as_array().ok_or_else(invalid)?;
+            if cases.is_empty() || cases.len() > MAX_EXTRA_RULE_CASES {
+                return Err(invalid());
+            }
+            for case in cases {
+                let case = case.as_object().ok_or_else(invalid)?;
+                if case.len() != 2 || !case.contains_key("when") || !case.contains_key("then") {
+                    return Err(invalid());
+                }
+                let condition = case["when"].as_object().ok_or_else(invalid)?;
+                if condition.len() != 3 {
+                    return Err(invalid());
+                }
+                let variable = condition
+                    .get("variable")
+                    .and_then(Value::as_str)
+                    .ok_or_else(invalid)?;
+                let operator = condition
+                    .get("operator")
+                    .and_then(Value::as_str)
+                    .ok_or_else(invalid)?;
+                let operand = condition
+                    .get("value")
+                    .and_then(Value::as_str)
+                    .ok_or_else(invalid)?;
+                if !(valid_variable(variable) || variable == "card")
+                    || operand.len() > MAX_EXTRA_COMPARISON_BYTES
+                {
+                    return Err(invalid());
+                }
+                if !matches!(
+                    operator,
+                    "eq" | "ne" | "gt" | "gte" | "lt" | "lte" | "regex" | "regex_not"
+                ) {
+                    return Err(invalid());
+                }
+                if matches!(operator, "regex" | "regex_not") && Regex::new(operand).is_err() {
+                    return Err(invalid());
+                }
+                validate_result(&case["then"])?;
+            }
+            validate_result(&rule["else"])?;
+            Ok(())
+        }
+        Value::Object(map) => {
+            for item in map.values() {
+                validate_template(item)?;
+            }
+            Ok(())
+        }
+        Value::Array(items) => {
+            for item in items {
+                validate_template(item)?;
+            }
+            Ok(())
+        }
+        Value::String(raw) => validate_placeholder_text(raw),
+        _ => Ok(()),
+    }
+}
+
+const EXTRA_VARIABLES: &[&str] = &[
+    "order.order_no",
+    "order.quantity",
+    "order.total_amount",
+    "site.domain",
+    "site.name",
+    "product.id",
+    "product.title",
+    "sku.id",
+    "sku.specifications",
+    "source.id",
+    "source.name",
+    "source.protocol",
+];
+
+fn valid_variable(path: &str) -> bool {
+    EXTRA_VARIABLES.contains(&path)
+}
+
+fn validate_placeholder_text(raw: &str) -> Result<()> {
+    let mut rest = raw;
+    while let Some(start) = rest.find("{{") {
+        if rest[..start].contains("}}") {
+            return Err(invalid());
+        }
+        let after = &rest[start + 2..];
+        let end = after.find("}}").ok_or_else(invalid)?;
+        if !valid_variable(after[..end].trim()) {
+            return Err(invalid());
+        }
+        rest = &after[end + 2..];
+    }
+    if rest.contains("}}") {
+        return Err(invalid());
+    }
+    Ok(())
+}
+
+fn binding_issues(template: &Value, deps: &BindingDependencies) -> Vec<String> {
+    let mut issues = Vec::new();
+    if !deps.product_exists {
+        issues.push("商品已删除，绑定不再生效".to_owned());
+    }
+    if !deps.sku_available {
+        issues.push("绑定的 SKU 已删除或停用".to_owned());
+    }
+    if !deps.converter_enabled {
+        issues.push("转换器已删除或停用".to_owned());
+    }
+    if deps.product_changed && template_uses_prefix(template, "product.") {
+        issues.push("商品配置在绑定保存后已变更，请核对商品变量的发送值".to_owned());
+    }
+    if deps.sku_changed && template_uses_prefix(template, "sku.") {
+        issues.push("SKU 配置在绑定保存后已变更，请核对 SKU 变量的发送值".to_owned());
+    }
+    if deps.source_changed
+        && (template_uses_prefix(template, "source.name")
+            || template_uses_prefix(template, "source.protocol"))
+    {
+        issues.push("上游名称或协议在绑定保存后可能已变更，请核对来源规则与变量".to_owned());
+    }
+    if deps.site_changed && template_uses_prefix(template, "site.") {
+        issues.push("站点名称或域名在绑定保存后已变更，请核对站点变量的发送值".to_owned());
+    }
+    scan_source_dependencies(template, &deps.sources, &mut issues);
+    issues.sort();
+    issues.dedup();
+    issues
+}
+
+fn template_uses_prefix(value: &Value, prefix: &str) -> bool {
+    match value {
+        Value::String(text) => text.contains(&format!("{{{{{prefix}")),
+        Value::Object(map) => {
+            map.get("variable")
+                .and_then(Value::as_str)
+                .is_some_and(|path| path.starts_with(prefix))
+                || map
+                    .values()
+                    .any(|nested| template_uses_prefix(nested, prefix))
+        }
+        Value::Array(items) => items
+            .iter()
+            .any(|nested| template_uses_prefix(nested, prefix)),
+        _ => false,
+    }
+}
+
+fn scan_source_dependencies(
+    value: &Value,
+    sources: &[zs_domain::integration::card_converter::ConverterSource],
+    issues: &mut Vec<String>,
+) {
+    match value {
+        Value::String(text) if text.contains("{{source.") && sources.is_empty() => {
+            issues.push("配置引用上游变量，但商品当前没有可用上游".to_owned());
+        }
+        Value::Object(map) if map.contains_key("$zs_rule") => {
+            if let Some(cases) = map["$zs_rule"]["cases"].as_array() {
+                for case in cases {
+                    let when = &case["when"];
+                    if when["operator"] == "eq" {
+                        let expected = when["value"].as_str().unwrap_or_default();
+                        let matched = match when["variable"].as_str().unwrap_or_default() {
+                            "source.id" => sources
+                                .iter()
+                                .any(|source| source.id.to_string() == expected),
+                            "source.name" => sources.iter().any(|source| source.name == expected),
+                            "source.protocol" => {
+                                sources.iter().any(|source| source.protocol == expected)
+                            }
+                            _ => true,
+                        };
+                        if !matched {
+                            issues.push(format!(
+                                "上游条件 {} = {} 已无可用匹配",
+                                when["variable"].as_str().unwrap_or_default(),
+                                expected
+                            ));
+                        }
+                    }
+                    scan_source_dependencies(&case["then"], sources, issues);
+                }
+            }
+            scan_source_dependencies(&map["$zs_rule"]["else"], sources, issues);
+        }
+        Value::Object(map) => {
+            if map
+                .get("variable")
+                .and_then(Value::as_str)
+                .is_some_and(|path| path.starts_with("source."))
+                && sources.is_empty()
+            {
+                issues.push("配置引用上游变量，但商品当前没有可用上游".to_owned());
+            }
+            for nested in map.values() {
+                scan_source_dependencies(nested, sources, issues);
+            }
+        }
+        Value::Array(items) => {
+            for nested in items {
+                scan_source_dependencies(nested, sources, issues);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn validate_result(value: &Value) -> Result<()> {
+    let map = value.as_object().ok_or_else(invalid)?;
+    if map.len() != 1 {
+        return Err(invalid());
+    }
+    if let Some(path) = map.get("variable") {
+        if !path.as_str().is_some_and(valid_variable) {
+            return Err(invalid());
+        }
+    } else if let Some(literal) = map.get("literal") {
+        validate_template(literal)?;
+    } else {
+        return Err(invalid());
+    }
+    Ok(())
+}
+
+fn lookup<'a>(context: &'a Value, path: &str) -> Option<&'a Value> {
+    path.split('.')
+        .try_fold(context, |node, part| node.get(part))
+}
+
+fn condition_matches(condition: &Value, context: &Value, cards: &[&str]) -> Result<bool> {
+    let path = condition["variable"].as_str().ok_or_else(invalid)?;
+    let op = condition["operator"].as_str().ok_or_else(invalid)?;
+    let expected = condition["value"].as_str().ok_or_else(invalid)?;
+    let compare = |actual: &str| -> Result<bool> {
+        Ok(match op {
+            "eq" => actual == expected,
+            "ne" => actual != expected,
+            "gt" | "gte" | "lt" | "lte" => {
+                let (Ok(a), Ok(b)) = (Decimal::from_str(actual), Decimal::from_str(expected))
+                else {
+                    return Ok(false);
+                };
+                match op {
+                    "gt" => a > b,
+                    "gte" => a >= b,
+                    "lt" => a < b,
+                    _ => a <= b,
+                }
+            }
+            "regex" | "regex_not" => {
+                let matched = Regex::new(expected)
+                    .map_err(|_| invalid())?
+                    .is_match(actual);
+                if op == "regex" { matched } else { !matched }
+            }
+            _ => return Err(invalid()),
+        })
+    };
+    if path == "card" {
+        return cards
+            .iter()
+            .map(|card| compare(card))
+            .collect::<Result<Vec<_>>>()
+            .map(|matches| matches.into_iter().all(|matched| matched));
+    }
+    let Some(actual) = lookup(context, path).filter(|value| !value.is_null()) else {
+        return Ok(false);
+    };
+    compare(
+        actual
+            .as_str()
+            .map_or_else(|| actual.to_string(), str::to_owned)
+            .as_str(),
+    )
+}
+
+fn render_result(value: &Value, context: &Value, cards: &[&str]) -> Result<Value> {
+    if let Some(path) = value.get("variable") {
+        return lookup(context, path.as_str().ok_or_else(invalid)?)
+            .filter(|value| !value.is_null())
+            .cloned()
+            .ok_or_else(invalid);
+    }
+    render_extra(value.get("literal").ok_or_else(invalid)?, context, cards)
+}
+
+fn render_extra(value: &Value, context: &Value, cards: &[&str]) -> Result<Value> {
+    if let Value::Object(map) = value {
+        if let Some(rule) = map.get("$zs_rule") {
+            validate_template(value)?;
+            for case in rule["cases"].as_array().ok_or_else(invalid)? {
+                if condition_matches(&case["when"], context, cards)? {
+                    return render_result(&case["then"], context, cards);
+                }
+            }
+            return render_result(&rule["else"], context, cards);
+        }
+        return map
+            .iter()
+            .map(|(key, item)| Ok((key.clone(), render_extra(item, context, cards)?)))
+            .collect::<Result<Map<_, _>>>()
+            .map(Value::Object);
+    }
+    if let Value::Array(items) = value {
+        return items
+            .iter()
+            .map(|item| render_extra(item, context, cards))
+            .collect::<Result<Vec<_>>>()
+            .map(Value::Array);
+    }
+    render_template(value, context)
 }
 
 fn mask(mut converter: Converter) -> Converter {
@@ -614,19 +875,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn template_renders_nested_paths_and_preserves_constants() {
+    fn template_renders_allowed_paths_and_preserves_constants() {
         let context = serde_json::json!({
             "site": {"domain": "shop.example"},
-            "product": {"variables": {"region": "eu"}}
+            "product": {"title": "新激活"}
         });
         let template = serde_json::json!({
             "site": "{{site.domain}}",
-            "region": "{{ product.variables.region }}",
+            "product": "{{ product.title }}",
             "enabled": true
         });
         assert_eq!(
             render_template(&template, &context).ok(),
-            Some(serde_json::json!({"site":"shop.example","region":"eu","enabled":true}))
+            Some(serde_json::json!({"site":"shop.example","product":"新激活","enabled":true}))
         );
     }
 
@@ -635,5 +896,243 @@ mod tests {
         let context = serde_json::json!({"site":{"domain":"shop.example"}});
         assert!(render_template(&serde_json::json!("{{site.secret}}"), &context).is_err());
         assert!(render_template(&serde_json::json!("{{site.domain"), &context).is_err());
+        assert!(validate_template(&serde_json::json!({"a":"{{buyer.email}}"})).is_err());
+        assert!(validate_template(&serde_json::json!({"a":"{{site.domain}"})).is_err());
+        assert!(validate_template(&serde_json::json!({"a":"site.domain}}"})).is_err());
+        assert!(validate_template(&serde_json::json!({"a":"{{source.unknown}}"})).is_err());
+    }
+
+    #[test]
+    fn extra_contract_lists_the_same_variables_and_limits_as_admin() {
+        let contract: Value = serde_json::from_str(include_str!(
+            "../../../../../docs/protocol/card-converter-extra-contract.json"
+        ))
+        .expect("checked-in contract JSON is valid");
+        assert_eq!(contract["variables"], serde_json::json!(EXTRA_VARIABLES));
+        assert_eq!(
+            contract["condition_only_variables"],
+            serde_json::json!(["card"])
+        );
+        assert_eq!(
+            contract["operators"],
+            serde_json::json!(["eq", "ne", "gt", "gte", "lt", "lte", "regex", "regex_not"])
+        );
+        assert_eq!(contract["max_cases"], MAX_EXTRA_RULE_CASES);
+        assert_eq!(contract["max_comparison_bytes"], MAX_EXTRA_COMPARISON_BYTES);
+    }
+
+    #[test]
+    fn all_extra_variables_resolve_and_json_is_escaped() {
+        let context = serde_json::json!({
+            "order":{"order_no":"ZS-1","quantity":2,"total_amount":"12.30"},
+            "site":{"domain":"a\"b.example","name":"店铺"},
+            "product":{"id":12,"title":"激活"},
+            "sku":{"id":34,"specifications":{"region":"US"}},
+            "source":{"id":7,"name":"渠道1","protocol":"acg_faka"}
+        });
+        let template = serde_json::json!({
+            "order_no":"{{order.order_no}}","quantity":"{{order.quantity}}",
+            "amount":"{{order.total_amount}}","domain":"{{site.domain}}",
+            "site_name":"{{site.name}}","product_id":"{{product.id}}",
+            "product_title":"{{product.title}}","sku_id":"{{sku.id}}",
+            "specs":"{{sku.specifications}}","source_id":"{{source.id}}",
+            "source_name":"{{source.name}}","source_protocol":"{{source.protocol}}",
+            "typed_quantity":{"$zs_rule":{"cases":[{"when":{"variable":"order.quantity","operator":"gte","value":"2"},"then":{"variable":"order.quantity"}}],"else":{"literal":0}}}
+        });
+        assert!(validate_template(&template).is_ok());
+        let rendered =
+            render_extra(&template, &context, &["P1-X"]).expect("known variables resolve");
+        assert_eq!(rendered["quantity"], "2");
+        assert_eq!(rendered["typed_quantity"], 2);
+        assert_eq!(rendered["domain"], "a\"b.example");
+        assert_eq!(rendered["specs"], "{\"region\":\"US\"}");
+        assert_eq!(rendered["source_name"], "渠道1");
+        assert_eq!(rendered["source_protocol"], "acg_faka");
+        assert_eq!(
+            serde_json::from_str::<Value>(&rendered.to_string()).ok(),
+            Some(rendered)
+        );
+    }
+
+    #[test]
+    fn decision_table_uses_source_numeric_comparison_and_card_regex() {
+        let context = serde_json::json!({"source":{"name":"A"},"order":{"quantity":2}});
+        let template = serde_json::json!({
+            "provider":{"$zs_rule":{"cases":[
+                {"when":{"variable":"source.name","operator":"eq","value":"A"},"then":{"literal":"p1"}},
+                {"when":{"variable":"card","operator":"regex","value":"^P2-"},"then":{"literal":"p2"}}
+            ],"else":{"literal":"other"}}},
+            "category":{"$zs_rule":{"cases":[
+                {"when":{"variable":"order.quantity","operator":"gte","value":"2"},"then":{"literal":"go"}}
+            ],"else":{"literal":"single"}}}
+        });
+        assert!(validate_template(&template).is_ok());
+        assert_eq!(
+            render_extra(&template, &context, &["P2-1", "P2-2"]).ok(),
+            Some(serde_json::json!({"provider":"p1","category":"go"}))
+        );
+        let fallback = serde_json::json!({"provider":{"$zs_rule":{"cases":[{"when":{"variable":"card","operator":"regex","value":"^P2-"},"then":{"literal":"p2"}}],"else":{"literal":"other"}}}});
+        assert_eq!(
+            render_extra(&fallback, &context, &["P2-1", "bad"]).ok(),
+            Some(serde_json::json!({"provider":"other"}))
+        );
+        assert_eq!(
+            render_extra(&fallback, &context, &["P2-1", "P2-2"]).ok(),
+            Some(serde_json::json!({"provider":"p2"}))
+        );
+    }
+
+    #[test]
+    fn decision_table_rejects_invalid_regex_and_missing_result() {
+        let invalid_regex = serde_json::json!({"$zs_rule":{"cases":[{"when":{"variable":"card","operator":"regex","value":"["},"then":{"literal":"x"}}],"else":{"literal":"y"}}});
+        assert!(validate_template(&invalid_regex).is_err());
+        let missing_else = serde_json::json!({"$zs_rule":{"cases":[]}});
+        assert!(validate_template(&missing_else).is_err());
+    }
+
+    #[test]
+    fn extra_rule_boundaries_preserve_json_types_and_use_default_for_missing_source() {
+        let context = serde_json::json!({"source":null,"order":{"quantity":2,"total_amount":"12.30"},"site":{"domain":"a\"b.example"}});
+        let template = serde_json::json!({
+            "route":{"$zs_rule":{"cases":[{"when":{"variable":"source.id","operator":"eq","value":"7"},"then":{"literal":"p1"}}],"else":{"literal":"manual"}}},
+            "quantity":{"$zs_rule":{"cases":[{"when":{"variable":"order.quantity","operator":"gte","value":"2"},"then":{"variable":"order.quantity"}}],"else":{"literal":0}}},
+            "amount":{"$zs_rule":{"cases":[{"when":{"variable":"order.total_amount","operator":"lt","value":"12.31"},"then":{"literal":true}}],"else":{"literal":false}}},
+            "note":"{{site.domain}}"
+        });
+        assert_eq!(
+            render_extra(&template, &context, &["P1-X"]).ok(),
+            Some(
+                serde_json::json!({"route":"manual","quantity":2,"amount":true,"note":"a\"b.example"})
+            )
+        );
+
+        let source = serde_json::json!({"source":{"id":7}});
+        let route = serde_json::json!({"$zs_rule":{"cases":[{"when":{"variable":"source.id","operator":"eq","value":"7"},"then":{"literal":"p1"}}],"else":{"literal":"other"}}});
+        assert_eq!(
+            render_extra(&route, &source, &["P1-X"]).ok(),
+            Some(serde_json::json!("p1"))
+        );
+    }
+
+    #[test]
+    fn extra_rule_rejects_unknown_paths_operators_and_oversized_cases() {
+        let invalid_path = serde_json::json!({"$zs_rule":{"cases":[{"when":{"variable":"buyer.email","operator":"eq","value":"x"},"then":{"literal":"x"}}],"else":{"literal":"y"}}});
+        assert!(validate_template(&invalid_path).is_err());
+        let invalid_operator = serde_json::json!({"$zs_rule":{"cases":[{"when":{"variable":"source.id","operator":"execute","value":"x"},"then":{"literal":"x"}}],"else":{"literal":"y"}}});
+        assert!(validate_template(&invalid_operator).is_err());
+        let too_many = serde_json::json!({"$zs_rule":{"cases":vec![serde_json::json!({"when":{"variable":"source.id","operator":"eq","value":"7"},"then":{"literal":"x"}});21],"else":{"literal":"y"}}});
+        assert!(validate_template(&too_many).is_err());
+    }
+
+    #[test]
+    fn extra_condition_operators_handle_boundaries_and_multiple_cards() {
+        let context = serde_json::json!({"order":{"quantity":2},"source":{"id":7,"name":"渠道1"}});
+        let cases = [
+            ("eq", "2", true),
+            ("ne", "2", false),
+            ("ne", "3", true),
+            ("gt", "2", false),
+            ("gte", "2", true),
+            ("lt", "2", false),
+            ("lte", "2", true),
+            ("gt", "not-a-number", false),
+        ];
+        for (operator, value, expected) in cases {
+            let condition =
+                serde_json::json!({"variable":"order.quantity","operator":operator,"value":value});
+            assert_eq!(
+                condition_matches(&condition, &context, &["P1-A"]).ok(),
+                Some(expected),
+                "{operator} {value}"
+            );
+        }
+        let regex = serde_json::json!({"variable":"card","operator":"regex","value":"^P1-"});
+        let inverse = serde_json::json!({"variable":"card","operator":"regex_not","value":"^P1-"});
+        assert_eq!(
+            condition_matches(&regex, &context, &["P1-A", "P1-B"]).ok(),
+            Some(true)
+        );
+        assert_eq!(
+            condition_matches(&regex, &context, &["P1-A", "P2-B"]).ok(),
+            Some(false)
+        );
+        assert_eq!(
+            condition_matches(&inverse, &context, &["P2-A", "P2-B"]).ok(),
+            Some(true)
+        );
+        assert_eq!(
+            condition_matches(&inverse, &context, &["P1-A", "P2-B"]).ok(),
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn extra_rejects_unsupported_variables_and_utf8_oversized_comparisons() {
+        let invalid_variable = serde_json::json!({"route":{"$zs_rule":{"cases":[{"when":{"variable":"source.other","operator":"eq","value":"x"},"then":{"literal":"p1"}}],"else":{"literal":"other"}}}});
+        assert!(validate_template(&invalid_variable).is_err());
+        let invalid_result = serde_json::json!({"route":{"$zs_rule":{"cases":[{"when":{"variable":"source.id","operator":"eq","value":"7"},"then":{"variable":"card"}}],"else":{"literal":"other"}}}});
+        assert!(validate_template(&invalid_result).is_err());
+        let oversized = serde_json::json!({"route":{"$zs_rule":{"cases":[{"when":{"variable":"source.name","operator":"eq","value":"中".repeat(171)},"then":{"literal":"p1"}}],"else":{"literal":"other"}}}});
+        assert!(validate_template(&oversized).is_err());
+        let boundary = serde_json::json!({"route":{"$zs_rule":{"cases":[{"when":{"variable":"source.name","operator":"eq","value":"a".repeat(512)},"then":{"literal":"p1"}}],"else":{"literal":"other"}}}});
+        assert!(validate_template(&boundary).is_ok());
+    }
+
+    #[test]
+    fn extra_binding_diagnostics_find_deleted_or_renamed_dependencies() {
+        let template = serde_json::json!({
+            "provider":{"$zs_rule":{"cases":[
+                {"when":{"variable":"source.id","operator":"eq","value":"7"},"then":{"literal":"p1"}},
+                {"when":{"variable":"source.name","operator":"eq","value":"旧名称"},"then":{"literal":"old"}}
+            ],"else":{"literal":"other"}}},
+            "source_name":"{{source.name}}"
+        });
+        let deps = BindingDependencies {
+            product_exists: true,
+            sku_available: true,
+            converter_enabled: true,
+            sources: vec![zs_domain::integration::card_converter::ConverterSource {
+                id: 7,
+                name: "渠道1".into(),
+                protocol: "acg_faka".into(),
+            }],
+            product_changed: false,
+            sku_changed: false,
+            source_changed: false,
+            site_changed: false,
+        };
+        assert_eq!(
+            binding_issues(&template, &deps),
+            vec!["上游条件 source.name = 旧名称 已无可用匹配"]
+        );
+        let missing = BindingDependencies {
+            product_exists: false,
+            sku_available: false,
+            converter_enabled: false,
+            sources: Vec::new(),
+            product_changed: false,
+            sku_changed: false,
+            source_changed: false,
+            site_changed: false,
+        };
+        let issues = binding_issues(&template, &missing);
+        assert!(issues.iter().any(|issue| issue.contains("商品已删除")));
+        assert!(issues.iter().any(|issue| issue.contains("SKU")));
+        assert!(issues.iter().any(|issue| issue.contains("转换器")));
+        assert!(issues.iter().any(|issue| issue.contains("source.id = 7")));
+        assert!(issues.iter().any(|issue| issue.contains("没有可用上游")));
+        let changed = BindingDependencies {
+            product_changed: true,
+            sku_changed: true,
+            source_changed: true,
+            site_changed: true,
+            ..deps
+        };
+        let dynamic = serde_json::json!({"product":"{{product.title}}","sku":"{{sku.specifications}}","source":"{{source.name}}","site":"{{site.domain}}"});
+        let issues = binding_issues(&dynamic, &changed);
+        assert!(issues.iter().any(|issue| issue.contains("商品配置")));
+        assert!(issues.iter().any(|issue| issue.contains("SKU 配置")));
+        assert!(issues.iter().any(|issue| issue.contains("上游名称")));
+        assert!(issues.iter().any(|issue| issue.contains("站点名称")));
     }
 }

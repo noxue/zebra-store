@@ -632,14 +632,20 @@ async fn converter_health() -> axum::Json<Value> {
     axum::Json(json!({"ok": true}))
 }
 
-async fn converter_types() -> axum::Json<Value> {
-    axum::Json(json!({"protocol_version":"1","types":[{"id":"account","name":"Account"}]}))
-}
-
 async fn converter_exchange(
     State(mock): State<Arc<ConverterMock>>,
     axum::Json(request): axum::Json<Value>,
 ) -> Response {
+    assert_eq!(request.as_object().map(|body| body.len()), Some(3));
+    assert!(request.get("order_no").and_then(Value::as_str).is_some());
+    assert!(request.get("items").is_some());
+    assert!(request.get("extra").is_some());
+    assert_eq!(request["extra"]["route"], "p1");
+    assert!(request.get("protocol_version").is_none());
+    assert!(request.get("idempotency_key").is_none());
+    for field in ["order", "site", "product", "sku"] {
+        assert!(request.get(field).is_none());
+    }
     mock.exchanges.fetch_add(1, Ordering::SeqCst);
     if mock.fail.load(Ordering::SeqCst) {
         return (
@@ -661,7 +667,7 @@ async fn converter_exchange(
         .collect::<Vec<_>>();
     (
         axum::http::StatusCode::OK,
-        axum::Json(json!({"protocol_version":"1","items":items})),
+        axum::Json(json!({"items":items})),
     )
         .into_response()
 }
@@ -1010,7 +1016,6 @@ async fn purchased_delivery_recovery_never_rebuys_upstream_cards() {
     let converter_address = converter_listener.local_addr().unwrap();
     let converter_router = Router::new()
         .route("/health", get(converter_health))
-        .route("/integration/v1/types", get(converter_types))
         .route("/integration/v1/exchanges", post(converter_exchange))
         .with_state(converter_mock.clone());
     tokio::spawn(async move {
@@ -1058,22 +1063,14 @@ async fn purchased_delivery_recovery_never_rebuys_upstream_cards() {
         .services
         .integration
         .card_converters
-        .refresh_types(converter.id)
-        .await
-        .unwrap();
-    buyer
-        .app
-        .services
-        .integration
-        .card_converters
         .save_binding(zs_domain::integration::card_converter::Binding {
             id: 0,
             product_id: product,
             sku_id: sku.id,
             converter_id: converter.id,
             type_id: "account".into(),
-            fields: Vec::new(),
-            extra_template: json!({}),
+            extra_template: json!({"route":{"$zs_rule":{"cases":[{"when":{"variable":"source.name","operator":"eq","value":"ACG"},"then":{"literal":"p1"}}],"else":{"literal":"unknown"}}}}),
+            issues: Vec::new(),
             created_at: now,
             updated_at: now,
         })

@@ -572,11 +572,6 @@
       },
       {
         "subject": "",
-        "object": "/admin/card-converters/:id/refresh-types",
-        "action": "POST"
-      },
-      {
-        "subject": "",
         "object": "/admin/card-converters/:id/events",
         "action": "GET"
       },

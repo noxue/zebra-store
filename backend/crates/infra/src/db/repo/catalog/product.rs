@@ -25,8 +25,8 @@ use super::sql::{
     SEARCH_LOCALES, backend_of, ilike_sql, json_array_nonempty, json_text, tombstone,
 };
 use crate::db::entity::{
-    card_secret_batches, card_secrets, cart_items, categories, member_level_prices,
-    product_mappings, product_skus, products, sku_mappings,
+    card_converter_bindings, card_secret_batches, card_secrets, cart_items, categories,
+    member_level_prices, product_mappings, product_skus, products, sku_mappings,
 };
 use crate::db::repo::support::{DbResultExt, from_json, now, to_json};
 
@@ -356,6 +356,12 @@ async fn apply_sku_ops<C: ConnectionTrait>(
                 new_sku(product_id, fields, at)?.insert(conn).await.dom()?;
             }
             SkuOp::Delete(id) => {
+                card_converter_bindings::Entity::delete_many()
+                    .filter(card_converter_bindings::Column::ProductId.eq(product_id))
+                    .filter(card_converter_bindings::Column::SkuId.eq(*id))
+                    .exec(conn)
+                    .await
+                    .dom()?;
                 product_skus::Entity::delete_by_id(*id)
                     .exec(conn)
                     .await
@@ -611,6 +617,11 @@ impl ProductRepo for SeaProductRepo {
             .col_expr(product_skus::Column::DeletedAt, Expr::value(at))
             .filter(product_skus::Column::ProductId.eq(id))
             .filter(product_skus::Column::DeletedAt.is_null())
+            .exec(&txn)
+            .await
+            .dom()?;
+        card_converter_bindings::Entity::delete_many()
+            .filter(card_converter_bindings::Column::ProductId.eq(id))
             .exec(&txn)
             .await
             .dom()?;

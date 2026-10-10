@@ -536,19 +536,33 @@ async fn converter_health() -> Json<Value> {
     Json(json!({"ok": true}))
 }
 
-async fn converter_types() -> Json<Value> {
-    Json(json!({"protocol_version":"1","types":[{"id":"account","name":"Account"}]}))
-}
-
 async fn converter_exchange(
     State(mock): State<Arc<ConverterMock>>,
     Json(request): Json<Value>,
 ) -> axum::response::Response {
+    assert_eq!(request.as_object().map(|body| body.len()), Some(3));
+    assert!(request.get("order_no").and_then(Value::as_str).is_some());
+    assert!(request.get("items").is_some());
+    assert!(request.get("extra").is_some());
+    assert!(request.get("protocol_version").is_none());
+    assert!(request.get("idempotency_key").is_none());
+    for field in ["order", "site", "product", "sku"] {
+        assert!(request.get(field).is_none());
+    }
+    assert_eq!(
+        request["extra"].as_object().map(|extra| extra.len()),
+        Some(1)
+    );
+    assert!(
+        request["extra"]["chosen_order"]
+            .as_str()
+            .is_some_and(|value| !value.is_empty() && !value.contains("{{"))
+    );
     mock.exchanges.fetch_add(1, Ordering::SeqCst);
     mock.keys
         .lock()
         .unwrap()
-        .push(request["idempotency_key"].as_str().unwrap().to_owned());
+        .push(request["order_no"].as_str().unwrap().to_owned());
     if mock.fail.load(Ordering::SeqCst) {
         return (
             StatusCode::SERVICE_UNAVAILABLE,
@@ -567,11 +581,7 @@ async fn converter_exchange(
             })
         })
         .collect::<Vec<_>>();
-    (
-        StatusCode::OK,
-        Json(json!({"protocol_version":"1","items":items})),
-    )
-        .into_response()
+    (StatusCode::OK, Json(json!({"items":items}))).into_response()
 }
 
 /// A failed conversion holds the exact stock cards and retry resumes only conversion.
@@ -588,7 +598,6 @@ async fn local_card_converter_retry_does_not_consume_stock_twice() {
     let address = listener.local_addr().unwrap();
     let router = Router::new()
         .route("/health", get(converter_health))
-        .route("/integration/v1/types", get(converter_types))
         .route("/integration/v1/exchanges", post(converter_exchange))
         .with_state(mock.clone());
     tokio::spawn(async move {
@@ -624,20 +633,14 @@ async fn local_card_converter_retry_does_not_consume_stock_twice() {
     app.services
         .integration
         .card_converters
-        .refresh_types(converter_id)
-        .await
-        .unwrap();
-    app.services
-        .integration
-        .card_converters
         .save_binding(Binding {
             id: 0,
             product_id: product,
             sku_id: sku,
             converter_id,
             type_id: "account".into(),
-            fields: Vec::new(),
-            extra_template: json!({}),
+            extra_template: json!({"chosen_order":"{{order.order_no}}"}),
+            issues: Vec::new(),
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         })
@@ -687,16 +690,10 @@ async fn local_card_converter_retry_does_not_consume_stock_twice() {
         fulfillment.payload,
         format!("SYSTEM-CARD-{product}-0\nSYSTEM-CARD-{product}-1")
     );
-    let item = zs_infra::db::entity::order_items::Entity::find()
-        .filter(zs_infra::db::entity::order_items::Column::OrderId.eq(child.id))
-        .one(&app.db)
-        .await
-        .unwrap()
-        .unwrap();
     assert_eq!(mock.exchanges.load(Ordering::SeqCst), 2);
     assert_eq!(
         *mock.keys.lock().unwrap(),
-        vec![format!("zebra-order-{}-item-{}", child.id, item.id); 2]
+        vec![final_order.order_no.clone(); 2]
     );
     assert_eq!(app.secrets_with(product, "used").await, 2);
 

@@ -8,7 +8,8 @@ use sea_orm::{
     QueryOrder, QuerySelect,
 };
 use zs_domain::integration::card_converter::{
-    Binding, Converter, ConverterEvent, ConverterRepo, NewConverterEvent,
+    Binding, BindingDependencies, Converter, ConverterEvent, ConverterRepo, ConverterSource,
+    NewConverterEvent,
 };
 use zs_domain::{Error, Id, Result};
 
@@ -16,7 +17,9 @@ use crate::db::entity::extra::{
     card_converter_bindings as bindings, card_converter_events as events,
     card_converters as converters,
 };
-use crate::db::entity::{product_skus, products};
+use crate::db::entity::{
+    procurement_orders, product_mappings, product_skus, products, settings, site_connections,
+};
 use crate::db::repo::support::{DbResultExt, from_json, to_json};
 
 #[derive(Debug, Clone)]
@@ -27,6 +30,20 @@ pub struct SeaCardConverterRepo {
 impl SeaCardConverterRepo {
     pub fn new(db: DatabaseConnection) -> Self {
         Self { db }
+    }
+
+    async fn site_snapshot(&self) -> Result<serde_json::Value> {
+        let config = settings::Entity::find_by_id(zs_domain::settings::keys::SITE_CONFIG)
+            .one(&self.db)
+            .await
+            .dom()?
+            .and_then(|row| row.value_json)
+            .unwrap_or_default();
+        let brand = &config["brand"];
+        Ok(serde_json::json!({
+            "domain": brand["site_url"].as_str().unwrap_or_default(),
+            "name": brand["site_name"].as_str().unwrap_or_default(),
+        }))
     }
 }
 
@@ -56,8 +73,8 @@ fn binding(m: bindings::Model) -> Binding {
         sku_id: m.sku_id,
         converter_id: m.converter_id,
         type_id: m.type_id,
-        fields: from_json(m.fields_json),
         extra_template: m.extra_template_json.unwrap_or(serde_json::Value::Null),
+        issues: Vec::new(),
         created_at: m.created_at,
         updated_at: m.updated_at,
     }
@@ -65,6 +82,101 @@ fn binding(m: bindings::Model) -> Binding {
 
 #[async_trait]
 impl ConverterRepo for SeaCardConverterRepo {
+    async fn binding_dependencies(&self, binding: &Binding) -> Result<BindingDependencies> {
+        let saved_snapshot = bindings::Entity::find()
+            .filter(bindings::Column::ProductId.eq(binding.product_id))
+            .filter(bindings::Column::SkuId.eq(binding.sku_id))
+            .one(&self.db)
+            .await
+            .dom()?
+            .and_then(|row| row.fields_json);
+        let current_site = self.site_snapshot().await?;
+        let site_changed = saved_snapshot
+            .as_ref()
+            .and_then(|snapshot| snapshot.get("site"))
+            .is_some_and(|saved| saved != &current_site);
+        let product = products::Entity::find_by_id(binding.product_id)
+            .filter(products::Column::DeletedAt.is_null())
+            .one(&self.db)
+            .await
+            .dom()?;
+        let skus = product_skus::Entity::find()
+            .filter(product_skus::Column::ProductId.eq(binding.product_id))
+            .filter(product_skus::Column::DeletedAt.is_null())
+            .filter(product_skus::Column::IsActive.eq(true))
+            .all(&self.db)
+            .await
+            .dom()?;
+        let sku_available = binding.sku_id == 0 || skus.iter().any(|sku| sku.id == binding.sku_id);
+        let sku_changed = skus.iter().any(|sku| {
+            (binding.sku_id == 0 || sku.id == binding.sku_id) && sku.updated_at > binding.updated_at
+        });
+        let converter_enabled = converters::Entity::find_by_id(binding.converter_id)
+            .one(&self.db)
+            .await
+            .dom()?
+            .is_some_and(|converter| converter.enabled);
+        let mappings = product_mappings::Entity::find()
+            .filter(product_mappings::Column::LocalProductId.eq(binding.product_id))
+            .filter(product_mappings::Column::DeletedAt.is_null())
+            .filter(product_mappings::Column::IsActive.eq(true))
+            .all(&self.db)
+            .await
+            .dom()?;
+        let mut sources = Vec::new();
+        let mut source_changed = false;
+        for mapping in mappings {
+            source_changed |= mapping.updated_at > binding.updated_at;
+            if let Some(row) = site_connections::Entity::find_by_id(mapping.connection_id)
+                .filter(site_connections::Column::DeletedAt.is_null())
+                .filter(site_connections::Column::Status.eq("active"))
+                .one(&self.db)
+                .await
+                .dom()?
+            {
+                source_changed |= row.updated_at > binding.updated_at;
+                sources.push(ConverterSource {
+                    id: row.id,
+                    name: row.name,
+                    protocol: row.protocol,
+                });
+            }
+        }
+        Ok(BindingDependencies {
+            product_changed: product
+                .as_ref()
+                .is_some_and(|row| row.updated_at > binding.updated_at),
+            product_exists: product.is_some(),
+            sku_available,
+            sku_changed,
+            converter_enabled,
+            sources,
+            source_changed,
+            site_changed,
+        })
+    }
+    async fn source_for_order(&self, order_id: Id) -> Result<Option<ConverterSource>> {
+        let Some(procurement) = procurement_orders::Entity::find()
+            .filter(procurement_orders::Column::LocalOrderId.eq(order_id))
+            .filter(procurement_orders::Column::DeletedAt.is_null())
+            .order_by_desc(procurement_orders::Column::Id)
+            .one(&self.db)
+            .await
+            .dom()?
+        else {
+            return Ok(None);
+        };
+        let connection = site_connections::Entity::find_by_id(procurement.connection_id)
+            .one(&self.db)
+            .await
+            .dom()?;
+        Ok(connection.map(|row| ConverterSource {
+            id: row.id,
+            name: row.name,
+            protocol: row.protocol,
+        }))
+    }
+
     async fn list(&self) -> Result<Vec<Converter>> {
         Ok(converters::Entity::find()
             .order_by_asc(converters::Column::Id)
@@ -156,12 +268,14 @@ impl ConverterRepo for SeaCardConverterRepo {
 
     async fn save_binding(&self, b: &Binding) -> Result<Binding> {
         let _product = products::Entity::find_by_id(b.product_id)
+            .filter(products::Column::DeletedAt.is_null())
             .one(&self.db)
             .await
             .dom()?
             .ok_or_else(|| Error::not_found("error.product_not_found"))?;
         if b.sku_id > 0
             && product_skus::Entity::find_by_id(b.sku_id)
+                .filter(product_skus::Column::DeletedAt.is_null())
                 .one(&self.db)
                 .await
                 .dom()?
@@ -170,8 +284,8 @@ impl ConverterRepo for SeaCardConverterRepo {
             return Err(Error::bad_request("error.card_converter_binding_invalid"));
         }
         let now = Utc::now();
-        let fields_json = to_json(&b.fields)?;
         let extra_template_json = Some(b.extra_template.clone());
+        let fields_json = Some(serde_json::json!({"site": self.site_snapshot().await?}));
         let model = bindings::ActiveModel {
             product_id: Set(b.product_id),
             sku_id: Set(b.sku_id),

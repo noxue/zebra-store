@@ -564,6 +564,26 @@ async fn delete_guards_and_cascade() {
     assert_eq!(res["msg"], "该商品已有成交记录，无法删除");
 
     let clean = id_of(&product(&app, cat, "clean", json!({"fulfillment_type": "auto"})).await);
+    let converter = app.post("/api/v1/admin/card-converters", json!({"name":"cleanup", "base_url":"https://converter.example", "token":"test-token-0123456789abcdef", "enabled":true})).await;
+    let converter_id = data(&converter)["id"].as_i64().unwrap();
+    data(&app.put("/api/v1/admin/card-converter-bindings", json!({"product_id":clean,"sku_id":0,"converter_id":converter_id,"extra_template":{"provider":"p1","site_name":"{{site.name}}"}})).await);
+    data(
+        &app.put(
+            "/api/v1/admin/settings",
+            json!({"key":"site_config","value":{"brand":{"site_name":"Renamed Store"}}}),
+        )
+        .await,
+    );
+    let checked = app
+        .get(&format!(
+            "/api/v1/admin/card-converter-bindings?product_id={clean}"
+        ))
+        .await;
+    assert!(data(&checked)[0]["issues"].as_array().is_some_and(|items| {
+        items
+            .iter()
+            .any(|item| item.as_str().is_some_and(|text| text.contains("站点名称")))
+    }));
     insert_secrets(&app, clean, 0, "used", 2).await;
     data(
         &app.post(
@@ -595,6 +615,15 @@ async fn delete_guards_and_cascade() {
         .await
         .unwrap();
     assert_eq!(live_skus, 0);
+    assert_eq!(
+        data(
+            &app.get(&format!(
+                "/api/v1/admin/card-converter-bindings?product_id={clean}"
+            ))
+            .await
+        ),
+        &json!([])
+    );
     assert_eq!(catalog_common::count_secrets(&app, clean, "used").await, 0);
     let prices = app
         .get(&format!(
@@ -609,6 +638,34 @@ async fn delete_guards_and_cascade() {
         )
         .await;
     assert_eq!(data(&ok_delete)["failed_ids"], json!([reserved + 1000]));
+}
+
+#[tokio::test]
+async fn deleting_a_sku_removes_only_its_converter_binding() {
+    let app = TestApp::new().await;
+    let cat = category(&app, "converter-skus", 0).await;
+    let product = product(&app, cat, "converter-skus", json!({"fulfillment_type":"auto","skus":[{"sku_code":"A","price_amount":10},{"sku_code":"B","price_amount":10}]})).await;
+    let product_id = id_of(&product);
+    let skus = product["skus"].as_array().unwrap();
+    let a = skus.iter().find(|sku| sku["sku_code"] == "A").unwrap()["id"]
+        .as_i64()
+        .unwrap();
+    let b = skus.iter().find(|sku| sku["sku_code"] == "B").unwrap()["id"]
+        .as_i64()
+        .unwrap();
+    let converter = app.post("/api/v1/admin/card-converters", json!({"name":"sku-cleanup", "base_url":"https://converter.example", "token":"test-token-0123456789abcdef", "enabled":true})).await;
+    let converter_id = data(&converter)["id"].as_i64().unwrap();
+    for sku_id in [a, b] {
+        data(&app.put("/api/v1/admin/card-converter-bindings", json!({"product_id":product_id,"sku_id":sku_id,"converter_id":converter_id,"extra_template":{"provider":"p1"}})).await);
+    }
+    data(&app.put(&format!("{PRODUCTS}/{product_id}"), json!({"category_id":cat,"slug":"converter-skus","title":{"zh-CN":"Converter"},"price_amount":10,"fulfillment_type":"auto","skus":[{"id":a,"sku_code":"A","price_amount":10}]})).await);
+    let rows = app
+        .get(&format!(
+            "/api/v1/admin/card-converter-bindings?product_id={product_id}"
+        ))
+        .await;
+    assert_eq!(data(&rows).as_array().unwrap().len(), 1);
+    assert_eq!(data(&rows)[0]["sku_id"], a);
 }
 
 // PAY-17

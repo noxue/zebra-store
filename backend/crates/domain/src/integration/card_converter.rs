@@ -62,9 +62,12 @@ pub struct Binding {
     /// 0 means the product default; a positive SKU id overrides it.
     pub sku_id: Id,
     pub converter_id: Id,
+    #[serde(skip_serializing)]
     pub type_id: String,
-    pub fields: Vec<String>,
     pub extra_template: Value,
+    /// Current dependencies are checked when bindings are listed; never persisted.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub issues: Vec<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -86,13 +89,7 @@ pub struct ExchangeItem {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ExchangeRequest {
-    pub protocol_version: String,
-    pub idempotency_key: String,
-    pub type_id: String,
-    pub order: Value,
-    pub site: Value,
-    pub product: Value,
-    pub sku: Value,
+    pub order_no: String,
     pub items: Vec<ExchangeItem>,
     pub extra: Value,
 }
@@ -105,7 +102,6 @@ pub struct ExchangeResultItem {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExchangeResponse {
-    pub protocol_version: String,
     pub items: Vec<ExchangeResultItem>,
 }
 
@@ -132,8 +128,29 @@ pub struct NewConverterEvent {
     pub created_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConverterSource {
+    pub id: Id,
+    pub name: String,
+    pub protocol: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct BindingDependencies {
+    pub product_exists: bool,
+    pub sku_available: bool,
+    pub converter_enabled: bool,
+    pub sources: Vec<ConverterSource>,
+    pub product_changed: bool,
+    pub sku_changed: bool,
+    pub source_changed: bool,
+    pub site_changed: bool,
+}
+
 #[async_trait]
 pub trait ConverterRepo: Send + Sync {
+    async fn binding_dependencies(&self, binding: &Binding) -> Result<BindingDependencies>;
+    async fn source_for_order(&self, order_id: Id) -> Result<Option<ConverterSource>>;
     async fn list(&self) -> Result<Vec<Converter>>;
     async fn get(&self, id: Id) -> Result<Option<Converter>>;
     async fn save(&self, converter: &Converter) -> Result<Converter>;
@@ -155,7 +172,6 @@ pub trait ConverterRepo: Send + Sync {
 
 #[async_trait]
 pub trait ConverterHttp: Send + Sync {
-    async fn types(&self, base_url: &str, token: &str) -> Result<Vec<ConverterType>>;
     async fn health(&self, base_url: &str, token: &str) -> Result<()>;
     async fn exchange(
         &self,

@@ -1,0 +1,20 @@
+{
+  "variables": [
+    "order.order_no",
+    "order.quantity",
+    "order.total_amount",
+    "site.domain",
+    "site.name",
+    "product.id",
+    "product.title",
+    "sku.id",
+    "sku.specifications",
+    "source.id",
+    "source.name",
+    "source.protocol"
+  ],
+  "condition_only_variables": ["card"],
+  "operators": ["eq", "ne", "gt", "gte", "lt", "lte", "regex", "regex_not"],
+  "max_cases": 20,
+  "max_comparison_bytes": 512
+}

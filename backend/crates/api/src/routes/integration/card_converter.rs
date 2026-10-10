@@ -19,7 +19,6 @@ pub(super) fn admin() -> Routes {
         .put("/card-converters/{id}", update)
         .delete("/card-converters/{id}", delete)
         .post("/card-converters/{id}/test", test)
-        .post("/card-converters/{id}/refresh-types", refresh_types)
         .get("/card-converter-bindings", bindings)
         .get("/card-converters/pending", pending)
         .put("/card-converter-bindings", save_binding)
@@ -95,12 +94,6 @@ async fn test(State(s): State<AppState>, PathId(id): PathId) -> ApiResult<Data<V
     Ok(Data(s.svc.integration.card_converters.test(id).await?))
 }
 
-async fn refresh_types(State(s): State<AppState>, PathId(id): PathId) -> ApiResult<Data<Value>> {
-    Ok(Data(json!(
-        s.svc.integration.card_converters.refresh_types(id).await?
-    )))
-}
-
 async fn bindings(State(s): State<AppState>, Query(q): Query<Params>) -> ApiResult<Data<Value>> {
     let product_id = q.get("product_id").and_then(|v| v.parse::<Id>().ok());
     Ok(Data(json!(
@@ -119,8 +112,6 @@ struct BindingBody {
     product_id: Id,
     sku_id: Id,
     converter_id: Id,
-    type_id: String,
-    fields: Vec<String>,
     extra_template: Value,
 }
 
@@ -137,9 +128,9 @@ async fn save_binding(
             product_id: body.product_id,
             sku_id: body.sku_id,
             converter_id: body.converter_id,
-            type_id: body.type_id,
-            fields: body.fields,
+            type_id: String::new(),
             extra_template: body.extra_template,
+            issues: Vec::new(),
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         })

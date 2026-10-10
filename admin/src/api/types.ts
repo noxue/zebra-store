@@ -698,9 +698,8 @@ export interface AdminCardConverterBinding {
   product_id: number
   sku_id: number
   converter_id: number
-  type_id: string
-  fields: string[]
   extra_template: Record<string, unknown>
+  issues?: string[]
 }
 
 export interface AdminCardConverterPending {

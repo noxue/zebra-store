@@ -156,7 +156,7 @@ export default defineComponent({
 
           <div class="grid grid-cols-1 gap-4 border-t border-line pt-4 md:grid-cols-2">
             <div class="md:col-span-2">
-              <FormField label={t('siteConnections.form.name')} required error={p.errors.name}>
+              <FormField label={t('siteConnections.form.name')} required error={p.errors.name} hint={t('siteConnections.converterSourceHint')}>
                 <Input v-model={f.name} placeholder={t('siteConnections.form.namePlaceholder')} />
               </FormField>
             </div>

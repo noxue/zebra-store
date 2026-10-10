@@ -9,7 +9,7 @@ Zebra Store is a self-hosted digital-goods commerce platform. Its backend uses *
 - Live site: [ai.xiaodianpu.cc](https://ai.xiaodianpu.cc)
 - Downloads: [GitHub Releases](https://github.com/noxue/zebra-store/releases)
 - Huifu SDK: [huifu-pay](https://github.com/noxue/huifu-pay) ([`huifu-pay` on crates.io](https://crates.io/crates/huifu-pay))
-- Card converter developer protocol: [English](docs/protocol/card-converter-v1.en.md) / [中文](docs/protocol/card-converter-v1.md)
+- Card converter developer protocol: [English](docs/protocol/card-converter.en.md) / [中文](docs/protocol/card-converter.md)
 
 Zebra Store supports Alipay and WeChat H5/PC collection through Huifu, including payment creation, RSA-verified notifications, active queries, original-route refunds, and trade-bill downloads. By default, desktop checkout shows a QR code for the complete hosted payment page while mobile invokes the payment flow; full-page redirect is also selectable. See the [Huifu setup guide](https://zebra-store-docs.noxue.com/payment/huifu).
 

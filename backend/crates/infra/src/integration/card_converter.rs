@@ -4,9 +4,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use serde::Deserialize;
-use zs_domain::integration::card_converter::{
-    ConverterHttp, ConverterType, ExchangeRequest, ExchangeResponse,
-};
+use zs_domain::integration::card_converter::{ConverterHttp, ExchangeRequest, ExchangeResponse};
 use zs_domain::{Error, Result};
 
 use super::http::{AddressPolicy, build_no_redirect_client, check_url, read_limited};
@@ -49,7 +47,6 @@ impl HttpCardConverter {
         method: reqwest::Method,
         url: reqwest::Url,
         token: &str,
-        idempotency_key: Option<&str>,
         body: Option<Vec<u8>>,
     ) -> Result<T> {
         let mut request = self
@@ -57,9 +54,6 @@ impl HttpCardConverter {
             .request(method, url)
             .bearer_auth(token)
             .header(reqwest::header::ACCEPT, "application/json");
-        if let Some(key) = idempotency_key {
-            request = request.header("Idempotency-Key", key);
-        }
         if let Some(body) = body {
             request = request
                 .header(reqwest::header::CONTENT_TYPE, "application/json")
@@ -90,12 +84,6 @@ impl HttpCardConverter {
 }
 
 #[derive(Debug, Deserialize)]
-struct TypesResponse {
-    protocol_version: String,
-    types: Vec<ConverterType>,
-}
-
-#[derive(Debug, Deserialize)]
 struct HealthResponse {
     #[serde(default = "health_ok")]
     ok: bool,
@@ -107,70 +95,6 @@ fn health_ok() -> bool {
 
 #[async_trait]
 impl ConverterHttp for HttpCardConverter {
-    async fn types(&self, base: &str, token: &str) -> Result<Vec<ConverterType>> {
-        let response: TypesResponse = self
-            .request_json(
-                reqwest::Method::GET,
-                self.endpoint(base, "/integration/v1/types")?,
-                token,
-                None,
-                None,
-            )
-            .await?;
-        if response.protocol_version != "1"
-            || response.types.is_empty()
-            || response.types.len() > 500
-            || response.types.iter().any(|item| {
-                item.id.trim().is_empty()
-                    || item.id.len() > 100
-                    || item.name.trim().is_empty()
-                    || item.name.len() > 200
-                    || item.fields.len() > 64
-                    || item.fields.iter().any(|field| {
-                        field.key.is_empty()
-                            || field.key.len() > 100
-                            || !field
-                                .key
-                                .chars()
-                                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '-'))
-                            || field.label.trim().is_empty()
-                            || field.label.len() > 200
-                            || !matches!(
-                                field.kind.as_str(),
-                                "text" | "number" | "boolean" | "select"
-                            )
-                            || field.options.len() > 100
-                            || (field.kind == "select" && field.options.is_empty())
-                    })
-            })
-        {
-            return Err(Error::internal_msg("card converter type list is invalid"));
-        }
-        let mut ids = std::collections::HashSet::new();
-        if response
-            .types
-            .iter()
-            .any(|item| !ids.insert(item.id.as_str()))
-        {
-            return Err(Error::internal_msg(
-                "card converter returned duplicate type ids",
-            ));
-        }
-        for item in &response.types {
-            let mut fields = std::collections::HashSet::new();
-            if item
-                .fields
-                .iter()
-                .any(|field| !fields.insert(field.key.as_str()))
-            {
-                return Err(Error::internal_msg(
-                    "card converter returned duplicate field keys",
-                ));
-            }
-        }
-        Ok(response.types)
-    }
-
     async fn health(&self, base: &str, token: &str) -> Result<()> {
         let url = self.endpoint(base, "/health")?;
         let response = self
@@ -188,8 +112,9 @@ impl ConverterHttp for HttpCardConverter {
                 })
             })?;
         if response.status() == reqwest::StatusCode::NOT_FOUND {
-            self.types(base, token).await?;
-            return Ok(());
+            return Err(Error::internal_msg(
+                "card converter health endpoint is missing",
+            ));
         }
         if !response.status().is_success() {
             return Err(Error::internal_msg(format!(
@@ -214,11 +139,7 @@ impl ConverterHttp for HttpCardConverter {
         token: &str,
         request: &ExchangeRequest,
     ) -> Result<ExchangeResponse> {
-        if request.protocol_version != "1"
-            || request.items.is_empty()
-            || request.items.len() > 100
-            || request.order["quantity"].as_u64() != Some(request.items.len() as u64)
-        {
+        if request.items.is_empty() || request.items.len() > 100 {
             return Err(Error::bad_request("error.card_converter_request_invalid"));
         }
         let bytes = serde_json::to_vec(request)?;
@@ -227,11 +148,10 @@ impl ConverterHttp for HttpCardConverter {
                 reqwest::Method::POST,
                 self.endpoint(base, "/integration/v1/exchanges")?,
                 token,
-                Some(&request.idempotency_key),
                 Some(bytes),
             )
             .await?;
-        if response.protocol_version != "1" || response.items.len() != request.items.len() {
+        if response.items.len() != request.items.len() {
             return Err(Error::internal_msg(
                 "card converter returned the wrong number of cards",
             ));
@@ -283,15 +203,9 @@ mod tests {
     }
 
     #[test]
-    fn bounds_exchange_card_count_and_requires_exact_order_quantity() {
+    fn bounds_exchange_card_count_and_keeps_context_out_of_the_wire_body() {
         let request = ExchangeRequest {
-            protocol_version: "1".into(),
-            idempotency_key: "order-1".into(),
-            type_id: "type-a".into(),
-            order: serde_json::json!({"quantity":2}),
-            site: Value::Null,
-            product: Value::Null,
-            sku: Value::Null,
+            order_no: "ZS1".into(),
             items: vec![
                 zs_domain::integration::card_converter::ExchangeItem {
                     index: 0,
@@ -304,9 +218,14 @@ mod tests {
             ],
             extra: Value::Null,
         };
-        assert_eq!(
-            request.items.len(),
-            request.order["quantity"].as_u64().unwrap() as usize
-        );
+        let body = serde_json::to_value(&request).expect("valid request");
+        assert_eq!(body["items"].as_array().map(Vec::len), Some(2));
+        assert_eq!(body.as_object().map(|body| body.len()), Some(3));
+        assert_eq!(body["order_no"], "ZS1");
+        assert!(body.get("idempotency_key").is_none());
+        assert!(body.get("order").is_none());
+        assert!(body.get("site").is_none());
+        assert!(body.get("product").is_none());
+        assert!(body.get("sku").is_none());
     }
 }

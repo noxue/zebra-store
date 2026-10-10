@@ -15,6 +15,7 @@ const messages: ExtraMessages = {
       manualReviewHint: '供货方可能已扣款：不会自动退款。重试 = 用同一请求号重新提交（或重新查单）；取消 = 标记失败并回退本地订单。',
     },
     siteConnections: {
+      "converterSourceHint": "这里填写的名称供后台显示，对应变量“上游名称”；系统分配的 ID 对应更稳定的“上游 ID”，协议对应“上游协议”。它们只用于生成商品 extra，不会自动发送。例如页面显示“渠道1”，可以配置发送别名“p1”。",
       "protocolHint": "选择上游站点所用的对接协议，不同协议需要填写的字段与支持的能力不同。",
       "protocolsLoading": "正在加载对接协议…",
       "protocolsLoadFailed": "对接协议列表加载失败，暂时按通用字段（地址 / Key / Secret）填写。",
@@ -107,6 +108,7 @@ const messages: ExtraMessages = {
       manualReviewHint: '供貨方可能已扣款：不會自動退款。重試 = 用同一請求號重新提交（或重新查單）；取消 = 標記失敗並回退本地訂單。',
     },
     siteConnections: {
+      "converterSourceHint": "此處填寫的名稱供後台顯示，對應變數「上游名稱」；系統分配的 ID 對應較穩定的「上游 ID」，協定對應「上游協定」。它們只用於產生商品 extra，不會自動傳送。例如頁面顯示「渠道1」，可以設定傳送別名「p1」。",
       "protocolHint": "選擇上游站點所用的對接協議，不同協議需要填寫的欄位與支援的能力不同。",
       "protocolsLoading": "正在載入對接協議…",
       "protocolsLoadFailed": "對接協議列表載入失敗，暫時按通用欄位（地址 / Key / Secret）填寫。",
@@ -199,6 +201,7 @@ const messages: ExtraMessages = {
       manualReviewHint: 'The supplier may have charged us: no automatic refund. Retry resubmits with the same request number (or re-checks the order); cancel marks it failed and rolls the local order back.',
     },
     siteConnections: {
+      "converterSourceHint": "This display name maps to the Upstream name variable. The assigned ID maps to the more stable Upstream ID variable, and the adapter maps to Upstream protocol. They only help generate product extra and are not sent automatically. For example, display Channel 1 and configure alias p1 as the sent value.",
       "protocolHint": "Pick the integration protocol the upstream site speaks. Each protocol has its own fields and capabilities.",
       "protocolsLoading": "Loading protocols…",
       "protocolsLoadFailed": "Could not load the protocol list — falling back to the generic fields (URL / Key / Secret).",
