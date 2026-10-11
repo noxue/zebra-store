@@ -263,10 +263,13 @@ export interface HuifuConfig {
 }
 
 export interface ManualQrConfig {
-  qr_image_url: string
+  supported_channel_types: string[]
+  alipay_qr_image_url: string
+  wechat_qr_image_url: string
   review_base_url: string
+  notification_type: string
   telegram_token: string
-  telegram_chat_id: string
+  telegram_chat_ids: { id: string; name: string }[]
   wecom_webhook_url: string
   dingtalk_webhook_url: string
   dingtalk_secret: string
@@ -313,7 +316,8 @@ export const defaultConfigs = (siteOrigin = '', manualReviewBase = siteOrigin): 
 
   return {
   manual_qr: {
-    qr_image_url: '', review_base_url: manualReviewBase.trim().replace(/\/+$/, ''), telegram_token: '', telegram_chat_id: '',
+    supported_channel_types: ['alipay'], alipay_qr_image_url: '', wechat_qr_image_url: '',
+    review_base_url: manualReviewBase.trim().replace(/\/+$/, ''), notification_type: 'telegram', telegram_token: '', telegram_chat_ids: [],
     wecom_webhook_url: '', dingtalk_webhook_url: '', dingtalk_secret: '',
     smtp_host: '', smtp_port: '465', smtp_username: '', smtp_password: '', smtp_from: '', smtp_to: '',
     smtp_tls: false, smtp_ssl: true,
@@ -471,8 +475,16 @@ export const applyConfigs = (raw: Raw, siteOrigin = '', manualReviewBase = siteO
   const dujiaoMode = cashierOr(raw)
   return {
     manual_qr: {
-      qr_image_url: str(raw, 'qr_image_url'), review_base_url: str(raw, 'review_base_url', inferred.manual_qr.review_base_url),
-      telegram_token: str(raw, 'telegram_token'), telegram_chat_id: str(raw, 'telegram_chat_id'),
+      supported_channel_types: Array.isArray(raw.supported_channel_types)
+        ? raw.supported_channel_types.map(String).filter((v) => v === 'alipay' || v === 'wechat')
+        : [],
+      alipay_qr_image_url: str(raw, 'alipay_qr_image_url'), wechat_qr_image_url: str(raw, 'wechat_qr_image_url'),
+      review_base_url: str(raw, 'review_base_url', inferred.manual_qr.review_base_url),
+      notification_type: str(raw, 'notification_type') || (str(raw, 'telegram_token') ? 'telegram' : str(raw, 'wecom_webhook_url') ? 'wecom' : str(raw, 'dingtalk_webhook_url') ? 'dingtalk' : str(raw, 'smtp_to') ? 'email' : 'telegram'),
+      telegram_token: str(raw, 'telegram_token'),
+      telegram_chat_ids: Array.isArray(raw.telegram_chat_ids)
+        ? raw.telegram_chat_ids.filter((v): v is { id: string; name: string } => !!v && typeof v === 'object' && typeof v.id === 'string' && typeof v.name === 'string')
+        : str(raw, 'telegram_chat_id') ? [{ id: str(raw, 'telegram_chat_id'), name: '' }] : [],
       wecom_webhook_url: str(raw, 'wecom_webhook_url'), dingtalk_webhook_url: str(raw, 'dingtalk_webhook_url'),
       dingtalk_secret: str(raw, 'dingtalk_secret'), smtp_host: str(raw, 'smtp_host'),
       smtp_port: str(raw, 'smtp_port', '465'), smtp_username: str(raw, 'smtp_username'),
@@ -786,10 +798,12 @@ export const buildHuifuConfig = (c: HuifuConfig): Raw =>
 
 export const buildManualQrConfig = (c: ManualQrConfig): Raw => ({
   ...pickNonEmpty(c, [
-    'qr_image_url', 'review_base_url', 'telegram_token', 'telegram_chat_id',
+    'alipay_qr_image_url', 'wechat_qr_image_url', 'review_base_url', 'notification_type', 'telegram_token',
     'wecom_webhook_url', 'dingtalk_webhook_url', 'dingtalk_secret',
     'smtp_host', 'smtp_port', 'smtp_username', 'smtp_password', 'smtp_from', 'smtp_to',
   ]),
+  supported_channel_types: c.supported_channel_types,
+  telegram_chat_ids: c.telegram_chat_ids,
   smtp_tls: c.smtp_tls,
   smtp_ssl: c.smtp_ssl,
 })
@@ -900,6 +914,14 @@ export const channelToState = (channel: AdminPaymentChannel, siteOrigin = '', ma
   if (channel.provider_type === 'epay' && configs.epay.supported_channel_types.length === 0) {
     configs.epay.supported_channel_types = [form.channel_type]
   }
+  if (channel.provider_type === 'manual_qr') {
+    if (configs.manual_qr.supported_channel_types.length === 0) {
+      configs.manual_qr.supported_channel_types = [form.channel_type]
+      const legacyQr = str(raw || {}, 'qr_image_url')
+      if (form.channel_type === 'alipay') configs.manual_qr.alipay_qr_image_url = legacyQr
+      if (form.channel_type === 'wechat') configs.manual_qr.wechat_qr_image_url = legacyQr
+    }
+  }
   form.interaction_mode = pickInteractionMode(
     form.interaction_mode,
     interactionModesFor(form.provider_type, form.channel_type, {
@@ -911,7 +933,7 @@ export const channelToState = (channel: AdminPaymentChannel, siteOrigin = '', ma
 }
 
 /** channel_type actually sent to the backend. */
-export const resolvePayloadChannelType = (form: Pick<ChannelForm, 'provider_type' | 'channel_type'>, configs: Pick<ProviderConfigs, 'dujiaopay' | 'huifu' | 'epay'>) => {
+export const resolvePayloadChannelType = (form: Pick<ChannelForm, 'provider_type' | 'channel_type'>, configs: Pick<ProviderConfigs, 'dujiaopay' | 'huifu' | 'epay' | 'manual_qr'>) => {
   switch (form.provider_type) {
     case 'tokenpay':
       return 'usdt'
@@ -927,6 +949,10 @@ export const resolvePayloadChannelType = (form: Pick<ChannelForm, 'provider_type
       return configs.epay.supported_channel_types.includes(form.channel_type)
         ? form.channel_type
         : configs.epay.supported_channel_types[0] || form.channel_type
+    case 'manual_qr':
+      return configs.manual_qr.supported_channel_types.includes(form.channel_type)
+        ? form.channel_type
+        : configs.manual_qr.supported_channel_types[0] || form.channel_type
     default:
       return form.channel_type
   }
@@ -965,7 +991,7 @@ export const buildConfigJson = (form: ChannelForm, configs: ProviderConfigs): { 
   const fx = ['target_currency', 'exchange_rate']
   switch (section) {
     case 'manual_qr':
-      config = { ...config, ...buildManualQrConfig(configs.manual_qr) }
+      config = { ...withoutKeys(config, ['telegram_chat_id', 'qr_image_url']), ...buildManualQrConfig(configs.manual_qr) }
       break
     case 'epay':
       config = {

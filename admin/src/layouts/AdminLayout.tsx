@@ -8,7 +8,6 @@ import { localeSelectOptions, setLocale, type AppLocale } from '@/i18n'
 import { adminUrl } from '@/utils/adminBase'
 import { Button, Select, Sheet, cn, type IconComponent } from '@/components/ui'
 import { SystemUpdateDialog } from '@/components/SystemUpdateDialog'
-import { ComplianceGuard } from '@/components/compliance/ComplianceGuard'
 import { DASHBOARD_ITEM, NAV_GROUPS, isNavItemActive, resolveNav } from './nav'
 
 const GROUP_KEY = 'admin_nav_group_expanded'
@@ -243,7 +242,7 @@ export default defineComponent({
               <RouterView>
                 {{
                   default: ({ Component: View }: { Component: Component | undefined }) =>
-                    View ? (route.meta.compliance ? <ComplianceGuard>{{ default: () => h(View, { key: route.path }) }}</ComplianceGuard> : h(View, { key: route.path })) : null,
+                    View ? h(View, { key: route.path }) : null,
                 }}
               </RouterView>
             </div>

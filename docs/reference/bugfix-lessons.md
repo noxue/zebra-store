@@ -1776,8 +1776,8 @@ dujiao-next 在约 7 个月内迭代了支付（10+ 网关）、订单/库存、
 - 问题现象: 运维需要重置超管密码；重置后旧 JWT 必须立即失效。支付/财务相关后台接口需在超管确认合规声明前禁止使用。
 - 根因: —
 - 原修复方式: `server reset-password --username x [--password y]`（未提供时终端隐藏输入两次，非终端从 stdin 读一行；最小长度 8），bcrypt 哈希，UpdatePassword 同时 `token_version = token_version + 1`、`token_invalid_before = now`，写 admin_login_log(event=password_reset_by_cli)。合规：ComplianceService 启动时加载，atomic 标志；确认需三段文本逐字匹配；PaymentComplianceRequired 中间件包住 payment-channels、payments、钱包调整、充值、对账、推广佣金/提现、分销财务等路由，未确认时超管返回 403 "compliance_required"、其他管理员 "compliance_required_by_super_admin"。后台可设置用户 email_verified（true 且原为空时写当前时间，false 清空）。
-- **对我们实现的要求**: 修改管理员密码的所有路径都递增 token_version / 设置 token_invalid_before，JWT 校验比对；合规门禁作为 axum 路由层中间件，状态缓存于 AtomicBool，确认时加互斥防止并发重复写。
-- **必测用例**: CLI 重置后旧 token 请求 → 401；未确认合规时 GET /admin/payments → 403 compliance_required；确认文本少一个字 → 拒绝。
+- **当前实现（2026-10-11）**: 用户要求移除合规声明和对应门禁。支付、钱包及财务路由继续要求管理员身份和 RBAC 权限；旧确认 API 仅作兼容保留，不再参与访问控制。修改管理员密码的所有路径仍递增 token_version / 设置 token_invalid_before，JWT 校验继续比对。
+- **必测用例**: CLI 重置后旧 token 请求 → 401；未确认合规时有权限的管理员 GET /admin/payments → 成功，无凭据 → 401；旧确认 API 的幂等校验保持兼容。
 
 #### ADM-06 内置角色种子必须覆盖所有后台路由（覆盖率测试防漏）
 

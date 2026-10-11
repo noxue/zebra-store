@@ -34,12 +34,6 @@ describe('api client', () => {
     expect(useNoticeStore().items.map((i) => i.message)).toContain('参数错误')
   })
 
-  it('does not toast compliance rejections', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ status_code: 403, msg: 'compliance_required', data: null }))
-    await expect(api.get('/admin/payments')).rejects.toMatchObject({ message: 'compliance_required', notified: false })
-    expect(useNoticeStore().items).toHaveLength(0)
-  })
-
   it('clears the token on 401', async () => {
     localStorage.setItem('admin_token', 'old')
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ status_code: 401, msg: 'unauthorized', data: null }, 401))

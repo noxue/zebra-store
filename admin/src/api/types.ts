@@ -1647,20 +1647,6 @@ export interface AdminAffiliateSetting {
   withdraw_channels: string[]
 }
 
-export interface ComplianceStatus {
-  acknowledged: boolean
-  acknowledged_at?: string
-  acknowledged_by_admin_id?: number
-  acknowledged_by_username?: string
-  version?: string
-}
-
-export interface ComplianceAcknowledgePayload {
-  segment1: string
-  segment2: string
-  segment3: string
-}
-
 // ---- Dashboard (from original views/Dashboard.vue) ----
 export interface DashboardAlertItem {
   type: string

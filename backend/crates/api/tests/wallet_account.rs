@@ -197,9 +197,9 @@ async fn admin_user_wallet_view_and_errors() {
     err(&res, 400, "Invalid user ID");
 }
 
-/// Wallet admin routes are compliance gated **[C]**.
+/// Wallet admin routes work without the retired compliance acknowledgement.
 #[tokio::test]
-async fn admin_wallet_routes_are_compliance_gated() {
+async fn admin_wallet_routes_need_no_compliance_acknowledgement() {
     let app = App::without_ack().await;
     let (uid, _) = app.user("gate@example.com").await;
     for (method, uri, body) in [
@@ -217,9 +217,8 @@ async fn admin_wallet_routes_are_compliance_gated() {
         ("GET", "/api/v1/admin/wallet/recharges".to_owned(), None),
     ] {
         let res = app.admin_call(method, &uri, body).await;
-        assert_eq!(res["status_code"], 403, "{uri}: {res}");
+        assert_ne!(res["status_code"], 403, "{uri}: {res}");
     }
-    assert_eq!(app.balance(uid).await, "0.00");
     // Without an admin token the routes are 401.
     let res = app
         .call("GET", "/api/v1/admin/wallet/recharges", None, None)

@@ -87,8 +87,6 @@ import type {
   AdminWalletTransaction,
   AdRenderResponse,
   BatchResult,
-  ComplianceAcknowledgePayload,
-  ComplianceStatus,
   DashboardOverview,
   DashboardRankings,
   DashboardTrends,
@@ -112,11 +110,9 @@ export type * from './types'
 type Id = number | string
 
 export const adminAPI = {
-  // ---- auth / 2FA / compliance ----
+  // ---- auth / 2FA ----
   login: (data: AdminLoginRequest) => api.post<AdminLoginResponse>('/admin/login', data),
   verify2FA: (data: Verify2FAPayload) => api.post<AdminLoginPasswordResponse>('/admin/login/verify-2fa', data),
-  getComplianceStatus: () => api.get<ComplianceStatus>('/admin/compliance/status'),
-  acknowledgeCompliance: (data: ComplianceAcknowledgePayload) => api.post<ComplianceStatus>('/admin/compliance/acknowledge', data),
   get2FAStatus: () => api.get<TwoFAStatus>('/admin/2fa/status'),
   setup2FA: () => api.post<SetupTwoFAResponse>('/admin/2fa/setup', {}),
   enable2FA: (data: { code: string }) => api.post<EnableTwoFAResponse>('/admin/2fa/enable', data),
@@ -258,7 +254,7 @@ export const adminAPI = {
   setManualPaymentKey: (id: Id, key?: string) => api.post<{ key: string }>(`/admin/payment-channels/${id}/manual-key`, { key }),
   testManualPaymentNotice: (id: Id, review_url: string) => api.post<{ sent: boolean }>(`/admin/payment-channels/${id}/manual-test`, { review_url }),
   beginManualTelegramBind: (id: Id) => api.post<{ url: string }>(`/admin/payment-channels/${id}/manual-telegram-bind`, {}),
-  finishManualTelegramBind: (id: Id) => api.get<{ chat_id: string | null }>(`/admin/payment-channels/${id}/manual-telegram-bind`),
+  finishManualTelegramBind: (id: Id) => api.get<{ chat_ids: { id: string; name: string }[] }>(`/admin/payment-channels/${id}/manual-telegram-bind`),
   testWechatPayPublicKey: (id: Id) =>
     api.post<AdminGatewaySecurityTestResult>(`/admin/payment-channels/${id}/wechatpay-public-key-test`, {}),
   queryTradeBill: (id: Id, fileDate: string) =>

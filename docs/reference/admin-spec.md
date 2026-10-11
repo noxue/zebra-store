@@ -31,7 +31,6 @@ I covered all 62 views, the 17 dialog/tab components, the router, layout, `api/a
 - Headers: `X-Lang: <locale>` and `Authorization: Bearer <admin_token>`. JSON body unless the body is FormData.
 - Response envelope: `{status_code, msg, data, pagination?{page,page_size,total,total_page}}`. Any `status_code !== 0` is a business error and triggers a toast.
 - A 401 (HTTP status or `status_code`) on anything except `/admin/login` clears the token and redirects to `adminUrl('/login')`.
-- The messages `compliance_required` and `compliance_required_by_super_admin` are rejected silently (no toast).
 - The `blob:true` option returns `{data: Blob, headers}` and parses JSON error bodies.
 - `api.get/post/put/patch/delete`. DELETE can carry a body through `options.data`.
 
@@ -46,10 +45,7 @@ I covered all 62 views, the 17 dialog/tab components, the router, layout, `api/a
 2. Token present and the target is `/login`: go to `/`.
 3. Permissions not loaded yet: call `loadAuthz()`. On failure, log out and go to `/login`.
 4. Check the route permission.
-5. Compliance gate. For these routes: `payments, payment-channels, wallet-config, wallet-recharges, reconciliation, affiliates-withdraws, affiliates-commissions, resellers-operations, resellers-ledger-entries, resellers-balance-accounts, resellers-withdraws`:
-   - fetch compliance status;
-   - a non-super admin who has not acknowledged is sent to `compliance-required`;
-   - a super admin is let through, and the page's `ComplianceGuardWrapper` shows a blocking dialog instead.
+5. Payment and finance pages follow the same authentication and permission checks as other admin pages; no compliance acknowledgement is required.
 
 **Sidebar (`layouts/AdminLayout.vue`).** Menu items are filtered by the same permission. Group labels below are the zh-CN i18n values.
 
@@ -90,7 +86,6 @@ I covered all 62 views, the 17 dialog/tab components, the router, layout, `api/a
 - `telegram-bot/broadcasts/create` → TelegramBotBroadcastCreate
 - `telegram-bot/broadcasts/:id` → TelegramBotBroadcastDetail
 - `forbidden` → Forbidden
-- `compliance-required` → ComplianceRequired
 - `posts` redirects to `/posts/blog`
 
 **Layout behaviour**
@@ -234,13 +229,13 @@ Settings key `order_risk_control_config`:
 - `member{enabled, max_pending_orders_per_user, max_pending_orders_per_ip, max_quantity_per_product_per_order, rate_limit{…}}`
 - An "apply recommended guest policy" button.
 
-### Payments (`Payments.vue`, compliance-guarded)
+### Payments (`Payments.vue`)
 - **Filters:** status (`initiated|pending|success|failed|expired`), userId, orderId, channelId (select from channels), providerType, channelType, created range.
 - **Columns:** paymentId, orderId, channel, status, amount, feeRate, feeAmount, createdAt, action (detail).
 - **Detail** (`getPayment`) shows the AdminPayment fields: provider_trade_no, pay_url, qr_code, provider_payload, fee_policy, superseded_*.
 - **Export:** `GET payments/export` with the current filters (blob).
 
-### PaymentChannels (`PaymentChannels.vue`, `components/PaymentChannelModal.vue`, compliance-guarded)
+### PaymentChannels (`PaymentChannels.vue`, `components/PaymentChannelModal.vue`)
 - **Fee config card** (settings key `payment_config`): customer_fee_enabled, reuse_legacy_order_fee_payment.
 - **Filters:** providerType (`official, dujiaopay, epay, bepusdt, epusdt, okpay, tokenpay`); channelType (`wechat, alipay, qqpay, paypal, stripe, usdt, usdt-trc20, usdc-trc20, trx, tron-usdt, tron-trx, ethereum-usdt, ethereum-usdc, base-usdc, solana-usdt, aptos-usdt`).
 - **Columns:** id, name, type, interaction, feeRate, status, sort, action (edit, delete).
@@ -288,11 +283,11 @@ Settings key `order_risk_control_config`:
 - **Filters:** userId, email, clientIp, status (success/failed), failReason (`bad_request, captcha_required, captcha_invalid, captcha_config_invalid, captcha_verify_failed, invalid_email, invalid_credentials, email_not_verified, user_disabled, internal_error`), created range.
 - **Columns:** id, user, status, failReason, clientIp, loginSource, createdAt.
 
-### WalletRecharges (`WalletRecharges.vue`, compliance-guarded)
+### WalletRecharges (`WalletRecharges.vue`)
 - **Filters:** rechargeNo, userId, userKeyword, paymentId, channelId, providerType (`official, epay, epusdt, tokenpay, wallet`), status (`pending, success, failed, expired`), created range, paid range.
 - **Columns:** id, rechargeNo, user, payment, channel, status, amount, paidAt, createdAt.
 
-### Wallet config (`Wallet.vue`, compliance-guarded)
+### Wallet config (`Wallet.vue`)
 - Settings key `wallet_config`: `recharge_channel_ids[]` (checkbox list of active channels) and `wallet_only_payment` (switch).
 
 ### MemberLevels (`MemberLevels.vue`)
@@ -338,16 +333,16 @@ Settings key `order_risk_control_config`:
   - Filters: keyword, code, status (active/disabled).
   - Columns: checkbox, id, user, code, clicks, validOrders, conversionRate, pending, available, withdrawn, status, createdAt, action.
   - Actions: toggle one → `PATCH affiliates/users/:id/status`; batch → `PATCH affiliates/users/batch-status {profile_ids, status}`.
-- **AffiliateCommissions** (compliance-guarded):
+- **AffiliateCommissions**:
   - Filters: affiliateProfileId, keyword, orderNo, status (`pending_confirm, available, rejected, withdrawn`).
   - Columns: id, user, orderNo, baseAmount, rate, commission, status, confirmAt, availableAt, createdAt.
-- **AffiliateWithdraws** (compliance-guarded):
+- **AffiliateWithdraws**:
   - Filters: affiliateProfileId, keyword, status (`pending_review, rejected, paid`).
   - Columns: id, user, amount, channel, account, status, rejectReason, processedBy, createdAt, action.
   - Actions: pay → `POST …/:id/pay`; reject (reason prompt) → `…/:id/reject {reason}`.
 
 ### Reseller (distribution)
-- **ResellerOperationsDashboard** (compliance-guarded):
+- **ResellerOperationsDashboard**:
   - Range `today|7d|30d|custom`.
   - Lifecycle stat cards and order stat cards (fields in `AdminResellerOperationsOverview`), plus alerts.
   - Top resellers table: reseller, ordersTotal, paidOrders, activeDomains, siteConfigured, lastOrderAt.
@@ -390,13 +385,13 @@ Settings key `order_risk_control_config`:
   - Filters: keyword, resellerId, userId, productId, listed (listed/hidden), pricingMode (`inherit|markup_percent|fixed_markup|fixed_price`).
   - Columns: id, owner, product, sku, listed, pricingMode, pricingValue, updatedAt, actions (edit, reset → `DELETE product-settings/:rid/:pid?sku_id=`).
   - Editor: loads `GET product-settings/:rid/:pid` (the AdminResellerProductSettingDetail type). Fields: is_listed, pricing_mode, markup_percent, fixed_markup_amount, fixed_price_amount, all per product and per SKU. Preview → `POST …/preview` (returns items with effective_price_amount, valid, error_code). Save → `PUT {settings:[…]}`.
-- **ResellerLedgerEntries** (compliance-guarded):
+- **ResellerLedgerEntries**:
   - Filters: keyword, resellerId, userId, orderId, orderNo, type (`order_profit, refund_deduct, manual_adjust, withdraw_lock, withdraw_paid`), status (`pending_confirm, available, locked, withdrawn, canceled`), created range.
   - Columns: id, reseller, orderNo, type, amount, currency, status, availableAt, withdrawRequest, createdAt.
-- **ResellerBalanceAccounts** (compliance-guarded):
+- **ResellerBalanceAccounts**:
   - Filters: keyword, resellerId, userId, status (`normal, negative_balance, frozen_review, disabled`).
   - Columns: id, reseller, currency, available, locked, negative, status, lastLedger, updatedAt.
-- **ResellerWithdraws** (compliance-guarded):
+- **ResellerWithdraws**:
   - Filters: keyword, resellerId, userId, status (`pending, rejected, paid`), created range.
   - Columns: id, reseller, amount, currency, channel, account, status, rejectReason, processedBy, createdAt, action (pay; reject dialog with reason).
 
@@ -418,7 +413,7 @@ Settings key `order_risk_control_config`:
   - Columns: localOrderNo, parentOrderNo, upstreamOrderNo, connection, status, upstreamAmount, localCost, localSellAmount, retryCount, errorMessage, createdAt.
   - Row actions: retry, cancel.
   - Detail drawer: order info, financials (profit, local and upstream refunded), trace id, next retry, timeline, upstream refund records table, and upstream payload download (blob).
-- **Reconciliation** (compliance-guarded):
+- **Reconciliation**:
   - Filters: connection, status (`pending, running, completed, failed`), type (`status, amount, full`).
   - Columns: id, connection, type, status, timeRange, total, matched, mismatched, createdAt, actions.
   - New-job dialog {connection_id, type, time_range_start, time_range_end} → `POST reconciliation/run`.
@@ -501,8 +496,6 @@ UI strings live in an inline `textMap` inside the file, not in i18n. Four sectio
 
 ### Misc views
 - **Forbidden:** back button, or go home.
-- **ComplianceRequired:** shown to non-super admins while compliance is not acknowledged.
-- **ComplianceAckDialog:** a super admin must type 4 exact Chinese phrases (paste is blocked). The UI splits them into 4 boxes; segments 3 and 4 are merged before sending `POST compliance/acknowledge {segment1,2,3}`.
 - **SystemUpdateDialog:** version check (a 429 is rate-limited), capability, start update, poll status (running/succeeded/failed), rollback {force}, restart. Release notes are rendered with marked and DOMPurify.
 
 ---
@@ -515,12 +508,11 @@ UI strings live in an inline `textMap` inside the file, not in i18n. Four sectio
 3. **TOTP step:** a countdown until challenge expiry, after which it automatically returns to the password step. Input is a 6-digit code, or a recovery code via a toggle. Calls `POST /admin/login/verify-2fa {challenge_token, code|recovery_code}`, which returns the token.
 4. After the token arrives: `GET /admin/authz/me` returns `{admin_id, is_super, roles, policies[{subject,object,action}]}`. Policies become permission keys `METHOD:/path`. Matching supports `*` and `:param` wildcards; a super admin passes every check.
 5. **Storage (localStorage):** `admin_token`, `admin_is_super`, `admin_roles`, `admin_permissions`.
-6. **No refresh token.** Any 401 clears the token and hard-redirects to login. Logout clears storage, resets the compliance store and goes to `adminUrl('/login')`.
+6. **No refresh token.** Any 401 clears the token and hard-redirects to login. Logout clears storage and goes to `adminUrl('/login')`.
 
 ## 5. Stores, composables, i18n
 - **Stores:**
   - `auth` (above);
-  - `compliance` (fetchStatus, acknowledge, reset);
   - `notice` (toasts error/success/info with dedupe; used through `utils/notify.ts`; rendered by `NoticeHost`);
   - `confirm` (promise-based confirm dialog with default/destructive variants and rich description segments; `utils/confirm.ts`; rendered by `ConfirmDialogHost`).
 - **Composables:**
@@ -532,14 +524,13 @@ UI strings live in an inline `textMap` inside the file, not in i18n. Four sectio
 - **Utils:** format (formatMoney, getLocalizedText), sku labels, status maps, category and post-category trees, wholesalePricing, reseller helpers, callbackRoutes, clipboard, upload/image size checks, favicon, fulfillment, releaseNotes.
 - **Shared components:** ListPagination, TableSkeleton, IdCell, FileInput, RichEditor (tiptap with an image button that opens MediaPicker, plus tables, color, alignment, links), MediaPicker, captcha components.
 - **shadcn/ui primitives in `components/ui`:** alert, badge, button, card, checkbox, dialog, input, label, multi-select, popover, radio-group, select, separator, sheet, switch, table, tabs, textarea, tooltip.
-- **i18n (`i18n/index.ts`, 13.4k lines):** languages `zh-CN` (default and fallback), `zh-TW`, `en-US`. Top-level namespaces: `common, order, procurement, reconciliation, apiCredentials, siteConnections, productMappings, payment, orderDetail, admin.*` (most pages), `telegramBot, compliance`. Every string passes through `sanitizeLinkedMessage`, which escapes `@`.
+- **i18n (`i18n/index.ts`, 13.4k lines):** languages `zh-CN` (default and fallback), `zh-TW`, `en-US`. Top-level namespaces: `common, order, procurement, reconciliation, apiCredentials, siteConnections, productMappings, payment, orderDetail, admin.*` (most pages), `telegramBot`. Every string passes through `sanitizeLinkedMessage`, which escapes `@`.
 - **Theme (`style.css`):** default shadcn zinc HSL tokens plus `--chart-1..5`, with a `.dark` variant. This is the layer to replace for the anime look.
 
 ## 6. Endpoints (all under `/api/v1`, defined in `api/admin.ts`)
 
-**Auth, 2FA, compliance**
+**Auth and 2FA**
 - `POST admin/login`, `admin/login/verify-2fa`
-- `GET admin/compliance/status`, `POST admin/compliance/acknowledge`
 - `GET admin/2fa/status`; `POST admin/2fa/{setup, enable, disable, recovery-codes/regenerate}`
 - `PUT admin/password`
 

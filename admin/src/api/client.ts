@@ -45,7 +45,6 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 const API_PREFIX = '/api/v1'
 const DEFAULT_TIMEOUT_MS = 10_000
 const UPLOAD_TIMEOUT_MS = 120_000
-const SILENT_MESSAGES = new Set(['compliance_required', 'compliance_required_by_super_admin'])
 
 export function buildUrl(path: string, params?: QueryParams): string {
   const url = `${API_BASE_URL}${API_PREFIX}${path}`
@@ -87,7 +86,7 @@ function httpErrorMessage(status: number): string {
 }
 
 function fail(message: string, statusCode: number, httpStatus: number, opts: RequestOptions): never {
-  const silent = !!opts.silent || SILENT_MESSAGES.has(message)
+  const silent = !!opts.silent
   if (!silent) notifyError(message)
   throw new ApiError(message, statusCode, httpStatus, !silent)
 }

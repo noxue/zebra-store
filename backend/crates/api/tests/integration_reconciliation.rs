@@ -1,4 +1,4 @@
-//! Reconciliation (compliance-gated): run, execute, counts and resolve (UPS-21).
+//! Reconciliation: run, execute, counts and resolve (UPS-21).
 
 #![expect(
     clippy::unwrap_used,
@@ -50,12 +50,13 @@ async fn seed_procurement(
 }
 
 #[tokio::test]
-async fn compliance_gate() {
+async fn reconciliation_jobs_need_no_compliance_acknowledgement() {
     let app = IntApp::new().await;
     let res = app
         .admin("GET", "/api/v1/admin/reconciliation/jobs", None)
         .await;
-    assert_eq!(res["status_code"], 403, "{res}");
+    assert_eq!(res["status_code"], 0, "{res}");
+    assert_eq!(res["data"], json!([]));
 }
 
 // UPS-21: cost vs supplier amount, skipped / errored rows excluded, no re-entry.
@@ -63,7 +64,6 @@ async fn compliance_gate() {
 async fn ups21_run_execute_resolve() {
     let (base, supplier) = start_supplier().await;
     let app = IntApp::new().await;
-    app.acknowledge_compliance().await;
     let conn = app.connection(&base, json!({})).await;
     // Selling price 12 vs purchase 10: never compared.
     seed_procurement(&app, conn, 88, "fulfilled", "10", "L-88").await;

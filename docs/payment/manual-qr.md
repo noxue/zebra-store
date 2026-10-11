@@ -2,22 +2,22 @@
 
 ## 配置渠道
 
-在「支付渠道」新增 `manual_qr`，分别选择微信或支付宝，上传自己的收款码图片。两种渠道独立配置；启用哪个，买家结账时就能选择哪个。当前仅支持人民币订单，且仅用于商品订单。
+在「支付渠道」新增 `manual_qr`，可同时勾选支付宝和微信。每种已勾选的方式都要上传**各自的收款码**；买家结账时会看到独立的支付宝、微信选项，也可与其他支付渠道并存。当前仅支持人民币商品订单。已有单方式渠道的旧收款码会自动回填到对应方式，编辑保存后转为新配置。
 
 确认页面基础地址应指向管理后台的实际入口，例如 `https://你的域名/admin`。后台创建渠道时会按当前后台地址预填；若使用自定义后台路径，请核对这项地址。
 
 每笔支付在原应付金额至原应付金额加 `0.99` 元的 100 个两位小数金额中选一个。所有仍处于待支付状态的订单共同占用金额池；即使某次支付尝试标记为过期，在订单处理完成前也不会复用它的金额。金额池满时拒绝新支付，待已有订单处理后再试。买家看到的金额是最终应转账金额，管理员按这一金额核对实际到账。商品仍按原订单价格结算，差额是区分订单的收款尾数。
 
-可配置一种或多种通知方式：
+通知方式单选，只需配置所选的一种；未选方式的输入框不会影响通知。保存时，缺少或格式错误的字段会在输入框旁标出。
 
 | 方式 | 配置 |
 |---|---|
-| Telegram | Bot Token；保存渠道后点击「绑定 Telegram」，打开生成的 `/start` 链接并向机器人发送，再点击「检查绑定」，自动写入 Chat ID |
+| Telegram | Bot Token；保存后系统读取机器人资料并自动生成可点击的 `/start` 链接及二维码。管理员可用多个 Telegram 账号或群依次打开链接并发送 `/start`，点击「检查绑定」后会显示所有已绑定的 Chat ID 和名称；可移除后保存。 |
 | 企业微信 | 群机器人 Webhook URL，须为 `https://qyapi.weixin.qq.com/cgi-bin/webhook/send` |
 | 钉钉 | 群机器人 Webhook URL，须为 `https://oapi.dingtalk.com/robot/send`；如机器人启用了加签，填入加签密钥 |
 | 邮件 | SMTP 主机、端口、用户名、密码、发件地址、收件地址及 TLS/SSL 设置 |
 
-Telegram 自动绑定通过 Bot API 的 `getUpdates` 读取 `/start` 消息；如果机器人已有 Webhook，Telegram 不允许同时读取更新，这时可直接填写 Chat ID，或使用专门用于此渠道的机器人。Telegram 的参数链接格式与限制见[官方 Deep Linking 文档](https://core.telegram.org/bots/features#deep-linking)，更新读取限制见[官方 Bot API](https://core.telegram.org/bots/api#getupdates)。
+Telegram 自动绑定通过 Bot API 的 `getUpdates` 读取 `/start` 消息；如果机器人已有 Webhook，Telegram 不允许同时读取更新，建议使用专门用于此渠道的机器人。Telegram 的参数链接格式与限制见[官方 Deep Linking 文档](https://core.telegram.org/bots/features#deep-linking)，更新读取限制见[官方 Bot API](https://core.telegram.org/bots/api#getupdates)。同一链接可绑定多个接收账号，通知会发送给全部已绑定账号。
 
 保存后点击「测试发送」验证通知。通知含订单号、商品摘要、应收金额和确认页面链接。测试消息中的订单号是示例，不对应真实订单。
 

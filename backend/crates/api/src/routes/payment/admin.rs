@@ -189,13 +189,13 @@ async fn finish_manual_telegram_bind(
     Path(raw): Path<String>,
 ) -> ApiResult<Data<Value>> {
     let id = parse_id(&raw, keys::CHANNEL_INVALID)?;
-    let chat_id = s
+    let chats = s
         .svc
         .payment
         .channels
         .finish_manual_telegram_binding(id)
         .await?;
-    ok(json!({"chat_id": chat_id}))
+    ok(json!({"chat_ids": chats}))
 }
 
 /// `CreatePaymentChannelRequest` / `UpdatePaymentChannelRequest` body.

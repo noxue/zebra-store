@@ -7,7 +7,7 @@ use reseller_common::{App, config, data, err};
 use serde_json::json;
 
 #[tokio::test]
-async fn requires_admin_and_compliance() {
+async fn requires_admin_without_compliance_prompt() {
     let app = App::new().await;
     assert_eq!(
         app.call("GET", "/api/v1/admin/resellers/profiles", None, None)
@@ -30,30 +30,26 @@ async fn requires_admin_and_compliance() {
         .await;
     assert_eq!(list["pagination"]["total"], 0);
 
-    // Without the compliance acknowledgement the [C] finance routes are gated.
-    let gated = App::without_ack(config()).await;
+    let unacknowledged = App::without_ack(config()).await;
     for uri in [
         "/api/v1/admin/resellers/withdraws",
         "/api/v1/admin/resellers/ledger-entries",
         "/api/v1/admin/resellers/balance-accounts",
         "/api/v1/admin/resellers/operations/finance",
     ] {
-        err(
-            &gated.admin_call("GET", uri, None).await,
-            403,
-            "compliance_required",
+        assert_ne!(
+            unacknowledged.admin_call("GET", uri, None).await["status_code"],
+            403
         );
     }
-    err(
-        &gated
+    assert_ne!(
+        unacknowledged
             .admin_call("POST", "/api/v1/admin/resellers/withdraws/1/pay", None)
-            .await,
-        403,
-        "compliance_required",
+            .await["status_code"],
+        403
     );
-    // non-finance pages are not gated
     data(
-        &gated
+        &unacknowledged
             .admin_call("GET", "/api/v1/admin/resellers/profiles", None)
             .await,
     );

@@ -264,9 +264,9 @@ async fn commission_and_withdraw_review() {
     assert!(mine[0].get("reject_reason").is_none());
 }
 
-/// Finance pages are compliance gated; the user list is not.
+/// Finance pages remain available without the retired compliance acknowledgement.
 #[tokio::test]
-async fn finance_routes_are_compliance_gated() {
+async fn finance_routes_need_no_compliance_acknowledgement() {
     let app = App::without_ack().await;
     for (method, uri) in [
         ("GET", "/api/v1/admin/affiliates/commissions"),
@@ -274,7 +274,7 @@ async fn finance_routes_are_compliance_gated() {
         ("POST", "/api/v1/admin/affiliates/withdraws/1/pay"),
     ] {
         let res = app.admin_call(method, uri, None).await;
-        assert_eq!(res["status_code"], 403, "{uri}: {res}");
+        assert_ne!(res["status_code"], 403, "{uri}: {res}");
     }
     let res = app
         .admin_call("GET", "/api/v1/admin/affiliates/users", None)

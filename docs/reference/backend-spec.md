@@ -435,7 +435,7 @@ All four paths can be replaced by admin-set custom paths (settings key `callback
 
 - `POST /admin/login` and `POST /admin/login/verify-2fa` need no token (IP rate limit).
 - Everything else needs an admin JWT, then the Casbin permission check.
-- Routes marked **[C]** also need the compliance acknowledgement; without it they return 403 with `msg` `compliance_required` (or `compliance_required_by_super_admin` for non-super admins).
+- Payment and finance routes use the same admin JWT and Casbin permissions as other admin routes. The former compliance acknowledgement gate was removed.
 
 **Account, permissions and system**
 
@@ -559,7 +559,7 @@ All four paths can be replaced by admin-set custom paths (settings key `callback
 | POST | `/payment-channels/:id/wechatpay-public-key-test` | Test WeChat Pay key |
 | POST | `/payment-channels/:id/manual-key` | Generate or replace manual QR confirmation API key; plaintext returned once |
 | POST | `/payment-channels/:id/manual-test` | Send a manual QR test notification |
-| POST / GET | `/payment-channels/:id/manual-telegram-bind` | Begin / finish Telegram Chat ID binding |
+| POST / GET | `/payment-channels/:id/manual-telegram-bind` | Begin binding (`{url}`) / collect all bound Telegram recipients (`{chat_ids:[{id,name}]}`) |
 | GET | `/payment-channels/:id/trade-bill?file_date=yyyyMMdd` | Query Huifu `TRADE_BILL` generation and files |
 | GET | `/payment-channels/:id/trade-bill/download?file_date=yyyyMMdd&file_id=...` | Re-query, verify and download one Huifu trade-bill file |
 | GET | `/payments`, `/payments/export`, `/payments/:id` | Payment records |
@@ -832,7 +832,7 @@ All four paths can be replaced by admin-set custom paths (settings key `callback
 | `tokenpay` | crypto | gateway_url, notify_secret, currency, base_currency | shared endpoint; reply `ok` |
 | `okpay` | crypto | gateway_url, merchant_id, merchant_token, exchange_rate, coin | shared endpoint; reply `{"status":"success"}` |
 | `dujiaopay` | crypto (transaction or cashier mode) | api_base_url, api_key_id, api_secret, webhook_secret, chain, token_id, fiat_currency | `/payments/webhook/dujiaopay?channel_id=` |
-| `manual_qr` | wechat, alipay (merchant-owned collection QR) | qr_image_url; optional Telegram, WeCom, DingTalk, SMTP notice settings; confirmation key hash | authenticated `/manual-payments/:id/confirm`; see [manual QR guide](../payment/manual-qr.md) |
+| `manual_qr` | wechat, alipay, or both (merchant-owned collection QR) | supported_channel_types; alipay_qr_image_url / wechat_qr_image_url; notification_type (one of telegram, wecom, dingtalk, email); Telegram recipients in telegram_chat_ids [{id,name}]; confirmation key hash. Legacy qr_image_url remains readable for old single-method rows. | authenticated `/manual-payments/:id/confirm`; see [manual QR guide](../payment/manual-qr.md) |
 | `wallet` | balance | – | internal, no gateway |
 
 - **Shared endpoint** (`modules/payment/transport/http/callback/handler.go`): tries each format in this order — WeChat, OKPay, Alipay, epay, TokenPay, epusdt, BEpusdt. If none matches it returns 404 and queues an alert.

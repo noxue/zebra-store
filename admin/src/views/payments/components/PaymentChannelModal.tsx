@@ -73,6 +73,7 @@ export const PaymentChannelModal = defineComponent({
             keyValue={s.manualKey.value}
             customKey={s.customManualKey.value}
             bindUrl={s.telegramBindUrl.value}
+            errors={s.manualErrors}
             busy={s.manualActionBusy.value}
             onUpdate:customKey={(v: string) => { s.customManualKey.value = v }}
             onSetKey={() => void s.setManualKey()}
@@ -124,7 +125,7 @@ export const PaymentChannelModal = defineComponent({
         }}
       >
         <div class="grid grid-cols-1 gap-4 md:grid-cols-2 [&>*]:min-w-0">
-          <FormField label={pc('name')} required>
+          <FormField label={pc('name')} required error={s.nameError.value} data-channel-name="true">
             <Input v-model={form.name} placeholder={pc('namePlaceholder')} />
           </FormField>
           <FormField label={pc('icon')}>
@@ -133,7 +134,7 @@ export const PaymentChannelModal = defineComponent({
           <FormField label={pc('providerType')}>
             <Select modelValue={form.provider_type} onUpdate:modelValue={(v) => (form.provider_type = String(v))} options={providerOptions()} />
           </FormField>
-          {s.showChannelSelect.value && form.provider_type !== 'huifu' && (
+          {s.showChannelSelect.value && form.provider_type !== 'huifu' && form.provider_type !== 'manual_qr' && (
             <FormField label={pc('channelType')}>
               <Select modelValue={form.channel_type} onUpdate:modelValue={(v) => (form.channel_type = String(v))} options={s.channelTypeOptions.value} />
             </FormField>

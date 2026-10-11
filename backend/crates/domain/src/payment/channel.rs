@@ -18,7 +18,7 @@ pub type ChannelConfig = Map<String, Value>;
 pub const REDACTED_VALUE: &str = "••••••••";
 
 /// Config keys never echoed back to the admin UI (`sensitivePaymentConfigKeys`).
-pub const SENSITIVE_CONFIG_KEYS: [&str; 16] = [
+pub const SENSITIVE_CONFIG_KEYS: [&str; 17] = [
     "api_secret",
     "api_v3_key",
     "auth_token",
@@ -32,6 +32,7 @@ pub const SENSITIVE_CONFIG_KEYS: [&str; 16] = [
     "webhook_secret",
     "confirmation_api_key",
     "telegram_token",
+    "telegram_bind_code",
     "smtp_password",
     "dingtalk_secret",
     "confirmation_api_key_hash",
@@ -88,7 +89,7 @@ impl PaymentChannel {
     /// singleton channel; Huifu and Epay may explicitly opt into multiple methods.
     pub fn supported_channel_types(&self) -> Vec<String> {
         let provider = self.provider();
-        if (provider == provider::HUIFU || provider == "epay")
+        if (provider == provider::HUIFU || provider == "epay" || provider == provider::MANUAL_QR)
             && let Some(values) = self
                 .config_json
                 .get("supported_channel_types")
@@ -101,6 +102,7 @@ impl PaymentChannel {
                 .filter(|value| match provider.as_str() {
                     provider::HUIFU => matches!(value.as_str(), "wechat" | "alipay"),
                     "epay" => matches!(value.as_str(), "wechat" | "wxpay" | "alipay" | "qqpay"),
+                    provider::MANUAL_QR => matches!(value.as_str(), "wechat" | "alipay"),
                     _ => false,
                 })
                 .collect::<Vec<_>>();
@@ -399,6 +401,37 @@ mod tests {
             channel.supported_channel_types(),
             ["wechat", "qqpay", "alipay"]
         );
+        let legacy = PaymentChannel {
+            config_json: ChannelConfig::new(),
+            ..channel
+        };
+        assert_eq!(legacy.supported_channel_types(), ["alipay"]);
+    }
+
+    #[test]
+    fn manual_qr_exposes_both_selected_methods_and_legacy_single_method() {
+        let channel = PaymentChannel {
+            id: 1,
+            name: "Manual".into(),
+            icon: String::new(),
+            provider_type: provider::MANUAL_QR.into(),
+            channel_type: "alipay".into(),
+            interaction_mode: "qr".into(),
+            fee_rate: Amount::ZERO,
+            fixed_fee: Amount::ZERO,
+            min_amount: Amount::ZERO,
+            max_amount: Amount::ZERO,
+            hide_amount_out_range: false,
+            payment_roles: vec![],
+            member_levels: vec![],
+            payment_types: vec![super::super::types::payment_type::ORDER.into()],
+            config_json: obj(json!({"supported_channel_types": ["alipay", "wechat"]})),
+            is_active: true,
+            sort_order: 0,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        assert_eq!(channel.supported_channel_types(), ["alipay", "wechat"]);
         let legacy = PaymentChannel {
             config_json: ChannelConfig::new(),
             ..channel

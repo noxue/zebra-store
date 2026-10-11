@@ -18,6 +18,7 @@ fn main() {
     let admin_assets = assets(&admin);
     require_index("storefront", &storefront_assets);
     require_index("admin", &admin_assets);
+    require_admin_asset_base(&admin);
 
     let mut generated = String::from(
         "#[derive(Clone, Copy, Debug)]\n\
@@ -65,6 +66,15 @@ fn require_index(name: &str, assets: &[(String, PathBuf)]) {
     assert!(
         assets.iter().any(|(path, _)| path == "index.html"),
         "{name}/dist/index.html is missing; build the frontend before enabling embedded-web"
+    );
+}
+
+fn require_admin_asset_base(root: &Path) {
+    let index = fs::read_to_string(root.join("index.html"))
+        .unwrap_or_else(|error| panic!("read admin index.html: {error}"));
+    assert!(
+        index.contains("/admin/assets/"),
+        "admin assets must use /admin/assets/; set the production Vite base to /admin/"
     );
 }
 

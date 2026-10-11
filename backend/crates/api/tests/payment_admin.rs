@@ -379,16 +379,16 @@ async fn huifu_trade_bill_query_and_download() {
     assert!(body.starts_with(b"huifu_id,file_date,bill_type"));
 }
 
-/// Compliance gate and authentication on the finance routes.
+/// Payment routes require authentication without a compliance prompt.
 #[tokio::test]
-async fn compliance_and_auth_gates() {
+async fn payment_auth_without_compliance_prompt() {
     let app = PayApp::without_ack(|_| Err("offline".into())).await;
     let res = app
         .call("GET", "/api/v1/admin/payment-channels", None)
         .await;
-    assert_eq!(res["status_code"], 403, "{res}");
+    assert_eq!(res["status_code"], 0, "{res}");
     let res = app.call("GET", "/api/v1/admin/payments", None).await;
-    assert_eq!(res["status_code"], 403, "{res}");
+    assert_eq!(res["status_code"], 0, "{res}");
     let anon = app
         .call_as("GET", "/api/v1/admin/payments", None, None)
         .await;

@@ -11,7 +11,7 @@ use std::time::Duration;
 use zs_domain::payment::channel::{ChannelConfig, config_str};
 use zs_domain::payment::gateway::{
     GatewayCapabilities, GatewayCreateInput, GatewayCreateResult, GatewayError, ManualIssueNotice,
-    PaymentGateway,
+    ManualTelegramChat, PaymentGateway,
 };
 use zs_shared::money::Amount;
 
@@ -19,6 +19,98 @@ use super::common::hmac_sha256;
 use crate::identity::mail::smtp_transport;
 
 const NOTICE_TIMEOUT: Duration = Duration::from_secs(12);
+
+fn qr_image(config: &ChannelConfig, method: &str) -> String {
+    let keyed = config_str(config, &format!("{method}_qr_image_url"));
+    if !keyed.is_empty() {
+        keyed
+    } else if config
+        .get("supported_channel_types")
+        .and_then(Value::as_array)
+        .is_none()
+    {
+        // Existing single-method channels kept their image in qr_image_url.
+        config_str(config, "qr_image_url")
+    } else {
+        String::new()
+    }
+}
+
+fn selected_notification(config: &ChannelConfig) -> String {
+    let selected = config_str(config, "notification_type");
+    if !selected.is_empty() {
+        return selected;
+    }
+    // Legacy channels predate the single-destination selector.
+    if !config_str(config, "telegram_token").is_empty() {
+        "telegram".into()
+    } else if !config_str(config, "wecom_webhook_url").is_empty() {
+        "wecom".into()
+    } else if !config_str(config, "dingtalk_webhook_url").is_empty() {
+        "dingtalk".into()
+    } else if !config_str(config, "smtp_to").is_empty() {
+        "email".into()
+    } else {
+        String::new()
+    }
+}
+
+fn telegram_chat_ids(config: &ChannelConfig) -> Vec<String> {
+    let mut ids = config
+        .get("telegram_chat_ids")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|chat| chat.get("id").and_then(Value::as_str))
+        .filter(|id| !id.is_empty())
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    let legacy = config_str(config, "telegram_chat_id");
+    if !legacy.is_empty() && !ids.contains(&legacy) {
+        ids.push(legacy);
+    }
+    ids
+}
+
+fn chats_from_updates(updates: &[Value], code: &str) -> Vec<ManualTelegramChat> {
+    let expected = format!("/start {code}");
+    let mut chats = Vec::new();
+    for update in updates.iter().rev() {
+        let Some(message) = update.get("message") else {
+            continue;
+        };
+        if message.get("text").and_then(Value::as_str) != Some(expected.as_str()) {
+            continue;
+        }
+        let Some(id) = message.pointer("/chat/id").and_then(Value::as_i64) else {
+            continue;
+        };
+        let id = id.to_string();
+        if chats.iter().any(|chat: &ManualTelegramChat| chat.id == id) {
+            continue;
+        }
+        let chat = &message["chat"];
+        let display_name = [chat.get("first_name"), chat.get("last_name")]
+            .into_iter()
+            .filter_map(|v| v.and_then(Value::as_str))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let name = chat
+            .get("title")
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+            .filter(|value| !value.is_empty())
+            .or_else(|| (!display_name.is_empty()).then_some(display_name))
+            .or_else(|| {
+                chat.get("username")
+                    .and_then(Value::as_str)
+                    .map(|name| format!("@{name}"))
+            })
+            .unwrap_or_else(|| id.clone());
+        chats.push(ManualTelegramChat { id, name });
+    }
+    chats
+}
 
 fn official_webhook(raw: &str, host: &str, path: &str) -> Result<Url, GatewayError> {
     let url = Url::parse(raw).map_err(|_| GatewayError::config("invalid webhook URL"))?;
@@ -143,78 +235,78 @@ async fn send_notices(
     subject: &str,
     text: &str,
 ) -> Result<(), GatewayError> {
-    let mut failures = Vec::new();
-    let token = config_str(config, "telegram_token");
-    let chat_id = config_str(config, "telegram_chat_id");
-    let wecom = config_str(config, "wecom_webhook_url");
-    let dingtalk = config_str(config, "dingtalk_webhook_url");
-    let smtp_to = config_str(config, "smtp_to");
-    if (token.is_empty() || chat_id.is_empty())
-        && wecom.is_empty()
-        && dingtalk.is_empty()
-        && smtp_to.is_empty()
-    {
-        return Err(GatewayError::config(
+    match selected_notification(config).as_str() {
+        "telegram" => {
+            let token = config_str(config, "telegram_token");
+            let ids = telegram_chat_ids(config);
+            if token.is_empty() || ids.is_empty() {
+                return Err(GatewayError::config(
+                    "Telegram bot or recipients not configured",
+                ));
+            }
+            let url = Url::parse(&format!("https://api.telegram.org/bot{token}/sendMessage"))
+                .map_err(|_| GatewayError::config("telegram_token invalid"))?;
+            let mut failed = Vec::new();
+            for chat_id in ids {
+                if post_notice(
+                url.clone(),
+                serde_json::json!({"chat_id": chat_id, "text": text, "disable_web_page_preview": true}),
+            ).await.is_err() {
+                failed.push(chat_id);
+            }
+            }
+            if failed.is_empty() {
+                Ok(())
+            } else {
+                Err(GatewayError::request(format!(
+                    "Telegram delivery failed for {} recipient(s)",
+                    failed.len()
+                )))
+            }
+        }
+        "wecom" => {
+            let wecom = config_str(config, "wecom_webhook_url");
+            if wecom.is_empty() {
+                return Err(GatewayError::config("WeCom webhook not configured"));
+            }
+            let url = official_webhook(&wecom, "qyapi.weixin.qq.com", "/cgi-bin/webhook/send")?;
+            post_notice(
+                url,
+                serde_json::json!({"msgtype": "text", "text": {"content": text}}),
+            )
+            .await
+        }
+        "dingtalk" => {
+            let dingtalk = config_str(config, "dingtalk_webhook_url");
+            if dingtalk.is_empty() {
+                return Err(GatewayError::config("DingTalk webhook not configured"));
+            }
+            let mut url = official_webhook(&dingtalk, "oapi.dingtalk.com", "/robot/send")?;
+            let secret = config_str(config, "dingtalk_secret");
+            if !secret.is_empty() {
+                let timestamp = chrono::Utc::now().timestamp_millis();
+                let signed = format!("{timestamp}\n{secret}");
+                let signature = base64::engine::general_purpose::STANDARD
+                    .encode(hmac_sha256(secret.as_bytes(), signed.as_bytes()));
+                url.query_pairs_mut()
+                    .append_pair("timestamp", &timestamp.to_string())
+                    .append_pair("sign", &signature);
+            }
+            post_notice(
+                url,
+                serde_json::json!({"msgtype": "text", "text": {"content": text}}),
+            )
+            .await
+        }
+        "email" => {
+            if config_str(config, "smtp_to").is_empty() {
+                return Err(GatewayError::config("email recipient not configured"));
+            }
+            send_email(config, subject, text).await
+        }
+        _ => Err(GatewayError::config(
             "no notification destination configured",
-        ));
-    }
-    if !token.is_empty() && !chat_id.is_empty() {
-        let url = Url::parse(&format!("https://api.telegram.org/bot{token}/sendMessage"))
-            .map_err(|_| GatewayError::config("telegram_token invalid"))?;
-        if post_notice(
-            url,
-            serde_json::json!({"chat_id": chat_id, "text": text, "disable_web_page_preview": true}),
-        )
-        .await
-        .is_err()
-        {
-            failures.push("Telegram");
-        }
-    }
-    if !wecom.is_empty() {
-        let url = official_webhook(&wecom, "qyapi.weixin.qq.com", "/cgi-bin/webhook/send")?;
-        if post_notice(
-            url,
-            serde_json::json!({"msgtype": "text", "text": {"content": text}}),
-        )
-        .await
-        .is_err()
-        {
-            failures.push("企业微信");
-        }
-    }
-    if !dingtalk.is_empty() {
-        let mut url = official_webhook(&dingtalk, "oapi.dingtalk.com", "/robot/send")?;
-        let secret = config_str(config, "dingtalk_secret");
-        if !secret.is_empty() {
-            let timestamp = chrono::Utc::now().timestamp_millis();
-            let signed = format!("{timestamp}\n{secret}");
-            let signature = base64::engine::general_purpose::STANDARD
-                .encode(hmac_sha256(secret.as_bytes(), signed.as_bytes()));
-            url.query_pairs_mut()
-                .append_pair("timestamp", &timestamp.to_string())
-                .append_pair("sign", &signature);
-        }
-        if post_notice(
-            url,
-            serde_json::json!({"msgtype": "text", "text": {"content": text}}),
-        )
-        .await
-        .is_err()
-        {
-            failures.push("钉钉");
-        }
-    }
-    if send_email(config, subject, text).await.is_err() {
-        failures.push("邮件");
-    }
-    if failures.is_empty() {
-        Ok(())
-    } else {
-        Err(GatewayError::request(format!(
-            "notification delivery failed: {}",
-            failures.join(", ")
-        )))
+        )),
     }
 }
 
@@ -235,11 +327,53 @@ impl PaymentGateway for ManualQrGateway {
         if !matches!(channel, "wechat" | "alipay") {
             return Err(GatewayError::UnsupportedChannel(channel.to_owned()));
         }
-        let url = config_str(config, "qr_image_url");
-        if url.is_empty() || !url.starts_with('/') && !url.starts_with("https://") {
-            return Err(GatewayError::config(
-                "qr_image_url must be a site path or HTTPS URL",
-            ));
+        let methods = config
+            .get("supported_channel_types")
+            .and_then(Value::as_array);
+        let selected = if let Some(methods) = methods {
+            let methods = methods.iter().filter_map(Value::as_str).collect::<Vec<_>>();
+            if methods.is_empty()
+                || methods.iter().any(|m| !matches!(*m, "wechat" | "alipay"))
+                || !methods.contains(&channel)
+            {
+                return Err(GatewayError::config("invalid manual payment methods"));
+            }
+            methods
+        } else {
+            vec![channel]
+        };
+        for method in selected {
+            let url = qr_image(config, method);
+            if url.is_empty() || !url.starts_with('/') && !url.starts_with("https://") {
+                return Err(GatewayError::config(format!(
+                    "{method} QR image missing or invalid"
+                )));
+            }
+        }
+        let notice = selected_notification(config);
+        if !notice.is_empty()
+            && !matches!(notice.as_str(), "telegram" | "wecom" | "dingtalk" | "email")
+        {
+            return Err(GatewayError::config("notification type required"));
+        }
+        match notice.as_str() {
+            "telegram" if config_str(config, "telegram_token").is_empty() => {
+                return Err(GatewayError::config("telegram_token required"));
+            }
+            "wecom" if config_str(config, "wecom_webhook_url").is_empty() => {
+                return Err(GatewayError::config("wecom_webhook_url required"));
+            }
+            "dingtalk" if config_str(config, "dingtalk_webhook_url").is_empty() => {
+                return Err(GatewayError::config("dingtalk_webhook_url required"));
+            }
+            "email"
+                if config_str(config, "smtp_host").is_empty()
+                    || config_str(config, "smtp_from").is_empty()
+                    || config_str(config, "smtp_to").is_empty() =>
+            {
+                return Err(GatewayError::config("SMTP details required"));
+            }
+            _ => {}
         }
         for (key, host, path) in [
             (
@@ -249,6 +383,11 @@ impl PaymentGateway for ManualQrGateway {
             ),
             ("dingtalk_webhook_url", "oapi.dingtalk.com", "/robot/send"),
         ] {
+            if (key == "wecom_webhook_url" && notice != "wecom")
+                || (key == "dingtalk_webhook_url" && notice != "dingtalk")
+            {
+                continue;
+            }
             let raw = config_str(config, key);
             if !raw.is_empty() {
                 official_webhook(&raw, host, path)?;
@@ -271,7 +410,7 @@ impl PaymentGateway for ManualQrGateway {
             Value::String(format!("mql_{}", hex::encode(bytes))),
         );
         Ok(GatewayCreateResult {
-            qr_code_url: config_str(config, "qr_image_url"),
+            qr_code_url: qr_image(config, &input.channel_type),
             payload,
             ..GatewayCreateResult::default()
         })
@@ -333,22 +472,91 @@ impl PaymentGateway for ManualQrGateway {
         &self,
         config: &ChannelConfig,
         code: &str,
-    ) -> Result<Option<String>, GatewayError> {
+    ) -> Result<Vec<ManualTelegramChat>, GatewayError> {
         let response = telegram_call(config, "getUpdates?limit=100").await?;
         let Some(updates) = response.get("result").and_then(Value::as_array) else {
             return Err(GatewayError::response("Telegram updates invalid"));
         };
-        let expected = format!("/start {code}");
-        Ok(updates.iter().rev().find_map(|update| {
-            let message = update.get("message")?;
-            (message.get("text")?.as_str()? == expected)
-                .then(|| {
-                    message
-                        .pointer("/chat/id")?
-                        .as_i64()
-                        .map(|id| id.to_string())
-                })
-                .flatten()
-        }))
+        Ok(chats_from_updates(updates, code))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn config(value: Value) -> ChannelConfig {
+        value.as_object().cloned().unwrap_or_default()
+    }
+
+    #[tokio::test]
+    async fn selected_method_uses_its_own_qr_and_requires_both_images() {
+        let gateway = ManualQrGateway;
+        let mut cfg = config(json!({
+            "supported_channel_types": ["alipay", "wechat"],
+            "alipay_qr_image_url": "/uploads/alipay.png",
+            "wechat_qr_image_url": "/uploads/wechat.png",
+            "notification_type": "wecom",
+            "wecom_webhook_url": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=test"
+        }));
+        let alipay = gateway
+            .create_payment(
+                &cfg,
+                &GatewayCreateInput {
+                    channel_type: "alipay".into(),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        let wechat = gateway
+            .create_payment(
+                &cfg,
+                &GatewayCreateInput {
+                    channel_type: "wechat".into(),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(alipay.qr_code_url, "/uploads/alipay.png");
+        assert_eq!(wechat.qr_code_url, "/uploads/wechat.png");
+        cfg.remove("wechat_qr_image_url");
+        assert!(gateway.validate_config(&cfg, "alipay").is_err());
+    }
+
+    #[test]
+    fn telegram_binding_collects_multiple_named_recipients_once() {
+        let updates = json!([
+            {"message": {"text": "/start abc", "chat": {"id": 101, "first_name": "Alice", "last_name": "A"}}},
+            {"message": {"text": "/start abc", "chat": {"id": 202, "title": "Ops group"}}},
+            {"message": {"text": "/start abc", "chat": {"id": 101, "first_name": "Alice", "last_name": "A"}}},
+            {"message": {"text": "/start wrong", "chat": {"id": 303, "first_name": "Other"}}}
+        ]);
+        let chats = chats_from_updates(updates.as_array().unwrap(), "abc");
+        assert_eq!(chats.len(), 2);
+        assert_eq!(
+            chats[0],
+            ManualTelegramChat {
+                id: "101".into(),
+                name: "Alice A".into()
+            }
+        );
+        assert_eq!(
+            chats[1],
+            ManualTelegramChat {
+                id: "202".into(),
+                name: "Ops group".into()
+            }
+        );
+    }
+
+    #[test]
+    fn only_selected_notification_mode_is_used() {
+        let cfg = config(
+            json!({"notification_type":"email", "telegram_token":"old", "smtp_to":"ops@example.test"}),
+        );
+        assert_eq!(selected_notification(&cfg), "email");
     }
 }

@@ -1221,7 +1221,11 @@ const messages = {
         wallet: '錢包餘額',
       },
       manualQr: {
-        title: '人工收款碼與通知', hint: '分別建立微信和支付寶渠道。付款金額在原應付金額上加 0～0.99 元唯一尾數；確認後才發貨。',
+        title: '人工收款碼與通知', hint: '可同時啟用微信和支付寶，並分別上傳收款碼。付款金額在原應付金額上加 0～0.99 元唯一尾數；確認後才發貨。',
+        paymentMethods: '支付方式', alipay: '支付寶', wechat: '微信', alipayQr: '支付寶收款碼', wechatQr: '微信收款碼',
+        notificationType: '通知方式（選擇一種）', telegram: 'Telegram', wecom: '企業微信', dingtalk: '釘釘',
+        boundChats: '已綁定的接收帳號', noBoundChats: '尚未綁定帳號', removeChat: '移除', copyLink: '複製連結', saveToBind: '儲存渠道後會自動產生機器人綁定連結。',
+        invalidUrl: '請輸入完整的 http:// 或 https:// 位址', invalidWebhook: '請輸入對應平台的官方 Webhook URL', invalidToken: '請輸入 BotFather 提供的 Token（數字:金鑰）', invalidPort: '請輸入 1–65535 之間的連接埠', invalidEmail: '請輸入有效電子郵件地址', chooseTls: 'STARTTLS 和 SSL/TLS 只能選擇一種', fixFields: '請修正下方標紅的欄位',
         qrImage: '收款碼圖片', reviewBase: '確認網頁地址（後台域名）', telegramToken: '機器人 Token', telegramChatId: 'Chat ID',
         bindTelegram: '產生綁定連結', openTelegram: '開啟 Telegram 綁定', checkBinding: '檢查綁定結果',
         webhooks: '群機器人 Webhook', wecomWebhook: '企業微信 Webhook URL', dingtalkWebhook: '釘釘 Webhook URL', dingtalkSecret: '釘釘加簽 Secret（可選）',
@@ -4479,47 +4483,7 @@ const messages = {
       pageSummary: '第 {page} / {total} 頁',
     },
   },
-  compliance: {
-    dialog: {
-      title: '合規使用聲明確認',
-      intro: '在繼續使用支付與交易相關功能前，請仔細閱讀以下聲明：',
-      section1Title: '一、開源協議與適用範圍',
-      section1Body: '您理解並接受 Dujiao-Next 採用 GNU General Public License v3.0（GPL v3）開源協議發布，可自由用於學習、研究與商業用途。您確認所部署、銷售的所有商品（含數位商品、卡密、虛擬權益、訂閱服務等）均符合您所在國家/地區及目標用戶所在地的法律法規、行政監管要求與平台政策。',
-      section2Title: '二、合法合規承諾',
-      section2Body: '您鄭重承諾：不會利用 Dujiao-Next 實施、協助實施或以任何形式變相實施任何違反適用法律法規、行政監管要求、社會公共利益或第三方合法權益的行為；不會將本系統用於洗錢、詐欺、賭博、色情、毒品、武器交易、侵犯智慧財產權、規避制裁、非法跨境資金轉移等任何違法犯罪場景。',
-      section3Title: '三、責任自擔',
-      section3Body: '您理解並同意：作為本系統的部署者與運營者，您將獨立、完整地承擔因部署、運營、收費、退款、客戶服務及全部商業行為所產生的法律責任、稅務責任、消費者糾紛處理與監管合規風險，與 Dujiao-Next 專案作者、貢獻者及任何上游依賴方無關。',
-      section4Title: '四、聲明性質',
-      section4Body: '您理解本合規聲明僅用於一般性風險提示，不構成任何形式的法律意見、合規審查結論或對您實際使用本系統行為合法性的保證或背書。您應結合實際業務場景、運營地區、商品類型與目標用戶群體，自行諮詢專業律師、稅務師與合規顧問，並採取必要的合規與風控措施。',
-      confirmLabel: '請逐字鍵入以下確認文字（不可貼上）：',
-      submit: '我已閱讀並確認',
-      cancel: '稍後再說',
-      pasteBlocked: '為確保您已通讀聲明，確認文字必須手動鍵入',
-      mismatchHint: '輸入與期望文本不一致，請檢查',
-      punctuationHint: '提示：標點（逗號、頓號）由系統自動補全，您只需鍵入中文字符。',
-    },
-    badge: {
-      acked: '管理員已確認合規性聲明',
-      by: '由 {username} 於 {date}',
-    },
-    required: {
-      title: '需要超級管理員先完成合規聲明確認',
-      message: '為保護專案作者與運營者雙方權益，本系統的支付與財務功能在首次啟用時需由超級管理員閱讀並確認合規使用聲明。請聯絡您的超級管理員完成此一次性步驟。',
-      back: '返回 Dashboard',
-    },
-    toast: {
-      success: '合規聲明已確認，感謝您的合規承諾',
-      mismatch: '確認文字輸入有誤，請檢查後重試',
-      superRequired: '此操作需超級管理員完成',
-      failed: '提交失敗，請稍後重試',
-    },
-    review: {
-      title: '合規使用聲明（已確認）',
-      ackedTextLabel: '已確認的承諾文字',
-      metadata: '由 {username} 於 {datetime} 確認',
-      close: '關閉',
-    },
-  },
+
 }
 
 export default messages

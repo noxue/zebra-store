@@ -1,4 +1,4 @@
-//! Compliance acknowledgement endpoints and the [C] route gate.
+//! Legacy acknowledgement endpoints remain compatible, but no route is gated.
 
 #![expect(
     clippy::unwrap_used,
@@ -57,7 +57,7 @@ async fn get_json(router: &axum::Router, uri: &str) -> (StatusCode, Value) {
     )
 }
 
-// ADM-05: gate messages, exact text, super-admin only, idempotent.
+// ADM-05: legacy acknowledgement stays idempotent while finance routes remain usable.
 #[tokio::test]
 async fn acknowledge_and_gate() {
     let app = App::new().await;
@@ -66,15 +66,12 @@ async fn acknowledge_and_gate() {
         .await;
     assert_eq!(data(&st), &json!({"acknowledged": false}));
 
-    for (is_super, msg) in [
-        (true, "compliance_required"),
-        (false, "compliance_required_by_super_admin"),
-    ] {
+    for is_super in [true, false] {
         let router = gated(&app, is_super);
         for uri in ["/layer", "/extractor"] {
             let (status, body) = get_json(&router, uri).await;
             assert_eq!(status, StatusCode::OK);
-            err(&body, 403, msg);
+            assert_eq!(body, json!("ok"));
         }
     }
 

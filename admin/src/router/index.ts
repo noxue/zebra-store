@@ -30,19 +30,6 @@ router.beforeEach(async (to) => {
     return { path: '/forbidden', query: { from: to.fullPath } }
   }
 
-  // Compliance gate: non-super admins are redirected; super admins see a blocking dialog in the page.
-  if (to.meta.compliance) {
-    const { useComplianceStore } = await import('@/stores/compliance')
-    const compliance = useComplianceStore()
-    if (!compliance.loaded) {
-      try {
-        await compliance.fetchStatus()
-      } catch {
-        /* do not block navigation; the page guard handles it */
-      }
-    }
-    if (!compliance.acknowledged && !auth.isSuper) return { name: 'compliance-required' }
-  }
   return true
 })
 

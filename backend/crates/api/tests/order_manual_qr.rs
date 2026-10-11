@@ -7,6 +7,94 @@ use sea_orm::prelude::Decimal;
 use sea_orm::{ActiveModelTrait, ActiveValue::NotSet, IntoActiveModel, Set};
 use serde_json::json;
 
+/// PAY-03: one manual channel exposes two named methods beside another gateway,
+/// and each selected method reaches its own collection image.
+#[tokio::test]
+async fn manual_methods_and_epay_coexist_on_checkout_and_payment() {
+    let app = OrderApp::new().await;
+    let product = app
+        .product("multi-method", json!({"price_amount": "10.00"}))
+        .await;
+    app.secrets(product.0, product.1, 3).await;
+    let (_, token) = app.user("multi-method@example.com", 0).await;
+    let auth = Auth::Bearer(token);
+    let manual = app
+        .admin_call(
+            "POST",
+            "/api/v1/admin/payment-channels",
+            Some(json!({
+                "name":"人工收款", "provider_type":"manual_qr", "channel_type":"alipay",
+                "interaction_mode":"qr", "payment_types":["order"],
+                "config_json": {
+                    "supported_channel_types":["alipay","wechat"],
+                    "alipay_qr_image_url":"/uploads/alipay.png",
+                    "wechat_qr_image_url":"/uploads/wechat.png",
+                    "notification_type":"telegram", "telegram_token":"12345:bot_token"
+                }
+            })),
+        )
+        .await;
+    assert_eq!(manual["status_code"], 0, "{manual}");
+    let manual_id = manual["data"]["id"].as_i64().unwrap();
+    let epay = app
+        .admin_call(
+            "POST",
+            "/api/v1/admin/payment-channels",
+            Some(json!({
+                "name":"自动支付", "provider_type":"epay", "channel_type":"wechat",
+                "interaction_mode":"qr", "payment_types":["order"],
+                "config_json": {
+                    "epay_version":"v1", "gateway_url":"https://pay.example.com",
+                    "merchant_id":"M-1", "merchant_key":"test-key",
+                    "notify_url":"https://shop.example.com/api/v1/payments/callback",
+                    "return_url":"https://shop.example.com/pay"
+                }
+            })),
+        )
+        .await;
+    assert_eq!(epay["status_code"], 0, "{epay}");
+    let listed = app
+        .call("GET", "/api/v1/public/config", None, &Auth::None)
+        .await;
+    let channels = listed["data"]["payment_channels"].as_array().unwrap();
+    assert!(
+        channels
+            .iter()
+            .any(|c| c["id"] == manual_id
+                && c["supported_channel_types"] == json!(["alipay", "wechat"])),
+        "{listed}"
+    );
+    assert!(channels.iter().any(|c| c["provider_type"] == "epay"));
+    let mut amounts = Vec::new();
+    for (method, image) in [
+        ("alipay", "/uploads/alipay.png"),
+        ("wechat", "/uploads/wechat.png"),
+    ] {
+        let order = app
+            .call(
+                "POST",
+                "/api/v1/orders",
+                Some(json!({
+                    "items":[{"product_id":product.0,"sku_id":product.1,"quantity":1}]
+                })),
+                &auth,
+            )
+            .await;
+        assert_eq!(order["status_code"], 0, "{order}");
+        let payment = app.call("POST", "/api/v1/payments", Some(json!({
+            "order_no":order["data"]["order_no"], "channel_id":manual_id, "channel_type":method
+        })), &auth).await;
+        assert_eq!(payment["status_code"], 0, "{payment}");
+        assert_eq!(payment["data"]["channel_type"], method);
+        let row = app
+            .payment(payment["data"]["payment_id"].as_i64().unwrap())
+            .await;
+        assert_eq!(row.qr_code, image);
+        amounts.push(row.amount);
+    }
+    assert_ne!(amounts[0], amounts[1]);
+}
+
 /// PAY-03: simultaneous live manual payments must stay distinguishable across channels.
 #[tokio::test]
 async fn different_manual_channels_allocate_distinct_live_amounts() {

@@ -201,8 +201,8 @@ DJ 来源商品（卡密前缀 `DJ-LAB-`）；以及 `backend/scripts/seed_store
 
 | ID | 流程 | 前置条件 | 步骤 | 期望结果 | 站点 | 自动化覆盖 |
 |---|---|---|---|---|---|---|
-| B-001 | 管理员登录 | `admin` 密码 | `/admin/login` 登录 | 进入仪表盘；错误时提示统一文案 | SA | e2e:01 `admin login and compliance acknowledgement`；api:admin_auth::login_contract_and_errors |
-| B-002 | ⚠️ 合规确认 | 新站首次登录 | 进入支付相关页面 → 按提示输入 4 段确认语（禁止粘贴） | 确认后才可访问支付、钱包、分销财务等页面；非超管看到“需要超级管理员确认”页 | SA | api:identity_compliance::acknowledge_and_gate |
+| B-001 | 管理员登录 | `admin` 密码 | `/admin/login` 登录 | 进入仪表盘；错误时提示统一文案 | SA | e2e:01 `admin login`；api:admin_auth::login_contract_and_errors |
+| B-002 | 支付页面无需合规弹窗 | 新站首次登录 | 进入支付相关页面 | 不显示合规声明；拥有相应权限的管理员可直接使用 | SA | api:identity_compliance::acknowledge_and_gate |
 | B-003 | ⚠️ 管理员 2FA | — | 安全设置 → 开启两步验证 → 保存恢复码 → 退出重登 | 登录需 TOTP；5 次错误后挑战失效 | SA `/security` | api:identity_admin_2fa::status_setup_enable_and_login_with_challenge、challenge_revoked_after_five_failures |
 | B-004 | ⚠️ 修改管理员密码 | — | 安全设置 → 修改密码 | 旧 token 全部失效 | SA | api:admin_auth::password_change_revokes_old_tokens |
 | B-005 | ⚠️ 命令行重置 | 服务器 shell | `zebra-store admin reset-password --username admin` / `reset-2fa`（别名 `reset2fa`） | 重置成功，所有会话被吊销 | 服务器 | api:identity_admin_2fa::cli_resets_revoke_sessions；server:cli::tests::qa_a06_reset_2fa_names |
@@ -307,7 +307,7 @@ DJ 来源商品（卡密前缀 `DJ-LAB-`）；以及 `backend/scripts/seed_store
 |---|---|---|---|---|---|---|
 | B-100 | 返利设置 | — | 开关、比例、确认天数、最低提现额、提现渠道 | 前台推广面板按新配置显示 | SA `/affiliates/settings` | api:affiliate_admin::setup |
 | B-101 | 返利用户 | 有推广用户 | 筛选、停用/启用（单个/批量） | 停用后该推广码不再产生佣金 | SA `/affiliates/users` | api:affiliate_admin::users_list_with_stats_and_status_changes |
-| B-102 | ⚠️ 佣金与提现审核 | F-104 | 佣金记录查看；提现审核 → 打款 / 驳回（填原因） | 见 F-104 | SA | api:affiliate_admin::commission_and_withdraw_review、finance_routes_are_compliance_gated |
+| B-102 | ⚠️ 佣金与提现审核 | F-104 | 佣金记录查看；提现审核 → 打款 / 驳回（填原因） | 见 F-104 | SA | api:affiliate_admin::commission_and_withdraw_review、finance_routes_need_no_compliance_acknowledgement |
 
 ### 2.10 通知、邮件、Telegram
 

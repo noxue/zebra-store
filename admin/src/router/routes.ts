@@ -5,15 +5,12 @@ declare module 'vue-router' {
     requiresAuth?: boolean
     /** `METHOD:/admin/path` required to open the route */
     permission?: string
-    /** Payment/finance route gated by the compliance acknowledgement */
-    compliance?: boolean
   }
 }
 
 export const adminChildRoutes: RouteRecordRaw[] = [
   { path: '', name: 'dashboard-home', component: () => import('@/views/Dashboard') },
   { path: 'forbidden', name: 'forbidden', component: () => import('@/views/Forbidden') },
-  { path: 'compliance-required', name: 'compliance-required', component: () => import('@/views/ComplianceRequired') },
   // catalog
   { path: 'products', name: 'products', component: () => import('@/views/catalog/Products'), meta: { permission: 'GET:/admin/products' } },
   { path: 'categories', name: 'categories', component: () => import('@/views/catalog/Categories'), meta: { permission: 'GET:/admin/categories' } },
@@ -27,15 +24,15 @@ export const adminChildRoutes: RouteRecordRaw[] = [
   { path: 'order-risk-control', name: 'order-risk-control', component: () => import('@/views/orders/OrderRiskControl'), meta: { permission: 'GET:/admin/settings' } },
   { path: 'order-refunds', name: 'order-refunds', component: () => import('@/views/orders/OrderRefunds'), meta: { permission: 'GET:/admin/order-refunds' } },
   // payments
-  { path: 'payments', name: 'payments', component: () => import('@/views/payments/Payments'), meta: { permission: 'GET:/admin/payments', compliance: true } },
-  { path: 'payment-channels', name: 'payment-channels', component: () => import('@/views/payments/PaymentChannels'), meta: { permission: 'GET:/admin/payment-channels', compliance: true } },
+  { path: 'payments', name: 'payments', component: () => import('@/views/payments/Payments'), meta: { permission: 'GET:/admin/payments' } },
+  { path: 'payment-channels', name: 'payment-channels', component: () => import('@/views/payments/PaymentChannels'), meta: { permission: 'GET:/admin/payment-channels' } },
   { path: 'callback-routes', name: 'callback-routes', component: () => import('@/views/payments/CallbackRoutes'), meta: { permission: 'GET:/admin/settings' } },
   // users
   { path: 'users', name: 'users', component: () => import('@/views/users/Users'), meta: { permission: 'GET:/admin/users' } },
   { path: 'users/:id', name: 'user-detail', component: () => import('@/views/users/UserDetail'), meta: { permission: 'GET:/admin/users/:id' } },
   { path: 'user-login-logs', name: 'user-login-logs', component: () => import('@/views/users/UserLoginLogs'), meta: { permission: 'GET:/admin/user-login-logs' } },
-  { path: 'wallet-recharges', name: 'wallet-recharges', component: () => import('@/views/users/WalletRecharges'), meta: { permission: 'GET:/admin/wallet/recharges', compliance: true } },
-  { path: 'wallet-config', name: 'wallet-config', component: () => import('@/views/users/Wallet'), meta: { permission: 'GET:/admin/settings', compliance: true } },
+  { path: 'wallet-recharges', name: 'wallet-recharges', component: () => import('@/views/users/WalletRecharges'), meta: { permission: 'GET:/admin/wallet/recharges' } },
+  { path: 'wallet-config', name: 'wallet-config', component: () => import('@/views/users/Wallet'), meta: { permission: 'GET:/admin/settings' } },
   { path: 'member-levels', name: 'member-levels', component: () => import('@/views/users/MemberLevels'), meta: { permission: 'GET:/admin/member-levels' } },
   // content
   { path: 'posts/categories', name: 'postCategories', component: () => import('@/views/content/PostCategories'), meta: { permission: 'GET:/admin/post-categories' } },
@@ -49,24 +46,24 @@ export const adminChildRoutes: RouteRecordRaw[] = [
   // affiliate
   { path: 'affiliates/settings', name: 'affiliates-settings', component: () => import('@/views/affiliate/AffiliateSettings'), meta: { permission: 'GET:/admin/settings/affiliate' } },
   { path: 'affiliates/users', name: 'affiliates-users', component: () => import('@/views/affiliate/AffiliateUsers'), meta: { permission: 'GET:/admin/affiliates/users' } },
-  { path: 'affiliates/commissions', name: 'affiliates-commissions', component: () => import('@/views/affiliate/AffiliateCommissions'), meta: { permission: 'GET:/admin/affiliates/commissions', compliance: true } },
-  { path: 'affiliates/withdraws', name: 'affiliates-withdraws', component: () => import('@/views/affiliate/AffiliateWithdraws'), meta: { permission: 'GET:/admin/affiliates/withdraws', compliance: true } },
+  { path: 'affiliates/commissions', name: 'affiliates-commissions', component: () => import('@/views/affiliate/AffiliateCommissions'), meta: { permission: 'GET:/admin/affiliates/commissions' } },
+  { path: 'affiliates/withdraws', name: 'affiliates-withdraws', component: () => import('@/views/affiliate/AffiliateWithdraws'), meta: { permission: 'GET:/admin/affiliates/withdraws' } },
   // resellers
-  { path: 'resellers/operations', name: 'resellers-operations', component: () => import('@/views/reseller/ResellerOperationsDashboard'), meta: { permission: 'GET:/admin/resellers/operations/overview', compliance: true } },
+  { path: 'resellers/operations', name: 'resellers-operations', component: () => import('@/views/reseller/ResellerOperationsDashboard'), meta: { permission: 'GET:/admin/resellers/operations/overview' } },
   { path: 'resellers/profiles', name: 'resellers-profiles', component: () => import('@/views/reseller/ResellerProfiles'), meta: { permission: 'GET:/admin/resellers/profiles' } },
   { path: 'resellers/profiles/:id', name: 'resellers-profile-detail', component: () => import('@/views/reseller/ResellerProfileDetail'), meta: { permission: 'GET:/admin/resellers/profiles/:id' } },
   { path: 'resellers/domains', name: 'resellers-domains', component: () => import('@/views/reseller/ResellerDomains'), meta: { permission: 'GET:/admin/resellers/domains' } },
   { path: 'resellers/site-configs', name: 'resellers-site-configs', component: () => import('@/views/reseller/ResellerSiteConfigs'), meta: { permission: 'GET:/admin/resellers/site-configs' } },
   { path: 'resellers/product-settings', name: 'resellers-product-settings', component: () => import('@/views/reseller/ResellerProductSettings'), meta: { permission: 'GET:/admin/resellers/product-settings' } },
-  { path: 'resellers/ledger-entries', name: 'resellers-ledger-entries', component: () => import('@/views/reseller/ResellerLedgerEntries'), meta: { permission: 'GET:/admin/resellers/ledger-entries', compliance: true } },
-  { path: 'resellers/balance-accounts', name: 'resellers-balance-accounts', component: () => import('@/views/reseller/ResellerBalanceAccounts'), meta: { permission: 'GET:/admin/resellers/balance-accounts', compliance: true } },
-  { path: 'resellers/withdraws', name: 'resellers-withdraws', component: () => import('@/views/reseller/ResellerWithdraws'), meta: { permission: 'GET:/admin/resellers/withdraws', compliance: true } },
+  { path: 'resellers/ledger-entries', name: 'resellers-ledger-entries', component: () => import('@/views/reseller/ResellerLedgerEntries'), meta: { permission: 'GET:/admin/resellers/ledger-entries' } },
+  { path: 'resellers/balance-accounts', name: 'resellers-balance-accounts', component: () => import('@/views/reseller/ResellerBalanceAccounts'), meta: { permission: 'GET:/admin/resellers/balance-accounts' } },
+  { path: 'resellers/withdraws', name: 'resellers-withdraws', component: () => import('@/views/reseller/ResellerWithdraws'), meta: { permission: 'GET:/admin/resellers/withdraws' } },
   // integration
   { path: 'site-connections', name: 'site-connections', component: () => import('@/views/integration/SiteConnections'), meta: { permission: 'GET:/admin/site-connections' } },
   { path: 'product-mappings', name: 'product-mappings', component: () => import('@/views/integration/ProductMappings'), meta: { permission: 'GET:/admin/product-mappings' } },
   { path: 'card-converters', name: 'card-converters', component: () => import('@/views/integration/CardConverters'), meta: { permission: 'GET:/admin/card-converters' } },
   { path: 'procurement-orders', name: 'procurement-orders', component: () => import('@/views/integration/ProcurementOrders'), meta: { permission: 'GET:/admin/procurement-orders' } },
-  { path: 'reconciliation', name: 'reconciliation', component: () => import('@/views/integration/Reconciliation'), meta: { permission: 'GET:/admin/reconciliation/jobs', compliance: true } },
+  { path: 'reconciliation', name: 'reconciliation', component: () => import('@/views/integration/Reconciliation'), meta: { permission: 'GET:/admin/reconciliation/jobs' } },
   { path: 'api-credentials', name: 'api-credentials', component: () => import('@/views/integration/ApiCredentials'), meta: { permission: 'GET:/admin/api-credentials' } },
   // telegram bot
   { path: 'telegram-bot', name: 'telegram-bot', component: () => import('@/views/telegram/TelegramBot'), meta: { permission: 'GET:/admin/settings/telegram-bot' } },

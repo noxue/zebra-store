@@ -1221,7 +1221,11 @@ const messages = {
         wallet: '钱包余额',
       },
       manualQr: {
-        title: '人工收款码与通知', hint: '分别创建微信和支付宝渠道。付款金额在原应付金额上加 0～0.99 元唯一尾数；确认后才发货。',
+        title: '人工收款码与通知', hint: '可同时启用微信和支付宝，并分别上传收款码。付款金额在原应付金额上加 0～0.99 元唯一尾数；确认后才发货。',
+        paymentMethods: '支付方式', alipay: '支付宝', wechat: '微信', alipayQr: '支付宝收款码', wechatQr: '微信收款码',
+        notificationType: '通知方式（选择一种）', telegram: 'Telegram', wecom: '企业微信', dingtalk: '钉钉',
+        boundChats: '已绑定的接收账号', noBoundChats: '还没有绑定账号', removeChat: '移除', copyLink: '复制链接', saveToBind: '保存渠道后会自动生成机器人绑定链接。',
+        invalidUrl: '请输入完整的 http:// 或 https:// 地址', invalidWebhook: '请输入对应平台的官方 Webhook URL', invalidToken: '请输入 BotFather 提供的 Token（数字:密钥）', botLookupFailed: '无法读取机器人信息，请检查 Token', invalidPort: '请输入 1–65535 之间的端口', invalidEmail: '请输入有效邮箱地址', chooseTls: 'STARTTLS 和 SSL/TLS 只能选择一种', fixFields: '请修改下方标红的字段',
         qrImage: '收款码图片', reviewBase: '确认网页地址（后台域名）', telegramToken: '机器人 Token', telegramChatId: 'Chat ID',
         bindTelegram: '生成绑定链接', openTelegram: '打开 Telegram 绑定', checkBinding: '检查绑定结果',
         webhooks: '群机器人 Webhook', wecomWebhook: '企业微信 Webhook URL', dingtalkWebhook: '钉钉 Webhook URL', dingtalkSecret: '钉钉加签 Secret（可选）',
@@ -4479,47 +4483,7 @@ const messages = {
       pageSummary: '第 {page} / {total} 页',
     },
   },
-  compliance: {
-    dialog: {
-      title: '合规使用声明确认',
-      intro: '在继续使用支付与交易相关功能前，请仔细阅读以下声明：',
-      section1Title: '一、开源协议与适用范围',
-      section1Body: '您理解并接受 Dujiao-Next 采用 GNU General Public License v3.0（GPL v3）开源协议发布，可自由用于学习、研究与商业用途。您确认所部署、销售的所有商品（含数字商品、卡密、虚拟权益、订阅服务等）均符合您所在国家/地区及目标用户所在地的法律法规、行政监管要求与平台政策。',
-      section2Title: '二、合法合规承诺',
-      section2Body: '您郑重承诺：不会利用 Dujiao-Next 实施、协助实施或以任何形式变相实施任何违反适用法律法规、行政监管要求、社会公共利益或第三方合法权益的行为；不会将本系统用于洗钱、欺诈、赌博、色情、毒品、武器交易、侵犯知识产权、规避制裁、非法跨境资金转移等任何违法犯罪场景。',
-      section3Title: '三、责任自担',
-      section3Body: '您理解并同意：作为本系统的部署者与运营者，您将独立、完整地承担因部署、运营、收费、退款、客户服务及全部商业行为所产生的法律责任、税务责任、消费者纠纷处理与监管合规风险，与 Dujiao-Next 项目作者、贡献者及任何上游依赖方无关。',
-      section4Title: '四、声明性质',
-      section4Body: '您理解本合规声明仅用于一般性风险提示，不构成任何形式的法律意见、合规审查结论或对您实际使用本系统行为合法性的保证或背书。您应结合实际业务场景、运营地区、商品类型与目标用户群体，自行咨询专业律师、税务师与合规顾问，并采取必要的合规与风控措施。',
-      confirmLabel: '请逐字键入以下确认文字（不可粘贴）：',
-      submit: '我已阅读并确认',
-      cancel: '稍后再说',
-      pasteBlocked: '为确保您已通读声明，确认文字必须手动键入',
-      mismatchHint: '输入与期望文本不一致，请检查',
-      punctuationHint: '提示：标点（逗号、顿号）由系统自动补全，您只需键入中文字符。',
-    },
-    badge: {
-      acked: '管理员已确认合规性声明',
-      by: '由 {username} 于 {date}',
-    },
-    required: {
-      title: '需要超级管理员先完成合规声明确认',
-      message: '为保护项目作者与运营者双方权益，本系统的支付与财务功能在首次启用时需由超级管理员阅读并确认合规使用声明。请联系您的超级管理员完成此一次性步骤。',
-      back: '返回 Dashboard',
-    },
-    toast: {
-      success: '合规声明已确认，感谢您的合规承诺',
-      mismatch: '确认文字输入有误，请检查后重试',
-      superRequired: '该操作需超级管理员完成',
-      failed: '提交失败，请稍后重试',
-    },
-    review: {
-      title: '合规使用声明（已确认）',
-      ackedTextLabel: '已确认的承诺文字',
-      metadata: '由 {username} 于 {datetime} 确认',
-      close: '关闭',
-    },
-  },
+
 }
 
 export default messages

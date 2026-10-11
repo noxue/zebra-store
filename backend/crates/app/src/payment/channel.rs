@@ -236,7 +236,10 @@ impl ChannelService {
         Ok(format!("https://t.me/{username}?start={code}"))
     }
 
-    pub async fn finish_manual_telegram_binding(&self, id: Id) -> Result<Option<String>> {
+    pub async fn finish_manual_telegram_binding(
+        &self,
+        id: Id,
+    ) -> Result<Vec<zs_domain::payment::gateway::ManualTelegramChat>> {
         let channel = self.load(id, keys::CHANNEL_FETCH_FAILED).await?;
         if channel.provider() != provider::MANUAL_QR {
             return Err(Error::bad_request(keys::PROVIDER_NOT_SUPPORTED));
@@ -247,27 +250,67 @@ impl ChannelService {
             .and_then(serde_json::Value::as_str)
             .unwrap_or_default();
         if code.is_empty() {
-            return Ok(None);
+            return Ok(Vec::new());
         }
         let gateway = self
             .registry
             .lookup(&channel.provider_type, &channel.channel_type)
             .ok_or_else(|| Error::bad_request(keys::PROVIDER_NOT_SUPPORTED))?;
-        let Some(chat_id) = gateway
+        let chats = gateway
             .manual_telegram_chat(&channel.config_json, code)
             .await
-            .map_err(Error::from)?
-        else {
-            return Ok(None);
-        };
+            .map_err(Error::from)?;
+        let mut bound = channel
+            .config_json
+            .get("telegram_chat_ids")
+            .and_then(serde_json::Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        let legacy = channel
+            .config_json
+            .get("telegram_chat_id")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default();
+        if !legacy.is_empty()
+            && !bound
+                .iter()
+                .any(|item| item.get("id").and_then(serde_json::Value::as_str) == Some(legacy))
+        {
+            bound.push(serde_json::json!({"id": legacy, "name": ""}));
+        }
+        let mut changed = false;
+        for chat in chats {
+            let value = serde_json::json!({"id": chat.id, "name": chat.name});
+            if let Some(existing) = bound
+                .iter_mut()
+                .find(|item| item.get("id") == value.get("id"))
+            {
+                if *existing != value {
+                    *existing = value;
+                    changed = true;
+                }
+            } else {
+                bound.push(value);
+                changed = true;
+            }
+        }
+        if !changed && legacy.is_empty() {
+            return Ok(bound
+                .iter()
+                .filter_map(|value| serde_json::from_value(value.clone()).ok())
+                .collect());
+        }
         let mut draft = ChannelDraft::from(&channel);
         draft.config_json.insert(
-            "telegram_chat_id".into(),
-            serde_json::Value::String(chat_id.clone()),
+            "telegram_chat_ids".into(),
+            serde_json::Value::Array(bound.clone()),
         );
-        draft.config_json.remove("telegram_bind_code");
+        draft.config_json.remove("telegram_chat_id");
         self.repo.update(id, &draft).await?;
-        Ok(Some(chat_id))
+        Ok(bound
+            .iter()
+            .filter_map(|value| serde_json::from_value(value.clone()).ok())
+            .collect())
     }
 
     /// `ValidateChannel`: gateway-independent rules, then the provider's own config check.

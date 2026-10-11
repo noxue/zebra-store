@@ -47,5 +47,8 @@ describe('paymentLabels', () => {
       'T(admin.paymentChannels.channelTypes.baseUsdc)',
     )
     expect(resolveChannelTypeDisplay(t, { provider_type: 'epay', channel_type: 'alipay', config_json: {} })).toBe('T(admin.paymentChannels.channelTypes.alipay)')
+    expect(resolveChannelTypeDisplay(t, { provider_type: 'manual_qr', channel_type: 'alipay', config_json: { supported_channel_types: ['alipay', 'wechat'] } })).toBe(
+      'T(admin.paymentChannels.channelTypes.alipay) / T(admin.paymentChannels.channelTypes.wechat)',
+    )
   })
 })

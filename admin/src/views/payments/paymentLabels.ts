@@ -140,6 +140,12 @@ export const resolveChannelTypeDisplay = (t: Translate, channel: Pick<AdminPayme
     }
     case 'okpay':
       return resolveOkpayConfiguredCoin(cfg) || channelTypeLabel(t, channel.channel_type)
+    case 'manual_qr': {
+      const methods = Array.isArray(cfg?.supported_channel_types)
+        ? cfg.supported_channel_types.filter((value): value is string => value === 'alipay' || value === 'wechat')
+        : []
+      return (methods.length ? methods : [channel.channel_type]).map((value) => channelTypeLabel(t, value)).join(' / ')
+    }
     case 'dujiaopay': {
       if (cfgString(cfg, 'order_mode') === 'cashier' || channel.channel_type === 'dujiaopay') {
         return t('admin.paymentChannels.channelTypes.dujiaopayCashier')

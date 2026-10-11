@@ -7,6 +7,7 @@ import tailwindcss from '@tailwindcss/vite'
 const apiTarget = process.env.VITE_API_TARGET || 'http://localhost:8080'
 
 export default defineConfig({
+  base: process.env.NODE_ENV === 'production' ? '/admin/' : '/',
   plugins: [vueJsx(), tailwindcss()],
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },

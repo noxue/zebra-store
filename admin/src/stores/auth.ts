@@ -109,9 +109,6 @@ export const useAdminAuthStore = defineStore('adminAuth', {
       this.token = ''
       localStorage.removeItem(TOKEN_KEY)
       this.clearAuthzCache()
-      import('@/stores/compliance')
-        .then(({ useComplianceStore }) => useComplianceStore().reset())
-        .catch(() => undefined)
     },
   },
 })

@@ -1,4 +1,4 @@
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import i18n from '@/i18n'
 import { adminAPI } from '@/api/admin'
 import { errorMessage } from '@/api/client'
@@ -40,6 +40,7 @@ export function usePaymentChannelModal(opts: PaymentChannelModalOptions) {
   const manualReviewBase = `${siteOrigin}${ADMIN_BASE}`
   const configs = reactive<ProviderConfigs>(defaultConfigs(siteOrigin, manualReviewBase))
   const error = ref('')
+  const nameError = ref('')
   const loading = ref(false)
   const submitting = ref(false)
   const createdId = ref<number | null>(null)
@@ -47,6 +48,7 @@ export function usePaymentChannelModal(opts: PaymentChannelModalOptions) {
   const customManualKey = ref('')
   const telegramBindUrl = ref('')
   const manualActionBusy = ref(false)
+  const manualErrors = reactive<Record<string, string>>({})
   const showAdvanced = ref(false)
   /** While loading/resetting, the provider/order-mode side effects must not run. */
   let applying = false
@@ -80,8 +82,12 @@ export function usePaymentChannelModal(opts: PaymentChannelModalOptions) {
     const id = effectiveId.value
     if (!id) return
     manualActionBusy.value = true
-    try { telegramBindUrl.value = (await adminAPI.beginManualTelegramBind(id)).data?.url ?? '' }
-    catch { /* The shared API client displays the failure. */ }
+    try {
+      telegramBindUrl.value = (await adminAPI.beginManualTelegramBind(id)).data?.url ?? ''
+      delete manualErrors.telegram_token
+    } catch (err) {
+      manualErrors.telegram_token = errorMessage(err, t('admin.paymentChannels.manualQr.botLookupFailed'))
+    }
     finally { manualActionBusy.value = false }
   }
   const finishTelegramBind = async () => {
@@ -89,8 +95,8 @@ export function usePaymentChannelModal(opts: PaymentChannelModalOptions) {
     if (!id) return
     manualActionBusy.value = true
     try {
-      const chat = (await adminAPI.finishManualTelegramBind(id)).data?.chat_id
-      if (chat) { configs.manual_qr.telegram_chat_id = chat; telegramBindUrl.value = ''; notifySuccess(t('admin.common.operationSuccess')) }
+      const chats = (await adminAPI.finishManualTelegramBind(id)).data?.chat_ids ?? []
+      if (chats.length > 0) { configs.manual_qr.telegram_chat_ids = chats; notifySuccess(t('admin.common.operationSuccess')) }
     } catch {
       /* The shared API client displays the failure. */
     } finally { manualActionBusy.value = false }
@@ -205,6 +211,7 @@ export function usePaymentChannelModal(opts: PaymentChannelModalOptions) {
     createdId.value = null
     manualKey.value = ''
     telegramBindUrl.value = ''
+    Object.keys(manualErrors).forEach((key) => { delete manualErrors[key] })
     error.value = ''
     wechatTestResult.value = null
     showAdvanced.value = false
@@ -223,6 +230,11 @@ export function usePaymentChannelModal(opts: PaymentChannelModalOptions) {
       if (seq !== loadSeq || !channel) return
       const state = channelToState(channel, siteOrigin, manualReviewBase)
       assignState(state.form, state.configs)
+      telegramBindUrl.value = ''
+      Object.keys(manualErrors).forEach((key) => { delete manualErrors[key] })
+      if (state.form.provider_type === 'manual_qr' && state.configs.manual_qr.notification_type === 'telegram' && state.configs.manual_qr.telegram_token) {
+        await beginTelegramBind()
+      }
     } catch (err) {
       if (seq === loadSeq) error.value = errorMessage(err, t('admin.paymentChannels.errors.fetchFailed'))
     } finally {
@@ -243,10 +255,44 @@ export function usePaymentChannelModal(opts: PaymentChannelModalOptions) {
   )
 
   // ---- submit ----
+  const validateManual = () => {
+    Object.keys(manualErrors).forEach((key) => { delete manualErrors[key] })
+    const c = configs.manual_qr
+    const required = t('admin.common.required')
+    if (c.supported_channel_types.length === 0) manualErrors.supported_channel_types = required
+    if (c.supported_channel_types.includes('alipay') && !c.alipay_qr_image_url.trim()) manualErrors.alipay_qr_image_url = required
+    if (c.supported_channel_types.includes('wechat') && !c.wechat_qr_image_url.trim()) manualErrors.wechat_qr_image_url = required
+    if (!/^https?:\/\/[^\s/]+/.test(c.review_base_url.trim())) manualErrors.review_base_url = t('admin.paymentChannels.manualQr.invalidUrl')
+    if (!['telegram', 'wecom', 'dingtalk', 'email'].includes(c.notification_type)) manualErrors.notification_type = required
+    if (c.notification_type === 'telegram') {
+      if (!c.telegram_token.trim()) manualErrors.telegram_token = required
+      else if (c.telegram_token !== '••••••••' && !/^\d+:[A-Za-z0-9_-]+$/.test(c.telegram_token.trim())) manualErrors.telegram_token = t('admin.paymentChannels.manualQr.invalidToken')
+    }
+    if (c.notification_type === 'wecom' && !/^https:\/\/qyapi\.weixin\.qq\.com\/cgi-bin\/webhook\/send\?key=.+/.test(c.wecom_webhook_url.trim())) manualErrors.wecom_webhook_url = t('admin.paymentChannels.manualQr.invalidWebhook')
+    if (c.notification_type === 'dingtalk' && !/^https:\/\/oapi\.dingtalk\.com\/robot\/send\?access_token=.+/.test(c.dingtalk_webhook_url.trim())) manualErrors.dingtalk_webhook_url = t('admin.paymentChannels.manualQr.invalidWebhook')
+    if (c.notification_type === 'email') {
+      if (!c.smtp_host.trim()) manualErrors.smtp_host = required
+      if (!/^\d+$/.test(c.smtp_port) || Number(c.smtp_port) < 1 || Number(c.smtp_port) > 65535) manualErrors.smtp_port = t('admin.paymentChannels.manualQr.invalidPort')
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.smtp_from.trim())) manualErrors.smtp_from = t('admin.paymentChannels.manualQr.invalidEmail')
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.smtp_to.trim())) manualErrors.smtp_to = t('admin.paymentChannels.manualQr.invalidEmail')
+      if (c.smtp_tls && c.smtp_ssl) manualErrors.smtp_tls = t('admin.paymentChannels.manualQr.chooseTls')
+    }
+    return Object.keys(manualErrors).length === 0
+  }
   const submit = async () => {
     error.value = ''
+    nameError.value = ''
     if (!form.name.trim()) {
-      error.value = `${t('admin.paymentChannels.modal.name')}: ${t('admin.common.required')}`
+      nameError.value = t('admin.common.required')
+      error.value = t('admin.paymentChannels.manualQr.fixFields')
+      await nextTick()
+      document.querySelector('[data-channel-name]')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      return
+    }
+    if (form.provider_type === 'manual_qr' && !validateManual()) {
+      error.value = t('admin.paymentChannels.manualQr.fixFields')
+      await nextTick()
+      document.querySelector('[data-manual-error="true"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       return
     }
     const built = buildChannelPayload(form, configs)
@@ -263,9 +309,15 @@ export function usePaymentChannelModal(opts: PaymentChannelModalOptions) {
         if (form.provider_type === 'manual_qr' && created.data?.id) {
           createdId.value = created.data.id
           manualKey.value = (await adminAPI.setManualPaymentKey(created.data.id)).data?.key ?? ''
+          if (configs.manual_qr.notification_type === 'telegram') await beginTelegramBind()
           opts.onSuccess()
           return
         }
+      }
+      if (form.provider_type === 'manual_qr' && configs.manual_qr.notification_type === 'telegram' && configs.manual_qr.telegram_token !== '••••••••') {
+        await beginTelegramBind()
+        opts.onSuccess()
+        return
       }
       notifySuccess(t('admin.common.operationSuccess'))
       opts.close()
@@ -281,9 +333,11 @@ export function usePaymentChannelModal(opts: PaymentChannelModalOptions) {
     form,
     configs,
     error,
+    nameError,
     loading,
     submitting,
     manualActionBusy,
+    manualErrors,
     manualKey,
     customManualKey,
     telegramBindUrl,

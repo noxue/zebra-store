@@ -46,53 +46,57 @@ impl PaymentChannelReader for SeaPaymentChannelReader {
                 let channel_type = m.channel_type;
                 let provider_type = m.provider_type;
                 let config: serde_json::Value = from_json(m.config_json);
-                let configured_types = if matches!(provider_type.as_str(), "huifu" | "epay") {
-                    config
-                        .get("supported_channel_types")
-                        .and_then(serde_json::Value::as_array)
-                        .map(|values| {
-                            values
-                                .iter()
-                                .filter_map(serde_json::Value::as_str)
-                                .map(|value| value.trim().to_ascii_lowercase())
-                                .filter(|value| match provider_type.as_str() {
-                                    "huifu" => matches!(value.as_str(), "wechat" | "alipay"),
-                                    "epay" => matches!(
-                                        value.as_str(),
-                                        "wechat" | "wxpay" | "alipay" | "qqpay"
-                                    ),
-                                    _ => false,
-                                })
-                                .collect::<Vec<_>>()
-                        })
-                        .filter(|values| !values.is_empty())
-                        .unwrap_or_else(|| vec![channel_type.clone()])
-                } else if provider_type == "epusdt"
-                    && config
-                        .get("order_mode")
-                        .and_then(serde_json::Value::as_str)
-                        .is_none_or(|mode| mode != "cashier")
-                {
-                    let token = config
-                        .get("token")
-                        .and_then(serde_json::Value::as_str)
-                        .unwrap_or("usdt")
-                        .trim()
-                        .to_ascii_lowercase();
-                    let network = config
-                        .get("network")
-                        .and_then(serde_json::Value::as_str)
-                        .unwrap_or("tron")
-                        .trim()
-                        .to_ascii_lowercase();
-                    if token.is_empty() || network.is_empty() {
-                        vec![channel_type.clone()]
+                let configured_types =
+                    if matches!(provider_type.as_str(), "huifu" | "epay" | "manual_qr") {
+                        config
+                            .get("supported_channel_types")
+                            .and_then(serde_json::Value::as_array)
+                            .map(|values| {
+                                values
+                                    .iter()
+                                    .filter_map(serde_json::Value::as_str)
+                                    .map(|value| value.trim().to_ascii_lowercase())
+                                    .filter(|value| match provider_type.as_str() {
+                                        "huifu" => matches!(value.as_str(), "wechat" | "alipay"),
+                                        "epay" => matches!(
+                                            value.as_str(),
+                                            "wechat" | "wxpay" | "alipay" | "qqpay"
+                                        ),
+                                        "manual_qr" => {
+                                            matches!(value.as_str(), "wechat" | "alipay")
+                                        }
+                                        _ => false,
+                                    })
+                                    .collect::<Vec<_>>()
+                            })
+                            .filter(|values| !values.is_empty())
+                            .unwrap_or_else(|| vec![channel_type.clone()])
+                    } else if provider_type == "epusdt"
+                        && config
+                            .get("order_mode")
+                            .and_then(serde_json::Value::as_str)
+                            .is_none_or(|mode| mode != "cashier")
+                    {
+                        let token = config
+                            .get("token")
+                            .and_then(serde_json::Value::as_str)
+                            .unwrap_or("usdt")
+                            .trim()
+                            .to_ascii_lowercase();
+                        let network = config
+                            .get("network")
+                            .and_then(serde_json::Value::as_str)
+                            .unwrap_or("tron")
+                            .trim()
+                            .to_ascii_lowercase();
+                        if token.is_empty() || network.is_empty() {
+                            vec![channel_type.clone()]
+                        } else {
+                            vec![format!("{token}.{network}")]
+                        }
                     } else {
-                        vec![format!("{token}.{network}")]
-                    }
-                } else {
-                    vec![channel_type.clone()]
-                };
+                        vec![channel_type.clone()]
+                    };
                 let supported_channel_types = if configured_types.len() > 1
                     || configured_types
                         .first()

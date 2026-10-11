@@ -357,11 +357,7 @@ export default defineComponent({
                 <Alert tone={p.paymentAlert.value.level}>{p.paymentAlert.value.message}</Alert>
               </div>
             )}
-            {p.selectedChannel.value ? (
-              <div class="mb-4 rounded-zs border border-success/35 bg-success-soft p-3 text-xs font-bold text-success-text">
-                {t('payment.methodLabel')}：{p.selectedChannelName.value}
-              </div>
-            ) : !p.orderExpired.value && !p.orderCanceled.value ? (
+            {!p.selectedChannel.value && !p.orderExpired.value && !p.orderCanceled.value ? (
               <div
                 class={cn(
                   'mb-4 rounded-zs border p-3 text-xs',

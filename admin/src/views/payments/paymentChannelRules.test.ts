@@ -61,6 +61,31 @@ describe('channel type options', () => {
   })
 })
 
+describe('manual QR payment methods', () => {
+  it('saves Alipay and WeChat with separate images and one notification selector', () => {
+    const configs = defaultConfigs('https://shop.example.test', 'https://shop.example.test/admin')
+    Object.assign(configs.manual_qr, {
+      supported_channel_types: ['alipay', 'wechat'],
+      alipay_qr_image_url: '/uploads/alipay.png',
+      wechat_qr_image_url: '/uploads/wechat.png',
+      notification_type: 'wecom',
+      wecom_webhook_url: 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=sample',
+      telegram_chat_ids: [{ id: '123', name: 'Alice' }, { id: '456', name: 'Ops' }],
+    })
+    const result = buildChannelPayload(form({ provider_type: 'manual_qr', channel_type: 'alipay', payment_types: ['order'] }), configs)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.payload.channel_type).toBe('alipay')
+    expect(result.payload.config_json).toMatchObject({
+      supported_channel_types: ['alipay', 'wechat'],
+      alipay_qr_image_url: '/uploads/alipay.png',
+      wechat_qr_image_url: '/uploads/wechat.png',
+      notification_type: 'wecom',
+      telegram_chat_ids: [{ id: '123', name: 'Alice' }, { id: '456', name: 'Ops' }],
+    })
+  })
+})
+
 describe('interaction modes', () => {
   it('depends on provider, channel and order mode', () => {
     expect(interactionModesFor('epay', 'alipay', tx)).toEqual(['qr', 'redirect'])

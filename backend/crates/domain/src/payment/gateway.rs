@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use zs_shared::money::Amount;
 
@@ -24,6 +24,13 @@ pub struct ManualIssueNotice<'a> {
     pub issue: &'a str,
     pub note: &'a str,
     pub review_url: &'a str,
+}
+
+/// Telegram account or group bound to receive manual payment notices.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct ManualTelegramChat {
+    pub id: String,
+    pub name: String,
 }
 
 /// Normalized gateway failure (`contract/gateway_errors.go`); the message is for logs only.
@@ -295,7 +302,7 @@ pub trait PaymentGateway: Send + Sync + std::fmt::Debug {
         &self,
         _config: &ChannelConfig,
         _code: &str,
-    ) -> Result<Option<String>, GatewayError> {
+    ) -> Result<Vec<ManualTelegramChat>, GatewayError> {
         Err(GatewayError::Unsupported)
     }
 
