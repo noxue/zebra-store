@@ -851,7 +851,7 @@ impl ProductService {
         Ok(view)
     }
 
-    async fn decorate_public(&self, products: Vec<Product>) -> Result<Vec<PublicProduct>> {
+    async fn decorate_public(&self, mut products: Vec<Product>) -> Result<Vec<PublicProduct>> {
         if products.is_empty() {
             return Ok(Vec::new());
         }
@@ -862,6 +862,18 @@ impl ProductService {
             .filter(|p| p.fulfillment_type == FulfillmentType::Upstream)
             .map(|p| p.id)
             .collect();
+        let p1_counts = self.d.secrets.p1_stock_counts(&upstream_ids).await?;
+        for product in &mut products {
+            if product.fulfillment_type != FulfillmentType::Upstream {
+                continue;
+            }
+            for sku in &mut product.skus {
+                sku.auto_stock_available = p1_counts
+                    .iter()
+                    .find(|row| row.product_id == product.id && row.sku_id == sku.id)
+                    .map_or(0, |row| row.total);
+            }
+        }
         let mut mappings = HashMap::new();
         if !upstream_ids.is_empty()
             && let Ok(list) = self.d.lookup.upstream_mappings(&upstream_ids).await

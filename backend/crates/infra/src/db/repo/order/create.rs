@@ -12,7 +12,9 @@ use zs_domain::{Error, Id, Result};
 
 use super::{map, risk};
 use crate::db::entity::{order_items, orders};
-use crate::db::repo::catalog::ordering::{manual_stock_in, reserve_secrets_in};
+use crate::db::repo::catalog::ordering::{
+    manual_stock_in, reserve_p1_secrets_in, reserve_secrets_in,
+};
 use crate::db::repo::integration::downstream::{DUPLICATE_KEY, insert_ref_in};
 use crate::db::repo::marketing::coupon::claim_in;
 use crate::db::repo::reseller::ledger::create_order_snapshot_in;
@@ -159,6 +161,14 @@ pub(crate) async fn create_in<C: ConnectionTrait>(
                 quantity,
             } => {
                 reserve_secrets_in(conn, product_id, sku_id, quantity, child_row.id, now).await?;
+            }
+            Reservation::P1Secrets {
+                product_id,
+                sku_id,
+                quantity,
+            } => {
+                reserve_p1_secrets_in(conn, product_id, sku_id, quantity, child_row.id, now)
+                    .await?;
             }
             Reservation::ManualSku { sku_id, quantity } => {
                 manual_stock_in(conn, StockTarget::Sku(sku_id), StockMove::Reserve, quantity)

@@ -546,6 +546,8 @@ pub trait CardSecretRepo: Send + Sync {
     async fn stats(&self, product_id: Id, sku_id: Id) -> Result<SecretStats>;
     /// `(product_id, sku_id, status, count)` rows for stock aggregation (DLV-08).
     async fn stock_counts(&self, product_ids: &[Id]) -> Result<Vec<StockCount>>;
+    /// Available P1 imports on products/SKUs with an enabled converter binding.
+    async fn p1_stock_counts(&self, product_ids: &[Id]) -> Result<Vec<StockCount>>;
     async fn list_batches(
         &self,
         product_id: Id,

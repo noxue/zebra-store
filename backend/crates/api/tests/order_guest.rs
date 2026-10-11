@@ -6,6 +6,7 @@
     reason = "integration test fixtures use unwrap for concise assertions"
 )]
 
+mod integration_common;
 mod order_common;
 mod payment_common;
 
@@ -14,8 +15,11 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::{get, post};
 use axum::{Json, Router};
+use integration_common::{SUP_KEY, SUP_SECRET, remote_product, start_supplier};
 use order_common::{Auth, OrderApp};
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter, Set};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, EntityTrait, IntoActiveModel, PaginatorTrait, QueryFilter, Set,
+};
 use serde_json::{Value, json};
 use std::sync::Mutex;
 use std::sync::{
@@ -23,7 +27,7 @@ use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 use zs_domain::queue::kinds;
-use zs_infra::db::entity::{orders, payments};
+use zs_infra::db::entity::{order_items, orders, payments, procurement_orders, products};
 use zs_infra::payment::http::{HttpResponse, MockTransport};
 
 const EMAIL: &str = "Buyer@Example.com";
@@ -747,6 +751,420 @@ async fn local_card_converter_retry_does_not_consume_stock_twice() {
         .unwrap();
     assert_eq!(manual.payload, "SYSTEM-MANUAL-RAW-CARD");
     assert_eq!(mock.exchanges.load(Ordering::SeqCst), 3);
+}
+
+async fn hybrid_exchange(Json(request): Json<Value>) -> Json<Value> {
+    assert_eq!(request["extra"]["provider"], "p1");
+    assert_eq!(request["extra"]["category"], "new_activation_go");
+    let item = &request["items"][0];
+    assert_eq!(item["upstream_card"], "P1-RAW-UNIQUE-CARD");
+    Json(json!({"items":[{"index":0,"card":"P1-SYSTEM-CARD"}]}))
+}
+
+// DLV-03: a P1 import on an upstream mapped product takes the local route;
+// unmarked inventory is not selected and no supplier order is created.
+#[tokio::test]
+async fn mapped_product_prefers_marked_p1_import_and_delivers_converted_card() {
+    use zs_domain::integration::card_converter::Binding;
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(
+            listener,
+            Router::new()
+                .route("/health", get(converter_health))
+                .route("/integration/v1/exchanges", post(hybrid_exchange)),
+        )
+        .await
+        .unwrap();
+    });
+    let real_ai = local_ai_topup();
+    let app = OrderApp::with_local_converter().await;
+    let (supplier_url, supplier) = start_supplier().await;
+    supplier.set_products(vec![remote_product(
+        9,
+        "10.00",
+        json!([{
+            "id":101,"sku_code":"DEFAULT","price_amount":"10.00",
+            "stock_quantity":5,"is_active":true
+        }]),
+    )]);
+    let connected = app.admin_call("POST", "/api/v1/admin/site-connections", Some(json!({
+        "name":"Fake P2","base_url":supplier_url,"api_key":SUP_KEY,"api_secret":SUP_SECRET,
+        "protocol":"dujiao-next","callback_url":"https://buyer.example.com/api/v1/upstream/callback"
+    }))).await;
+    assert_eq!(connected["status_code"], 0, "{connected}");
+    let conn = connected["data"]["id"].as_i64().unwrap();
+    let active = app
+        .admin_call(
+            "PUT",
+            &format!("/api/v1/admin/site-connections/{conn}/status"),
+            Some(json!({"status":"active"})),
+        )
+        .await;
+    assert_eq!(active["status_code"], 0, "{active}");
+    let imported = app
+        .admin_call(
+            "POST",
+            "/api/v1/admin/product-mappings/import",
+            Some(json!({"connection_id":conn,"upstream_product_id":9})),
+        )
+        .await;
+    assert_eq!(imported["status_code"], 0, "{imported}");
+    let product = imported["data"]["local_product_id"].as_i64().unwrap();
+    products::ActiveModel {
+        id: Set(product),
+        category_id: Set(app.category),
+        is_active: Set(true),
+        purchase_type: Set("guest".into()),
+        ..Default::default()
+    }
+    .update(&app.db)
+    .await
+    .unwrap();
+    let sku = zs_infra::db::entity::product_skus::Entity::find()
+        .filter(zs_infra::db::entity::product_skus::Column::ProductId.eq(product))
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap()
+        .id;
+    for (note, secret) in [("p1", "P1-RAW-UNIQUE-CARD"), ("", "UNKNOWN-RAW-CARD")] {
+        app.services
+            .catalog
+            .card_secret
+            .create_batch(
+                zs_app::catalog::card_secret::CreateSecretsInput {
+                    product_id: product,
+                    sku_id: sku,
+                    secrets: vec![secret.into()],
+                    note: note.into(),
+                    ..Default::default()
+                },
+                zs_domain::catalog::card_secret::BatchSource::Manual,
+            )
+            .await
+            .unwrap();
+    }
+    let now = chrono::Utc::now();
+    let converter = zs_infra::db::entity::extra::card_converters::ActiveModel {
+        name: Set("AI Top-up mock".into()),
+        base_url: Set(real_ai
+            .as_ref()
+            .map_or_else(|| format!("http://{address}"), |(url, _)| url.clone())),
+        token_enc: Set(app
+            .ctx
+            .cipher
+            .encrypt(real_ai.as_ref().map_or(
+                "test-converter-token-with-sufficient-length",
+                |(_, token)| token,
+            ))
+            .unwrap()),
+        enabled: Set(true),
+        health: Set("unknown".into()),
+        consecutive_failures: Set(0),
+        last_checked_at: Set(None),
+        last_error: Set(String::new()),
+        created_at: Set(now),
+        updated_at: Set(now),
+        ..Default::default()
+    }
+    .insert(&app.db)
+    .await
+    .unwrap();
+    app.services
+        .integration
+        .card_converters
+        .save_binding(Binding {
+            id: 0,
+            product_id: product,
+            sku_id: 0,
+            converter_id: converter.id,
+            type_id: String::new(),
+            extra_template: json!({"category":"new_activation_go","provider":{"$zs_rule":{"cases":[
+            {"when":{"variable":"card.notes","operator":"eq","value":"p1"},"then":{"literal":"p1"}},
+            {"when":{"variable":"source.id","operator":"eq","value":conn.to_string()},"then":{"literal":"p2"}}
+        ],"else":{"literal":""}}}}),
+            issues: Vec::new(),
+            created_at: now,
+            updated_at: now,
+        })
+        .await
+        .unwrap();
+
+    let channel = app.epay_channel().await;
+    let created = create_and_pay(&app, product, sku, 1, channel).await;
+    let parent = app.order_by_no(created["order_no"].as_str().unwrap()).await;
+    let child = app.children(parent.id).await.remove(0);
+    let item = order_items::Entity::find()
+        .filter(order_items::Column::OrderId.eq(child.id))
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(item.fulfillment_type, "auto");
+    assert_eq!(app.secrets_with(product, "reserved").await, 1);
+    assert_eq!(
+        app.epay_callback(created["payment_id"].as_i64().unwrap(), "10.00")
+            .await,
+        "success"
+    );
+    app.services
+        .order
+        .service
+        .auto_fulfill(child.id)
+        .await
+        .unwrap();
+    let delivered = app.order(child.id).await;
+    assert_eq!(delivered.status, "completed");
+    let fulfillment = zs_infra::db::entity::fulfillments::Entity::find()
+        .filter(zs_infra::db::entity::fulfillments::Column::OrderId.eq(child.id))
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    if let Some((base, _)) = &real_ai {
+        verify_real_ai_topup(base, &fulfillment.payload, "p1").await;
+    } else {
+        assert_eq!(fulfillment.payload, "P1-SYSTEM-CARD");
+    }
+    assert_eq!(app.secrets_with(product, "available").await, 1);
+    assert_eq!(
+        procurement_orders::Entity::find()
+            .count(&app.db)
+            .await
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        supplier
+            .hits()
+            .iter()
+            .filter(|hit| hit.path == "/api/v1/upstream/orders")
+            .count(),
+        0
+    );
+}
+
+async fn p2_hybrid_exchange(Json(request): Json<Value>) -> Json<Value> {
+    assert_eq!(request["extra"]["provider"], "p2");
+    assert_eq!(request["extra"]["category"], "new_activation_go");
+    assert_eq!(request["items"][0]["upstream_card"], "P2-RAW-CARD");
+    Json(json!({"items":[{"index":0,"card":"P2-SYSTEM-CARD"}]}))
+}
+
+fn local_ai_topup() -> Option<(String, String)> {
+    let url = std::env::var("ZS_TEST_AI_TOPUP_URL").ok()?;
+    let token = std::env::var("ZS_TEST_AI_TOPUP_TOKEN").ok()?;
+    Some((url.trim_end_matches('/').to_owned(), token))
+}
+
+async fn verify_real_ai_topup(base: &str, system_card: &str, provider: &str) {
+    assert!(system_card.starts_with(&format!("{}-", provider.to_ascii_uppercase())));
+    let client = reqwest::Client::new();
+    let validated: Value = client
+        .post(format!("{base}/api/topups/validate"))
+        .json(&json!({"user_key":system_card}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(validated["valid"], true, "{validated}");
+    assert_eq!(validated["category"], "new_activation_go");
+    let submitted: Value = client.post(format!("{base}/api/topups"))
+        .json(&json!({"user_key":system_card,"session":r#"{"accessToken":"fake","sessionToken":"fake","user":{"email":"flow@example.invalid"},"expires":"2099-01-01T00:00:00Z"}"#}))
+        .send().await.unwrap().json().await.unwrap();
+    assert!(submitted["trackingId"].as_str().is_some(), "{submitted}");
+    for _ in 0..100 {
+        let history: Value = client
+            .post(format!("{base}/api/topups/query"))
+            .json(&json!({"user_key":system_card}))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        if history["items"][0]["status"] == "success" {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    panic!("AI Top-up did not complete mock {provider} redemption");
+}
+
+// UPS-07 / DLV-03: with no P1 stock the same mapped product buys from P2,
+// converts the supplier's original card, and exposes only the system card.
+#[tokio::test]
+async fn mapped_product_falls_back_to_fake_p2_supplier_and_delivers_converted_card() {
+    use zs_domain::integration::card_converter::Binding;
+
+    let (supplier_url, supplier) = start_supplier().await;
+    supplier.set_products(vec![remote_product(
+        9,
+        "10.00",
+        json!([{
+            "id":101,"sku_code":"DEFAULT","price_amount":"10.00",
+            "stock_quantity":5,"is_active":true
+        }]),
+    )]);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let converter_address = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(
+            listener,
+            Router::new()
+                .route("/health", get(converter_health))
+                .route("/integration/v1/exchanges", post(p2_hybrid_exchange)),
+        )
+        .await
+        .unwrap();
+    });
+    let real_ai = local_ai_topup();
+    let app = OrderApp::with_local_converter().await;
+    let connected = app.admin_call("POST", "/api/v1/admin/site-connections", Some(json!({
+        "name":"Fake P2","base_url":supplier_url,"api_key":SUP_KEY,"api_secret":SUP_SECRET,
+        "protocol":"dujiao-next","callback_url":"https://buyer.example.com/api/v1/upstream/callback"
+    }))).await;
+    assert_eq!(connected["status_code"], 0, "{connected}");
+    let conn = connected["data"]["id"].as_i64().unwrap();
+    let active = app
+        .admin_call(
+            "PUT",
+            &format!("/api/v1/admin/site-connections/{conn}/status"),
+            Some(json!({"status":"active"})),
+        )
+        .await;
+    assert_eq!(active["status_code"], 0, "{active}");
+    let imported = app
+        .admin_call(
+            "POST",
+            "/api/v1/admin/product-mappings/import",
+            Some(json!({
+                "connection_id":conn,"upstream_product_id":9
+            })),
+        )
+        .await;
+    assert_eq!(imported["status_code"], 0, "{imported}");
+    let product = imported["data"]["local_product_id"].as_i64().unwrap();
+    products::ActiveModel {
+        id: Set(product),
+        category_id: Set(app.category),
+        is_active: Set(true),
+        purchase_type: Set("guest".into()),
+        ..Default::default()
+    }
+    .update(&app.db)
+    .await
+    .unwrap();
+    let sku = zs_infra::db::entity::product_skus::Entity::find()
+        .filter(zs_infra::db::entity::product_skus::Column::ProductId.eq(product))
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap()
+        .id;
+    let now = chrono::Utc::now();
+    let converter = zs_infra::db::entity::extra::card_converters::ActiveModel {
+        name: Set("AI Top-up mock".into()),
+        base_url: Set(real_ai.as_ref().map_or_else(
+            || format!("http://{converter_address}"),
+            |(url, _)| url.clone(),
+        )),
+        token_enc: Set(app
+            .ctx
+            .cipher
+            .encrypt(real_ai.as_ref().map_or(
+                "test-converter-token-with-sufficient-length",
+                |(_, token)| token,
+            ))
+            .unwrap()),
+        enabled: Set(true),
+        health: Set("unknown".into()),
+        consecutive_failures: Set(0),
+        last_checked_at: Set(None),
+        last_error: Set(String::new()),
+        created_at: Set(now),
+        updated_at: Set(now),
+        ..Default::default()
+    }
+    .insert(&app.db)
+    .await
+    .unwrap();
+    app.services.integration.card_converters.save_binding(Binding {
+        id: 0, product_id: product, sku_id: 0, converter_id: converter.id,
+        type_id: String::new(),
+        extra_template: json!({"category":"new_activation_go","provider":{"$zs_rule":{"cases":[
+            {"when":{"variable":"card.notes","operator":"eq","value":"p1"},"then":{"literal":"p1"}},
+            {"when":{"variable":"source.id","operator":"eq","value":conn.to_string()},"then":{"literal":"p2"}}
+        ],"else":{"literal":""}}}}),
+        issues: Vec::new(), created_at: now, updated_at: now,
+    }).await.unwrap();
+
+    let channel = app.epay_channel().await;
+    let created = create_and_pay(&app, product, sku, 1, channel).await;
+    let parent = app.order_by_no(created["order_no"].as_str().unwrap()).await;
+    let child = app.children(parent.id).await.remove(0);
+    let item = order_items::Entity::find()
+        .filter(order_items::Column::OrderId.eq(child.id))
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(item.fulfillment_type, "upstream");
+    assert_eq!(
+        app.epay_callback(created["payment_id"].as_i64().unwrap(), "10.00")
+            .await,
+        "success"
+    );
+    let procurement = procurement_orders::Entity::find()
+        .filter(procurement_orders::Column::LocalOrderId.eq(child.id))
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    app.services
+        .integration
+        .procurement
+        .submit(procurement.id)
+        .await
+        .unwrap();
+    supplier.orders.lock().unwrap().insert(
+        88,
+        json!({
+            "order_id":88,"status":"completed","amount":"7.00",
+            "fulfillment":{"type":"auto","status":"delivered","payload":"P2-RAW-CARD"}
+        }),
+    );
+    app.services
+        .integration
+        .procurement
+        .poll(procurement.id)
+        .await
+        .unwrap();
+    let fulfillment = zs_infra::db::entity::fulfillments::Entity::find()
+        .filter(zs_infra::db::entity::fulfillments::Column::OrderId.eq(child.id))
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    if let Some((base, _)) = &real_ai {
+        verify_real_ai_topup(base, &fulfillment.payload, "p2").await;
+    } else {
+        assert_eq!(fulfillment.payload, "P2-SYSTEM-CARD");
+    }
+    assert_eq!(app.order(child.id).await.status, "delivered");
+    assert_eq!(
+        supplier
+            .hits()
+            .iter()
+            .filter(|hit| hit.path == "/api/v1/upstream/orders")
+            .count(),
+        1
+    );
 }
 
 /// PAY-02: a success notification that does not cover the order leaves it unpaid

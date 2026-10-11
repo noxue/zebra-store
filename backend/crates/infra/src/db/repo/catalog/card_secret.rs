@@ -7,7 +7,7 @@ use chrono::{DateTime, Utc};
 use sea_orm::sea_query::{Expr, ExprTrait, Query};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, DatabaseConnection, EntityTrait,
-    PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, Set, TransactionTrait,
+    PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, QueryTrait, Set, TransactionTrait,
 };
 use zs_domain::catalog::card_secret::{
     BulkTarget, CardSecret, CardSecretRepo, NewSecretBatch, SecretBatch, SecretFilter, SecretStats,
@@ -17,6 +17,7 @@ use zs_domain::{Error, Id, Result};
 use zs_shared::page::{Page, PageRequest};
 
 use super::sql::{CHUNK, ilike_sql};
+use crate::db::entity::extra::{card_converter_bindings, card_converters};
 use crate::db::entity::{card_secret_batches, card_secrets};
 use crate::db::repo::support::DbResultExt;
 
@@ -363,6 +364,68 @@ impl CardSecretRepo for SeaCardSecretRepo {
                 product_id,
                 sku_id,
                 status,
+                total,
+            })
+            .collect())
+    }
+
+    async fn p1_stock_counts(&self, product_ids: &[Id]) -> Result<Vec<StockCount>> {
+        if product_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let bindings = card_converter_bindings::Entity::find()
+            .filter(card_converter_bindings::Column::ProductId.is_in(product_ids.to_vec()))
+            .all(&self.db)
+            .await
+            .dom()?;
+        let converter_ids: Vec<Id> = bindings.iter().map(|row| row.converter_id).collect();
+        let enabled: HashSet<Id> = if converter_ids.is_empty() {
+            HashSet::new()
+        } else {
+            card_converters::Entity::find()
+                .filter(card_converters::Column::Id.is_in(converter_ids))
+                .filter(card_converters::Column::Enabled.eq(true))
+                .all(&self.db)
+                .await
+                .dom()?
+                .into_iter()
+                .map(|row| row.id)
+                .collect()
+        };
+        let batches = card_secret_batches::Entity::find()
+            .select_only()
+            .column(card_secret_batches::Column::Id)
+            .filter(card_secret_batches::Column::Note.eq("p1"))
+            .filter(card_secret_batches::Column::DeletedAt.is_null())
+            .into_query();
+        let rows: Vec<(Id, Id, i64)> = card_secrets::Entity::find()
+            .select_only()
+            .column(card_secrets::Column::ProductId)
+            .column(card_secrets::Column::SkuId)
+            .column_as(card_secrets::Column::Id.count(), "total")
+            .filter(card_secrets::Column::ProductId.is_in(product_ids.to_vec()))
+            .filter(card_secrets::Column::Status.eq(SecretStatus::Available.as_str()))
+            .filter(card_secrets::Column::DeletedAt.is_null())
+            .filter(card_secrets::Column::BatchId.in_subquery(batches))
+            .group_by(card_secrets::Column::ProductId)
+            .group_by(card_secrets::Column::SkuId)
+            .into_tuple()
+            .all(&self.db)
+            .await
+            .dom()?;
+        Ok(rows
+            .into_iter()
+            .filter(|(product_id, sku_id, _)| {
+                bindings.iter().any(|binding| {
+                    binding.product_id == *product_id
+                        && (binding.sku_id == 0 || binding.sku_id == *sku_id)
+                        && enabled.contains(&binding.converter_id)
+                })
+            })
+            .map(|(product_id, sku_id, total)| StockCount {
+                product_id,
+                sku_id,
+                status: SecretStatus::Available.as_str().into(),
                 total,
             })
             .collect())

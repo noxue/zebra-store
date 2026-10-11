@@ -16,12 +16,95 @@ use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde_json::{Value, json};
 use zs_domain::catalog::ordering::{CatalogOrdering, StockMove, StockTarget};
 use zs_infra::db::entity::{card_secrets, product_skus, products};
-use zs_infra::db::repo::catalog::ordering::SeaCatalogOrdering;
+use zs_infra::db::repo::catalog::ordering::{SeaCatalogOrdering, reserve_p1_secrets_in};
 
 const SECRETS: &str = "/api/v1/admin/card-secrets";
 
 fn status(v: &Value) -> i64 {
     v["status_code"].as_i64().unwrap()
+}
+
+// DLV-03: a mapped product may use locally imported P1 cards only when the
+// whole batch is marked p1; unrelated imports must never be routed to P1.
+#[tokio::test]
+async fn p1_imports_are_counted_and_reserved_by_batch_note() {
+    let app = TestApp::new().await;
+    let cat = category(&app, "hybrid", 0).await;
+    let p = product(
+        &app,
+        cat,
+        "hybrid-p1",
+        json!({"fulfillment_type":"upstream"}),
+    )
+    .await;
+    let product_id = id_of(&p);
+    let sku_id = data(
+        &app.get(&format!("/api/v1/admin/products/{product_id}"))
+            .await,
+    )["skus"][0]["id"]
+        .as_i64()
+        .unwrap();
+    let converter = app
+        .post(
+            "/api/v1/admin/card-converters",
+            json!({
+                "name":"test converter", "base_url":"https://converter.example.com",
+                "token":"01234567890123456789012345678901", "enabled":true
+            }),
+        )
+        .await;
+    let converter_id = data(&converter)["id"].as_i64().unwrap();
+    let binding = app
+        .put(
+            "/api/v1/admin/card-converter-bindings",
+            json!({
+                "product_id":product_id,"sku_id":0,"converter_id":converter_id,
+                "extra_template":{"category":"new_activation_go","provider":"p1"}
+            }),
+        )
+        .await;
+    assert_eq!(status(&binding), 0, "{binding}");
+    for (note, secret) in [
+        ("p1", "p1-import"),
+        ("p2", "p2-import"),
+        ("", "unmarked-import"),
+    ] {
+        let result = app
+            .post(
+                &format!("{SECRETS}/batch"),
+                json!({
+                    "product_id":product_id,"sku_id":sku_id,"note":note,"secrets":[secret]
+                }),
+            )
+            .await;
+        assert_eq!(status(&result), 0, "{result}");
+    }
+    let ordering = SeaCatalogOrdering::new(app.db.clone());
+    assert_eq!(
+        ordering
+            .p1_import_available(product_id, sku_id)
+            .await
+            .unwrap(),
+        1
+    );
+    reserve_p1_secrets_in(&app.db, product_id, sku_id, 1, 12345, Utc::now())
+        .await
+        .unwrap();
+    assert_eq!(
+        ordering
+            .p1_import_available(product_id, sku_id)
+            .await
+            .unwrap(),
+        0
+    );
+    let reserved = card_secrets::Entity::find()
+        .filter(card_secrets::Column::OrderId.eq(12345))
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(reserved.secret, "p1-import");
+    assert_eq!(count_secrets(&app, product_id, "available").await, 2);
 }
 
 async fn auto_product(app: &TestApp, cat: i64, slug: &str, skus: Value) -> (i64, Vec<i64>) {

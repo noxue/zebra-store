@@ -171,6 +171,12 @@ pub enum Reservation {
         sku_id: Id,
         quantity: u64,
     },
+    /// Reserve only imported cards whose batch note is `p1`.
+    P1Secrets {
+        product_id: Id,
+        sku_id: Id,
+        quantity: u64,
+    },
     /// Reserve manual SKU stock.
     ManualSku {
         sku_id: Id,

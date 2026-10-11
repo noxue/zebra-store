@@ -38,6 +38,10 @@ pub trait CatalogOrdering: Send + Sync {
     /// A sellable product: not deleted, active, in an active category; with active SKUs (ORD-09).
     async fn orderable_product(&self, product_id: Id) -> Result<Option<Product>>;
 
+    /// Available P1 import cards for a mapped product/SKU with a converter binding.
+    /// Only batches explicitly marked `p1` qualify for local delivery.
+    async fn p1_import_available(&self, product_id: Id, sku_id: Id) -> Result<u64>;
+
     /// Applies a manual stock movement. Reserve/Consume fail with
     /// `error.manual_stock_insufficient` when the conditional update matches no row;
     /// Release is best effort (returns rows affected). Unlimited rows (`-1`) are never touched.

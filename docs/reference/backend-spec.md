@@ -114,6 +114,7 @@ A parent order's status is recalculated from its children (`CalcParentStatus`).
 - **card_secrets**: product_id, sku_id, batch_id, secret (text), status (`available`/`reserved`/`used`), order_id, reserved_at, used_at
 - **card_secret_batches**: product_id, sku_id, batch_no (unique), source (`manual`/`csv`), total_count, note, created_by
 - 手动录入和 CSV 导入的 `note` 是该批每张卡密的来源标识；本地自动发货时转换器可用 `card.notes` 条件（所有卡密备注均匹配）或同源订单的 `card.note` 占位符/条件。混合备注的订单不能将单一备注写入 `extra`。
+- 已绑定转换器的上游商品可混用本地导入与上游采购：下单时若当前 SKU 中批次备注准确为 `p1` 的可用卡密足量，整笔订单预占这些卡密并按本地自动发货；不足则整笔走原上游采购。两条路径均在交付前转换，买家仅收到系统卡密。前台自动发卡库存展示叠加可用 P1 数量；数量判定和预占使用同一来源条件。
 - **gift_cards**: batch_id, name, code (unique; upper-cased on redeem), amount, currency, status (`active`/`redeemed`/`disabled`), expires_at, redeemed_at, redeemed_user_id, wallet_txn_id
 - **gift_card_batches**: batch_no, name, amount, currency, quantity, expires_at, created_by
 

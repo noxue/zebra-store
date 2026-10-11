@@ -251,7 +251,18 @@ impl OrderService {
                 return Err(Error::bad_request(keys::PRODUCT_PURCHASE_NOT_ALLOWED));
             }
             let sku = resolve_sku(&product, item.sku_id)?;
-            let fulfillment = product.fulfillment_type;
+            let fulfillment = if product.fulfillment_type == FulfillmentType::Upstream
+                && self
+                    .deps
+                    .catalog
+                    .p1_import_available(product.id, sku.id)
+                    .await?
+                    >= u64::try_from(item.quantity).unwrap_or(0)
+            {
+                FulfillmentType::Auto
+            } else {
+                product.fulfillment_type
+            };
             if fulfillment == FulfillmentType::Manual
                 && should_enforce_manual_sku_stock(&product, &sku)
                 && manual_sku_available(&sku) < item.quantity
@@ -674,6 +685,15 @@ impl OrderService {
                 updated_at: now,
             });
             reservations.push(match meta.fulfillment {
+                FulfillmentType::Auto
+                    if meta.product.fulfillment_type == FulfillmentType::Upstream =>
+                {
+                    Reservation::P1Secrets {
+                        product_id: meta.product.id,
+                        sku_id: meta.sku.id,
+                        quantity: u64::try_from(line.quantity).unwrap_or(0),
+                    }
+                }
                 FulfillmentType::Auto => Reservation::Secrets {
                     product_id: meta.product.id,
                     sku_id: meta.sku.id,

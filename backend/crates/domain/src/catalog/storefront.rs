@@ -312,29 +312,42 @@ fn upstream_stock(
     };
     let display = upstream_display_type(mapping);
     product.fulfillment_type = display;
-    if mapping.skus.is_empty() {
-        return state;
-    }
     let by_local: HashMap<Id, _> = mapping.skus.iter().map(|m| (m.local_sku_id, m)).collect();
     let mut unlimited = false;
     let mut total: i64 = 0;
     let mut any_active = false;
     for sku in &mut product.skus {
-        let Some(m) = by_local.get(&sku.id).filter(|m| m.upstream_is_active) else {
-            sku.upstream_stock = 0;
-            continue;
-        };
-        any_active = true;
-        sku.upstream_stock = m.upstream_stock;
-        if display == FulfillmentType::Auto {
-            sku.auto_stock_available = i64::from(m.upstream_stock);
+        let p1_available = if display == FulfillmentType::Auto {
+            sku.auto_stock_available.max(0)
         } else {
-            sku.manual_stock_total = m.upstream_stock;
+            0
+        };
+        let p2_stock = by_local
+            .get(&sku.id)
+            .filter(|m| m.upstream_is_active)
+            .map_or(0, |m| m.upstream_stock);
+        if p1_available == 0 && p2_stock == 0 {
+            sku.upstream_stock = 0;
+            if display == FulfillmentType::Manual {
+                sku.manual_stock_total = 0;
+            }
+            continue;
         }
-        if m.upstream_stock == MANUAL_STOCK_UNLIMITED {
+        any_active = true;
+        sku.upstream_stock = if p2_stock == MANUAL_STOCK_UNLIMITED {
+            MANUAL_STOCK_UNLIMITED
+        } else {
+            i32::try_from(i64::from(p2_stock).saturating_add(p1_available)).unwrap_or(i32::MAX)
+        };
+        if display == FulfillmentType::Auto {
+            sku.auto_stock_available = i64::from(sku.upstream_stock);
+        } else {
+            sku.manual_stock_total = p2_stock;
+        }
+        if p2_stock == MANUAL_STOCK_UNLIMITED {
             unlimited = true;
         } else {
-            total += i64::from(m.upstream_stock);
+            total += i64::from(sku.upstream_stock);
         }
     }
     if !any_active {
@@ -882,5 +895,57 @@ mod tests {
             (v.fulfillment_type, v.stock_status, v.auto_stock_available),
             (FulfillmentType::Auto, StockStatus::Unlimited, -1)
         );
+    }
+
+    #[test]
+    fn p1_import_stock_keeps_mapped_auto_product_sellable_when_p2_is_empty() {
+        let mut p = product(vec![sku(1, "A", true)]);
+        p.fulfillment_type = FulfillmentType::Upstream;
+        p.skus[0].auto_stock_available = 2;
+        let mapping = UpstreamMapping {
+            local_product_id: p.id,
+            upstream_fulfillment_type: "auto".into(),
+            skus: vec![UpstreamSkuMapping {
+                local_sku_id: 1,
+                upstream_stock: 0,
+                upstream_is_active: true,
+            }],
+        };
+        let view = decorate_public_product(
+            p,
+            &Decoration {
+                upstream: Some(&mapping),
+                ..Decoration::default()
+            },
+        );
+        assert!(!view.is_sold_out);
+        assert_eq!(view.auto_stock_available, 2);
+        assert_eq!(view.skus[0].upstream_stock, 2);
+    }
+
+    #[test]
+    fn p1_import_stock_keeps_product_sellable_when_p2_sku_is_inactive() {
+        let mut p = product(vec![sku(1, "A", true)]);
+        p.fulfillment_type = FulfillmentType::Upstream;
+        p.skus[0].auto_stock_available = 1;
+        let mapping = UpstreamMapping {
+            local_product_id: p.id,
+            upstream_fulfillment_type: "auto".into(),
+            skus: vec![UpstreamSkuMapping {
+                local_sku_id: 1,
+                upstream_stock: 9,
+                upstream_is_active: false,
+            }],
+        };
+        let view = decorate_public_product(
+            p,
+            &Decoration {
+                upstream: Some(&mapping),
+                ..Decoration::default()
+            },
+        );
+        assert!(!view.is_sold_out);
+        assert_eq!(view.auto_stock_available, 1);
+        assert_eq!(view.skus[0].upstream_stock, 1);
     }
 }

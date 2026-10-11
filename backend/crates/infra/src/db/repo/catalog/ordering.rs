@@ -7,8 +7,8 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use sea_orm::sea_query::{Expr, ExprTrait, LockBehavior, LockType};
 use sea_orm::{
-    ColumnTrait, Condition, ConnectionTrait, DatabaseConnection, EntityTrait, QueryFilter,
-    QueryOrder, QuerySelect, TransactionTrait,
+    ColumnTrait, Condition, ConnectionTrait, DatabaseConnection, EntityTrait, PaginatorTrait,
+    QueryFilter, QueryOrder, QuerySelect, QueryTrait, TransactionTrait,
 };
 use zs_domain::catalog::card_secret::{CardSecret, SecretStatus, keys as secret_keys};
 use zs_domain::catalog::ordering::{CatalogOrdering, StockMove, StockTarget};
@@ -18,7 +18,8 @@ use zs_domain::{Error, Id, Result};
 
 use super::card_secret::secret_to_domain;
 use super::product::load_product;
-use crate::db::entity::{card_secrets, product_skus, products};
+use crate::db::entity::extra::{card_converter_bindings, card_converters};
+use crate::db::entity::{card_secret_batches, card_secrets, product_skus, products};
 use crate::db::repo::support::DbResultExt;
 
 /// SeaORM implementation of [`CatalogOrdering`].
@@ -118,6 +119,40 @@ pub async fn reserve_secrets_in<C: ConnectionTrait>(
     order_id: Id,
     now: DateTime<Utc>,
 ) -> Result<Vec<Id>> {
+    reserve_secrets_with_note_in(conn, product_id, sku_id, quantity, order_id, now, None).await
+}
+
+/// P1 imports are selected by batch provenance, never by a card's text or the
+/// product's current upstream mapping.
+pub async fn reserve_p1_secrets_in<C: ConnectionTrait>(
+    conn: &C,
+    product_id: Id,
+    sku_id: Id,
+    quantity: u64,
+    order_id: Id,
+    now: DateTime<Utc>,
+) -> Result<Vec<Id>> {
+    reserve_secrets_with_note_in(
+        conn,
+        product_id,
+        sku_id,
+        quantity,
+        order_id,
+        now,
+        Some("p1"),
+    )
+    .await
+}
+
+async fn reserve_secrets_with_note_in<C: ConnectionTrait>(
+    conn: &C,
+    product_id: Id,
+    sku_id: Id,
+    quantity: u64,
+    order_id: Id,
+    now: DateTime<Utc>,
+    note: Option<&str>,
+) -> Result<Vec<Id>> {
     let insufficient = || Error::bad_request(secret_keys::INSUFFICIENT);
     if product_id <= 0 || quantity == 0 || order_id <= 0 {
         return Err(insufficient());
@@ -130,6 +165,16 @@ pub async fn reserve_secrets_in<C: ConnectionTrait>(
         .filter(card_secrets::Column::DeletedAt.is_null());
     if sku_id > 0 {
         q = q.filter(card_secrets::Column::SkuId.eq(sku_id));
+    }
+    if let Some(note) = note {
+        let batches = card_secret_batches::Entity::find()
+            .select_only()
+            .column(card_secret_batches::Column::Id)
+            .filter(card_secret_batches::Column::ProductId.eq(product_id))
+            .filter(card_secret_batches::Column::Note.eq(note))
+            .filter(card_secret_batches::Column::DeletedAt.is_null())
+            .into_query();
+        q = q.filter(card_secrets::Column::BatchId.in_subquery(batches));
     }
     let ids: Vec<Id> = q
         .order_by_asc(card_secrets::Column::Id)
@@ -242,6 +287,50 @@ pub async fn mark_secrets_used_in<C: ConnectionTrait>(
 impl CatalogOrdering for SeaCatalogOrdering {
     async fn orderable_product(&self, product_id: Id) -> Result<Option<Product>> {
         load_product(&self.db, product_id, SkuScope::Active, true).await
+    }
+
+    async fn p1_import_available(&self, product_id: Id, sku_id: Id) -> Result<u64> {
+        let bindings = card_converter_bindings::Entity::find()
+            .filter(card_converter_bindings::Column::ProductId.eq(product_id))
+            .filter(
+                Condition::any()
+                    .add(card_converter_bindings::Column::SkuId.eq(0))
+                    .add(card_converter_bindings::Column::SkuId.eq(sku_id)),
+            )
+            .all(&self.db)
+            .await
+            .dom()?;
+        let mut bound = false;
+        for binding in bindings {
+            if card_converters::Entity::find_by_id(binding.converter_id)
+                .one(&self.db)
+                .await
+                .dom()?
+                .is_some_and(|converter| converter.enabled)
+            {
+                bound = true;
+                break;
+            }
+        }
+        if !bound {
+            return Ok(0);
+        }
+        let batches = card_secret_batches::Entity::find()
+            .select_only()
+            .column(card_secret_batches::Column::Id)
+            .filter(card_secret_batches::Column::ProductId.eq(product_id))
+            .filter(card_secret_batches::Column::Note.eq("p1"))
+            .filter(card_secret_batches::Column::DeletedAt.is_null())
+            .into_query();
+        let mut cards = card_secrets::Entity::find()
+            .filter(card_secrets::Column::ProductId.eq(product_id))
+            .filter(card_secrets::Column::Status.eq(SecretStatus::Available.as_str()))
+            .filter(card_secrets::Column::DeletedAt.is_null())
+            .filter(card_secrets::Column::BatchId.in_subquery(batches));
+        if sku_id > 0 {
+            cards = cards.filter(card_secrets::Column::SkuId.eq(sku_id));
+        }
+        Ok(cards.count(&self.db).await.dom()?)
     }
 
     async fn move_manual_stock(
