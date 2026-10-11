@@ -821,6 +821,21 @@
       },
       {
         "subject": "",
+        "object": "/admin/payment-channels/:id/manual-key",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/payment-channels/:id/manual-test",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/payment-channels/:id/manual-telegram-bind",
+        "action": "*"
+      },
+      {
+        "subject": "",
         "object": "/admin/payment-channels/:id/trade-bill",
         "action": "GET"
       },

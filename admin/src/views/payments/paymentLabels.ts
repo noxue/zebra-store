@@ -3,7 +3,7 @@ import { resolveOkpayConfiguredCoin } from '@/utils/paymentChannelDisplay'
 
 export type Translate = (key: string, params?: Record<string, unknown>) => string
 
-const PROVIDER_TYPE_KEYS = ['official', 'epay', 'bepusdt', 'epusdt', 'okpay', 'dujiaopay', 'tokenpay', 'wallet']
+const PROVIDER_TYPE_KEYS = ['official', 'epay', 'bepusdt', 'epusdt', 'okpay', 'dujiaopay', 'tokenpay', 'manual_qr', 'wallet']
 
 /** channel_type value → i18n suffix under admin.paymentChannels.channelTypes */
 const CHANNEL_TYPE_KEYS: Record<string, string> = {

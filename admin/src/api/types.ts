@@ -19,6 +19,22 @@ export type Money = string | number
 // --- Localized JSON (multi-language content) ---
 export type LocalizedText = Record<string, string>
 
+// --- Manual collection-code payment review ---
+export interface ManualPaymentReview {
+  payment_id: number
+  order_no: string
+  channel_name: string
+  channel_type: string
+  amount: string
+  currency: string
+  payment_status: string
+  order_status: string
+  items: { title: LocalizedText; quantity: number }[]
+  can_confirm: boolean
+  requires_force: boolean
+  buyer_report?: { payer_name: string; issue: string; note: string; reported_at: string } | null
+}
+
 // --- Category ---
 export interface AdminCategory {
   id: number

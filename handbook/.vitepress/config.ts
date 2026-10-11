@@ -134,6 +134,7 @@ const sidebar: DefaultTheme.Sidebar = {
       text: '支付渠道配置',
       items: [
         { text: '通用字段与回调地址', link: '/payment/' },
+        { text: '人工收款码（微信 / 支付宝）', link: '/payment/manual-qr' },
         { text: '易支付 epay', link: '/payment/epay' },
         { text: '支付宝官方', link: '/payment/alipay' },
         { text: '微信支付官方', link: '/payment/wechat' },

@@ -73,7 +73,7 @@ Zebra Store 在收到上游采购成功结果后，会先保存原始交付作�
 
 一条转换器连接代表一个第三方程序，可供多个商品/SKU 复用。管理员给每个商品/SKU 绑定转换器，并直接配置该商品的 `extra`。商品选择器应显示本地商品/SKU 及其已有上游来源，供管理员辨认；这不要求在手工导入库存时记录卡密来源。商品只要绑定转换器，购买交付就调用转换器；没有绑定则按原流程交付。
 
-请求主体顶层只有订单号 `order_no`、待转换卡密列表 `items` 和管理员配置的 `extra`。站点、商品和 SKU 信息不会自动传给转换器。`extra` 的字段名由管理员按转换器要求自行定义，Store 不固定 `extra` 中的地区、套餐、来源等字段名。字段值支持 JSON 常量和这些上下文字段的占位符：`&#123;&#123;order.order_no&#125;&#125;`、`&#123;&#123;order.quantity&#125;&#125;`、`&#123;&#123;order.total_amount&#125;&#125;`、`&#123;&#123;site.domain&#125;&#125;`、`&#123;&#123;site.name&#125;&#125;`、`&#123;&#123;product.id&#125;&#125;`、`&#123;&#123;product.title&#125;&#125;`、`&#123;&#123;sku.id&#125;&#125;`、`&#123;&#123;sku.specifications&#125;&#125;`、`&#123;&#123;source.name&#125;&#125;`、`&#123;&#123;source.id&#125;&#125;`、`&#123;&#123;source.protocol&#125;&#125;`。后台普通模式提供变量选择器和字段表单，高级模式编辑完整 JSON；两种模式可互相同步。保存前必须先将高级模式内容解析成 JSON 对象，并校验条件规则与变量路径。占位符以 JSON 字符串保存，交付时在内存中替换为订单值，再由 JSON 序列化发送；不执行脚本。邮箱、手机号等个人信息默认不发送。后台可预览请求结构，并可编辑或复制已保存的绑定。
+请求主体顶层只有订单号 `order_no`、待转换卡密列表 `items` 和管理员配置的 `extra`。站点、商品和 SKU 信息不会自动传给转换器。`extra` 的字段名由管理员按转换器要求自行定义，Store 不固定 `extra` 中的地区、套餐、来源等字段名。字段值支持 JSON 常量和这些上下文字段的占位符：<code v-pre>{{order.order_no}}</code>、<code v-pre>{{order.quantity}}</code>、<code v-pre>{{order.total_amount}}</code>、<code v-pre>{{site.domain}}</code>、<code v-pre>{{site.name}}</code>、<code v-pre>{{product.id}}</code>、<code v-pre>{{product.title}}</code>、<code v-pre>{{sku.id}}</code>、<code v-pre>{{sku.specifications}}</code>、<code v-pre>{{source.name}}</code>、<code v-pre>{{source.id}}</code>、<code v-pre>{{source.protocol}}</code>、<code v-pre>{{card.note}}</code>。后台普通模式提供变量选择器和字段表单，高级模式编辑完整 JSON；两种模式可互相同步。保存前必须先将高级模式内容解析成 JSON 对象，并校验条件规则与变量路径。占位符以 JSON 字符串保存，交付时在内存中替换为订单值，再由 JSON 序列化发送；不执行脚本。邮箱、手机号等个人信息默认不发送。后台可预览请求结构，并可编辑或复制已保存的绑定。
 
 ## AI Top-up 示例端点
 
@@ -118,3 +118,5 @@ AI Top-up 要求 `extra.category` 为其支持的套餐类型，`extra.provider`
 ```
 
 规则配置只保存在 Store，发送给转换器的是求值后的普通 JSON。条件比较失败或来源缺失时继续下一条；正则表达式和规则结构在保存前校验。`source.id` 比可改名的 `source.name` 更适合需要稳定匹配的配置。
+
+手动导入卡密的批次备注会关联本批每张卡密。本地库存发货时，可用 `card.notes` 条件变量匹配“本订单每张卡密的备注”；当所有卡密有相同的非空备注，还可用 <code v-pre>{{card.note}}</code> 占位符或条件变量。混合备注时该占位符会拒绝转换，防止错误路由。上游采购卡密仍使用 `source.*` 变量。

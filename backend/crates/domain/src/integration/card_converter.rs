@@ -151,6 +151,8 @@ pub struct BindingDependencies {
 pub trait ConverterRepo: Send + Sync {
     async fn binding_dependencies(&self, binding: &Binding) -> Result<BindingDependencies>;
     async fn source_for_order(&self, order_id: Id) -> Result<Option<ConverterSource>>;
+    /// Used local cards and their import-batch notes, in card id order.
+    async fn local_card_notes(&self, order_id: Id) -> Result<Vec<(String, String)>>;
     async fn list(&self) -> Result<Vec<Converter>>;
     async fn get(&self, id: Id) -> Result<Option<Converter>>;
     async fn save(&self, converter: &Converter) -> Result<Converter>;

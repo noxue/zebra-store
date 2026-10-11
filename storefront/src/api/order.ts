@@ -13,6 +13,7 @@ import type {
   PaymentChannel,
   PaymentChannelsPayload,
   PaymentCreateResult,
+  ManualPaymentIssuePayload,
   StatusStats,
 } from './types'
 
@@ -63,6 +64,8 @@ export const guestOrderAPI = {
     userApi.post<PaymentCaptureResult>(`/guest/payments/${id}/capture`, {}, guestOptions(auth)),
   latestPayment: (auth: GuestCredentials, params: { order_no: string }) =>
     userApi.get<PaymentCreateResult>('/guest/payments/latest', guestOptions(auth, { params, silentBusinessError: true })),
+  reportManualIssue: (id: number, auth: GuestCredentials, data: ManualPaymentIssuePayload) =>
+    userApi.post<{ submitted: boolean }>(`/guest/payments/${id}/manual-issue`, data, guestOptions(auth)),
 }
 
 export const paymentAPI = {
@@ -70,4 +73,6 @@ export const paymentAPI = {
   capture: (id: number) => userApi.post<PaymentCaptureResult>(`/payments/${id}/capture`),
   latest: (params: { order_no: string }) =>
     userApi.get<PaymentCreateResult>('/payments/latest', { params, silentBusinessError: true }),
+  reportManualIssue: (id: number, data: ManualPaymentIssuePayload) =>
+    userApi.post<{ submitted: boolean }>(`/payments/${id}/manual-issue`, data),
 }

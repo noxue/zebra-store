@@ -15,6 +15,7 @@ export function useGuestOrderDetail() {
   const { t } = useI18n()
   const loading = ref(true)
   const order = ref<Order | null>(null)
+  const hasManualPayment = ref(false)
   const authError = ref('')
   const auth = ref<GuestCredentials>({ email: '', order_password: '' })
   const fulfillmentDownloading = ref(false)
@@ -34,9 +35,17 @@ export function useGuestOrderDetail() {
         return
       }
       order.value = (await guestOrderAPI.detail(orderNo(), { ...auth.value })).data
+      hasManualPayment.value = false
+      if (order.value?.status === 'pending_payment' || order.value?.status === 'canceled') {
+        try {
+          const latest = await guestOrderAPI.latestPayment({ ...auth.value }, { order_no: order.value.order_no })
+          hasManualPayment.value = latest.data?.provider_type === 'manual_qr'
+        } catch { /* No active payment attempt. */ }
+      }
       authError.value = ''
     } catch {
       order.value = null
+      hasManualPayment.value = false
       authError.value = t('guestOrderDetail.authInvalid')
     } finally {
       loading.value = false
@@ -57,6 +66,7 @@ export function useGuestOrderDetail() {
     clearGuestOrderAuth()
     auth.value = { email: '', order_password: '' }
     order.value = null
+    hasManualPayment.value = false
     authError.value = t('guestOrderDetail.authRequired')
   }
 
@@ -82,5 +92,5 @@ export function useGuestOrderDetail() {
     void loadOrder()
   })
 
-  return { loading, order, auth, authError, viewState, handleAuthSubmit, clearAuth, fulfillmentDownloading, handleDownloadFulfillment, helpers }
+  return { loading, order, hasManualPayment, auth, authError, viewState, handleAuthSubmit, clearAuth, fulfillmentDownloading, handleDownloadFulfillment, helpers }
 }

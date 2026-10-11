@@ -12,7 +12,7 @@ use zs_domain::payment::errors::keys as pay_keys;
 use zs_domain::{Error, Id};
 
 use crate::client::Client;
-use crate::extract::{Bind, BindField, BindRules, Query, req};
+use crate::extract::{Bind, BindField, BindRules, Body, Query, req};
 use crate::middleware::auth::CurrentUser;
 use crate::response::{ApiError, ApiResult, Data, ok};
 use crate::routes::Routes;
@@ -23,6 +23,7 @@ pub(super) fn user_routes() -> Routes {
     Routes::new("")
         .post("/payments", create)
         .post("/payments/{id}/capture", capture)
+        .post("/payments/{id}/manual-issue", report_manual_issue)
         .get("/payments/latest", latest)
 }
 
@@ -30,6 +31,7 @@ pub(super) fn guest_routes() -> Routes {
     Routes::new("/guest")
         .post("/payments", guest_create)
         .post("/payments/{id}/capture", guest_capture)
+        .post("/payments/{id}/manual-issue", guest_report_manual_issue)
         .get("/payments/latest", guest_latest)
 }
 
@@ -172,6 +174,55 @@ async fn guest_capture(
     Path(id): Path<String>,
 ) -> ApiResult<Data<Value>> {
     capture_for(&s, viewer, tenant, &id).await
+}
+
+#[derive(Debug, Deserialize)]
+struct ManualIssueBody {
+    payer_name: String,
+    issue: String,
+    #[serde(default)]
+    note: String,
+}
+
+async fn report_issue_for(
+    s: &AppState,
+    viewer: Viewer,
+    tenant: TenantCtx,
+    raw_id: &str,
+    headers: &HeaderMap,
+    body: ManualIssueBody,
+) -> ApiResult<Data<Value>> {
+    let svc = &s.svc.order.service;
+    let payment = svc
+        .owned_payment(&viewer, &tenant.0, payment_id(raw_id)?)
+        .await?;
+    let origin = format!("{}://{}", request_scheme(headers), tenant.0.host);
+    svc.report_manual_payment_issue(payment, &body.payer_name, &body.issue, &body.note, &origin)
+        .await?;
+    ok(json!({"submitted": true}))
+}
+
+async fn report_manual_issue(
+    State(s): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    tenant: TenantCtx,
+    Path(id): Path<String>,
+    headers: HeaderMap,
+    Body(body): Body<ManualIssueBody>,
+) -> ApiResult<Data<Value>> {
+    report_issue_for(&s, Viewer::User(user.id), tenant, &id, &headers, body).await
+}
+
+async fn guest_report_manual_issue(
+    _: GuestWrite,
+    State(s): State<AppState>,
+    GuestViewer(viewer): GuestViewer,
+    tenant: TenantCtx,
+    Path(id): Path<String>,
+    headers: HeaderMap,
+    Body(body): Body<ManualIssueBody>,
+) -> ApiResult<Data<Value>> {
+    report_issue_for(&s, viewer, tenant, &id, &headers, body).await
 }
 
 async fn latest_for(

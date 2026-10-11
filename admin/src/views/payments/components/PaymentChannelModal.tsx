@@ -16,6 +16,7 @@ import { PaypalConfigForm } from './PaypalConfigForm'
 import { StripeConfigForm } from './StripeConfigForm'
 import { TokenpayConfigForm } from './TokenpayConfigForm'
 import { WechatConfigForm } from './WechatConfigForm'
+import { ManualQrConfigForm } from './ManualQrConfigForm'
 
 const CONFIG_JSON_PLACEHOLDER = '{ "key": "value" }'
 
@@ -65,6 +66,20 @@ export const PaymentChannelModal = defineComponent({
 
     const renderSection = (): VNodeChild => {
       switch (s.section.value) {
+        case 'manual_qr':
+          return <ManualQrConfigForm
+            config={configs.manual_qr}
+            savedId={s.effectiveId.value}
+            keyValue={s.manualKey.value}
+            customKey={s.customManualKey.value}
+            bindUrl={s.telegramBindUrl.value}
+            busy={s.manualActionBusy.value}
+            onUpdate:customKey={(v: string) => { s.customManualKey.value = v }}
+            onSetKey={() => void s.setManualKey()}
+            onTest={() => void s.testManualNotice()}
+            onBeginBind={() => void s.beginTelegramBind()}
+            onFinishBind={() => void s.finishTelegramBind()}
+          />
         case 'epay':
           return <EpayConfigForm config={configs.epay} />
         case 'paypal':

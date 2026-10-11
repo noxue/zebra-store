@@ -670,6 +670,12 @@ export interface CreatePaymentPayload {
   use_balance?: boolean
 }
 
+export interface ManualPaymentIssuePayload {
+  payer_name: string
+  issue: 'not_received' | 'wrong_amount'
+  note: string
+}
+
 export interface PaymentCreateResult {
   order_paid?: boolean
   wallet_paid_amount?: string

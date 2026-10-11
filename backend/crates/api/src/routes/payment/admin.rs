@@ -29,6 +29,16 @@ pub(super) fn routes() -> Routes {
         .post("/payment-channels", create_channel)
         .get("/payment-channels", list_channels)
         .get("/payment-channels/{id}", get_channel)
+        .post("/payment-channels/{id}/manual-key", set_manual_key)
+        .post("/payment-channels/{id}/manual-test", test_manual_notice)
+        .post(
+            "/payment-channels/{id}/manual-telegram-bind",
+            begin_manual_telegram_bind,
+        )
+        .get(
+            "/payment-channels/{id}/manual-telegram-bind",
+            finish_manual_telegram_bind,
+        )
         .post(
             "/payment-channels/{id}/wechatpay-public-key-test",
             test_wechatpay_public_key,
@@ -114,6 +124,78 @@ async fn get_channel(
 ) -> ApiResult<Data<PaymentChannel>> {
     let id = parse_id(&id, keys::CHANNEL_INVALID)?;
     ok(s.svc.payment.channels.get(id).await?)
+}
+
+#[derive(Debug, Deserialize)]
+struct ManualKeyBody {
+    key: Option<String>,
+}
+
+async fn set_manual_key(
+    State(s): State<AppState>,
+    _: ComplianceAcked,
+    Path(raw): Path<String>,
+    Body(body): Body<ManualKeyBody>,
+) -> ApiResult<Data<Value>> {
+    let id = parse_id(&raw, keys::CHANNEL_INVALID)?;
+    let key = s
+        .svc
+        .payment
+        .channels
+        .rotate_manual_key(id, body.key.as_deref())
+        .await?;
+    ok(json!({"key": key}))
+}
+
+#[derive(Debug, Deserialize)]
+struct ManualTestBody {
+    #[serde(default)]
+    review_url: String,
+}
+
+async fn test_manual_notice(
+    State(s): State<AppState>,
+    _: ComplianceAcked,
+    Path(raw): Path<String>,
+    Body(body): Body<ManualTestBody>,
+) -> ApiResult<Data<Value>> {
+    let id = parse_id(&raw, keys::CHANNEL_INVALID)?;
+    s.svc
+        .payment
+        .channels
+        .test_manual_notice(id, &body.review_url)
+        .await?;
+    ok(json!({"sent": true}))
+}
+
+async fn begin_manual_telegram_bind(
+    State(s): State<AppState>,
+    _: ComplianceAcked,
+    Path(raw): Path<String>,
+) -> ApiResult<Data<Value>> {
+    let id = parse_id(&raw, keys::CHANNEL_INVALID)?;
+    let url = s
+        .svc
+        .payment
+        .channels
+        .begin_manual_telegram_binding(id)
+        .await?;
+    ok(json!({"url": url}))
+}
+
+async fn finish_manual_telegram_bind(
+    State(s): State<AppState>,
+    _: ComplianceAcked,
+    Path(raw): Path<String>,
+) -> ApiResult<Data<Value>> {
+    let id = parse_id(&raw, keys::CHANNEL_INVALID)?;
+    let chat_id = s
+        .svc
+        .payment
+        .channels
+        .finish_manual_telegram_binding(id)
+        .await?;
+    ok(json!({"chat_id": chat_id}))
 }
 
 /// `CreatePaymentChannelRequest` / `UpdatePaymentChannelRequest` body.

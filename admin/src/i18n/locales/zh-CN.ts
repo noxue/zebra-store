@@ -1,5 +1,14 @@
 // 简体中文管理后台翻译。
 const messages = {
+  manualPayment: {
+    title: '人工收款确认', subtitle: '核对收款账户的实际到账金额后再操作。', invalidLink: '确认链接无效或缺少凭证。',
+    loadFailed: '加载支付信息失败', confirmFailed: '确认失败', loading: '正在读取订单…', orderNo: '订单号', amount: '应收金额',
+    amountHint: '请以收款账户的实际到账记录为准，不要只看买家截图。', items: '商品信息', status: '当前状态',
+    closedWarning: '订单已关闭，原库存、优惠券和余额预留可能已释放。强制确认后将转人工处理，不会自动发货。',
+    receivedAmount: '实际收到金额', forceReason: '强制确认原因', verified: '我已在收款账户核对到该笔金额',
+    confirm: '确认收款并处理订单', forceConfirm: '强制确认并转人工处理', success: '已确认收款。',
+    buyerReport: '买家付款反馈', payerName: '付款人姓名', issue: '问题', issueNotReceived: '付款后长时间未确认到账', issueWrongAmount: '支付金额与订单不符', note: '说明', reportedAt: '提交时间',
+  },
   common: {
     api: {
       responseMissing: '响应内容为空',
@@ -1208,7 +1217,18 @@ const messages = {
         okpay: 'OKPAY',
         dujiaopay: 'DujiaoPay',
         tokenpay: 'TokenPay',
+        manual_qr: '人工收款码',
         wallet: '钱包余额',
+      },
+      manualQr: {
+        title: '人工收款码与通知', hint: '分别创建微信和支付宝渠道。付款金额在原应付金额上加 0～0.99 元唯一尾数；确认后才发货。',
+        qrImage: '收款码图片', reviewBase: '确认网页地址（后台域名）', telegramToken: '机器人 Token', telegramChatId: 'Chat ID',
+        bindTelegram: '生成绑定链接', openTelegram: '打开 Telegram 绑定', checkBinding: '检查绑定结果',
+        webhooks: '群机器人 Webhook', wecomWebhook: '企业微信 Webhook URL', dingtalkWebhook: '钉钉 Webhook URL', dingtalkSecret: '钉钉加签 Secret（可选）',
+        email: '邮件通知', smtpHost: 'SMTP 主机', smtpPort: 'SMTP 端口', smtpUsername: 'SMTP 用户名', smtpPassword: 'SMTP 密码',
+        smtpFrom: '发件邮箱', smtpTo: '收件邮箱', smtpTls: 'STARTTLS', smtpSsl: 'SSL/TLS',
+        apiKey: '确认 API 密钥', keyHint: '保存后生成或修改。密钥只显示一次，请复制保存；确认链接使用独立的订单凭证。',
+        customKey: '留空自动生成，或输入至少 32 位自定义密钥', setKey: '生成 / 更新密钥', testSend: '测试发送', copyKey: '复制密钥',
       },
       channelTypes: {
         wechat: '微信',
@@ -1988,8 +2008,9 @@ const messages = {
       secretsLabel: '卡密列表',
       secretsPlaceholder: '一行一个卡密',
       batchNoLabel: '批次号',
-      noteLabel: '备注',
-      notePlaceholder: '补货说明',
+      noteLabel: '导入来源 / 备注',
+      noteHint: '本批每张卡密都会关联此备注，可在卡密转换器的条件规则中匹配。建议填写稳定的渠道标识。',
+      notePlaceholder: '例如：渠道 A',
       deduplicateLabel: '自动去重',
       deduplicateHint: '开启后，相同卡密只会导入一次；关闭后会按库存行保留重复卡密。',
       submitBatch: '提交录入',
@@ -2000,7 +2021,7 @@ const messages = {
       csvPlaceholder: '选择 CSV 文件',
       csvHint: '仅支持 .csv 文件',
       csvClear: '清除',
-      importNotePlaceholder: 'CSV 导入',
+      importNotePlaceholder: '例如：渠道 A',
       importing: '导入中...',
       startImport: '开始导入',
       statsTitle: '库存统计',

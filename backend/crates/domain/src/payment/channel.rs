@@ -18,7 +18,7 @@ pub type ChannelConfig = Map<String, Value>;
 pub const REDACTED_VALUE: &str = "••••••••";
 
 /// Config keys never echoed back to the admin UI (`sensitivePaymentConfigKeys`).
-pub const SENSITIVE_CONFIG_KEYS: [&str; 11] = [
+pub const SENSITIVE_CONFIG_KEYS: [&str; 16] = [
     "api_secret",
     "api_v3_key",
     "auth_token",
@@ -30,6 +30,11 @@ pub const SENSITIVE_CONFIG_KEYS: [&str; 11] = [
     "private_key",
     "secret_key",
     "webhook_secret",
+    "confirmation_api_key",
+    "telegram_token",
+    "smtp_password",
+    "dingtalk_secret",
+    "confirmation_api_key_hash",
 ];
 
 /// Largest fee rate in percent.
@@ -242,6 +247,12 @@ pub fn check_channel_rules(
     }
     if provider_type == provider::WALLET {
         return Ok(ChannelCheck::Wallet);
+    }
+    if provider_type == provider::MANUAL_QR
+        && (draft.payment_types.len() != 1
+            || draft.payment_types[0] != super::types::payment_type::ORDER)
+    {
+        return invalid;
     }
     let mode = draft.interaction_mode.trim().to_ascii_lowercase();
     if provider_type != provider::OFFICIAL {

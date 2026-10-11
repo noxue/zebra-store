@@ -143,6 +143,8 @@ pub trait OrderRepo: Send + Sync {
     ) -> Result<Option<Payment>>;
     async fn payment(&self, id: Id) -> Result<Option<Payment>>;
     async fn channel(&self, id: Id) -> Result<Option<PaymentChannel>>;
+    /// Historical channel lookup for unresolved manual-payment review links.
+    async fn archived_channel(&self, id: Id) -> Result<Option<PaymentChannel>>;
     async fn channels(&self, ids: &[Id]) -> Result<Vec<PaymentChannel>>;
     /// Active channels, `sort_order DESC, id ASC`.
     async fn active_channels(&self) -> Result<Vec<PaymentChannel>>;
@@ -442,6 +444,26 @@ pub trait OrderPaymentStore: Send + Sync {
         reseller_confirm_days: i64,
         now: DateTime<Utc>,
     ) -> Result<Settled>;
+    /// Confirms a merchant-owned QR payment. A closed order can be moved to
+    /// `fulfilling` for human review without reclaiming released inventory.
+    async fn manual_confirm(
+        &self,
+        payment_id: Id,
+        received: Amount,
+        force: bool,
+        note: &str,
+        reseller_confirm_days: i64,
+        now: DateTime<Utc>,
+    ) -> Result<Settled>;
+    /// Associates the buyer's latest payment report with the payment record.
+    async fn record_manual_issue(
+        &self,
+        payment_id: Id,
+        payer_name: &str,
+        issue: &str,
+        note: &str,
+        now: DateTime<Utc>,
+    ) -> Result<()>;
 }
 
 /// Cart rows (`cart_items`).

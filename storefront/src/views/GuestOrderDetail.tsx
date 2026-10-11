@@ -45,9 +45,18 @@ export default defineComponent({
             {{
               actions: () =>
                 d.order.value?.status === 'pending_payment' ? (
-                  <Button size="sm" to={{ path: '/pay', query: { guest: '1', order_no: d.order.value.order_no } }}>
-                    <CreditCard class="size-4" />
-                    {t('orders.payNow')}
+                  <>
+                    <Button size="sm" to={{ path: '/pay', query: { guest: '1', order_no: d.order.value.order_no } }}>
+                      <CreditCard class="size-4" />
+                      {t('orders.payNow')}
+                    </Button>
+                    {d.hasManualPayment.value && <Button size="sm" variant="secondary" to={{ path: '/pay', query: { guest: '1', order_no: d.order.value.order_no, report: '1' } }}>
+                      {t('payment.manualReportButton')}
+                    </Button>}
+                  </>
+                ) : d.order.value?.status === 'canceled' && d.hasManualPayment.value ? (
+                  <Button size="sm" variant="secondary" to={{ path: '/pay', query: { guest: '1', order_no: d.order.value.order_no, report: '1' } }}>
+                    {t('payment.manualReportButton')}
                   </Button>
                 ) : null,
             }}

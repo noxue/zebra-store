@@ -403,12 +403,35 @@ impl CardConverterService {
             ));
         }
         let source = self.repo.source_for_order(order.id).await?;
+        let local_cards = self.repo.local_card_notes(order.id).await?;
+        let local_cards_match = local_cards.len() == cards.len()
+            && local_cards
+                .iter()
+                .zip(&cards)
+                .all(|((secret, _), card)| secret == card);
+        if !local_cards.is_empty() && !local_cards_match {
+            return Err(Error::internal_msg(
+                "local card provenance does not match delivery",
+            ));
+        }
+        let card_notes = if local_cards_match {
+            local_cards
+                .into_iter()
+                .map(|(_, note)| note)
+                .collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        };
+        let shared_note = card_notes
+            .first()
+            .filter(|note| !note.is_empty() && card_notes.iter().all(|other| other == *note));
         let context = serde_json::json!({
             "order": {"id":order.id,"order_no":order.order_no,"quantity":item.quantity,"total_amount":order.total_amount.to_string()},
             "site": site,
             "product": {"id":item.product_id,"title":item.title},
             "sku": {"id":item.sku_id,"specifications":item.sku_snapshot},
             "source": source.map(|source| serde_json::json!({"id":source.id,"name":source.name,"protocol":source.protocol})),
+            "card": {"note": shared_note, "notes": card_notes},
         });
         let extra = render_extra(&binding.extra_template, &context, &cards)?;
         let request = ExchangeRequest {
@@ -526,7 +549,7 @@ fn validate_template(value: &Value) -> Result<()> {
                     .get("value")
                     .and_then(Value::as_str)
                     .ok_or_else(invalid)?;
-                if !(valid_variable(variable) || variable == "card")
+                if !(valid_variable(variable) || variable == "card" || variable == "card.notes")
                     || operand.len() > MAX_EXTRA_COMPARISON_BYTES
                 {
                     return Err(invalid());
@@ -575,6 +598,7 @@ const EXTRA_VARIABLES: &[&str] = &[
     "source.id",
     "source.name",
     "source.protocol",
+    "card.note",
 ];
 
 fn valid_variable(path: &str) -> bool {
@@ -768,6 +792,23 @@ fn condition_matches(condition: &Value, context: &Value, cards: &[&str]) -> Resu
             .collect::<Result<Vec<_>>>()
             .map(|matches| matches.into_iter().all(|matched| matched));
     }
+    if path == "card.notes" {
+        let notes = lookup(context, path)
+            .and_then(Value::as_array)
+            .ok_or_else(invalid)?;
+        if notes.is_empty()
+            || notes
+                .iter()
+                .any(|note| note.as_str().is_none_or(str::is_empty))
+        {
+            return Ok(false);
+        }
+        return notes
+            .iter()
+            .map(|note| compare(note.as_str().unwrap_or_default()))
+            .collect::<Result<Vec<_>>>()
+            .map(|matches| matches.into_iter().all(|matched| matched));
+    }
     let Some(actual) = lookup(context, path).filter(|value| !value.is_null()) else {
         return Ok(false);
     };
@@ -911,7 +952,7 @@ mod tests {
         assert_eq!(contract["variables"], serde_json::json!(EXTRA_VARIABLES));
         assert_eq!(
             contract["condition_only_variables"],
-            serde_json::json!(["card"])
+            serde_json::json!(["card", "card.notes"])
         );
         assert_eq!(
             contract["operators"],
@@ -979,6 +1020,42 @@ mod tests {
         assert_eq!(
             render_extra(&fallback, &context, &["P2-1", "P2-2"]).ok(),
             Some(serde_json::json!({"provider":"p2"}))
+        );
+    }
+
+    #[test]
+    fn imported_card_notes_match_only_when_every_card_has_that_source() {
+        let rule = serde_json::json!({"provider":{"$zs_rule":{"cases":[
+            {"when":{"variable":"card.notes","operator":"eq","value":"渠道 A"},"then":{"literal":"p1"}},
+            {"when":{"variable":"card.notes","operator":"regex","value":"^渠道 B$"},"then":{"literal":"p2"}}
+        ],"else":{"literal":"manual_review"}}}});
+        let one_source = serde_json::json!({"card":{"note":"渠道 A","notes":["渠道 A","渠道 A"]}});
+        assert_eq!(
+            render_extra(&rule, &one_source, &["A-1", "A-2"]).ok(),
+            Some(serde_json::json!({"provider":"p1"}))
+        );
+        assert_eq!(
+            render_template(&serde_json::json!("{{card.note}}"), &one_source).ok(),
+            Some(serde_json::json!("渠道 A"))
+        );
+        let mixed = serde_json::json!({"card":{"note":null,"notes":["渠道 A","渠道 B"]}});
+        assert_eq!(
+            render_extra(&rule, &mixed, &["A-1", "B-1"]).ok(),
+            Some(serde_json::json!({"provider":"manual_review"}))
+        );
+        assert!(render_template(&serde_json::json!("{{card.note}}"), &mixed).is_err());
+        let upstream = serde_json::json!({"card":{"note":null,"notes":[]}});
+        assert_eq!(
+            render_extra(&rule, &upstream, &["external"]).ok(),
+            Some(serde_json::json!({"provider":"manual_review"}))
+        );
+        let missing = serde_json::json!({"card":{"note":null,"notes":[""]}});
+        let not_a = serde_json::json!({"provider":{"$zs_rule":{"cases":[
+            {"when":{"variable":"card.notes","operator":"ne","value":"渠道 A"},"then":{"literal":"p2"}}
+        ],"else":{"literal":"manual_review"}}}});
+        assert_eq!(
+            render_extra(&not_a, &missing, &["legacy"]).ok(),
+            Some(serde_json::json!({"provider":"manual_review"}))
         );
     }
 

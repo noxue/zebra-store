@@ -520,6 +520,14 @@ impl OrderRepo for SeaOrderRepo {
             .map(channel_to_domain))
     }
 
+    async fn archived_channel(&self, id: Id) -> Result<Option<PaymentChannel>> {
+        Ok(payment_channels::Entity::find_by_id(id)
+            .one(&self.db)
+            .await
+            .dom()?
+            .map(channel_to_domain))
+    }
+
     async fn channels(&self, ids: &[Id]) -> Result<Vec<PaymentChannel>> {
         if ids.is_empty() {
             return Ok(Vec::new());

@@ -13,6 +13,7 @@ pub mod effects;
 pub mod email;
 pub mod fulfillment;
 pub mod jobs;
+pub mod manual_payment;
 pub mod payment;
 pub mod query;
 pub mod refund;
@@ -62,6 +63,13 @@ pub const GUEST_WRITE_RULE: RateRule = RateRule {
     window_seconds: 60,
     max_requests: 20,
     block_seconds: 300,
+};
+
+/// Buyer payment reports: at most three notices per payment in one hour.
+pub const MANUAL_ISSUE_RATE_RULE: RateRule = RateRule {
+    window_seconds: 3600,
+    max_requests: 3,
+    block_seconds: 3600,
 };
 
 /// Captcha scene of guest order creation.
@@ -114,14 +122,17 @@ impl std::fmt::Debug for OrderDeps {
 pub struct OrderService {
     deps: Arc<OrderDeps>,
     risk_limits: risk::RiskLimiters,
+    manual_issue_limiter: RateLimiter,
 }
 
 impl OrderService {
     pub fn new(deps: OrderDeps) -> Self {
         let clock = deps.clock.clone();
+        let manual_issue_limiter = RateLimiter::new(MANUAL_ISSUE_RATE_RULE, clock.clone());
         Self {
             deps: Arc::new(deps),
             risk_limits: risk::RiskLimiters::new(clock),
+            manual_issue_limiter,
         }
     }
 

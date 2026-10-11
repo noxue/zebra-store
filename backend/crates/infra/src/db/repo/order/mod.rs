@@ -386,6 +386,41 @@ impl OrderPaymentStore for SeaOrderStore {
         )
         .await)
     }
+
+    async fn manual_confirm(
+        &self,
+        payment_id: Id,
+        received: Amount,
+        force: bool,
+        note: &str,
+        reseller_confirm_days: i64,
+        now: DateTime<Utc>,
+    ) -> Result<Settled> {
+        in_txn!(self, |txn| pay::manual_confirm_in(
+            &txn,
+            payment_id,
+            received,
+            force,
+            note,
+            reseller_confirm_days,
+            now
+        )
+        .await)
+    }
+
+    async fn record_manual_issue(
+        &self,
+        payment_id: Id,
+        payer_name: &str,
+        issue: &str,
+        note: &str,
+        now: chrono::DateTime<chrono::Utc>,
+    ) -> Result<()> {
+        in_txn!(self, |txn| pay::record_manual_issue_in(
+            &txn, payment_id, payer_name, issue, note, now
+        )
+        .await)
+    }
 }
 
 #[async_trait]

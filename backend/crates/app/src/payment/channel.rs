@@ -14,6 +14,7 @@ use zs_domain::payment::gateway::{
 };
 use zs_domain::payment::types::{channel_type, provider};
 use zs_domain::{Error, Id, Result};
+use zs_shared::crypto::sha256_hex;
 use zs_shared::money::Amount;
 use zs_shared::page::Page;
 
@@ -159,6 +160,114 @@ impl ChannelService {
         Ok(redact_channel(
             &self.load(id, keys::CHANNEL_FETCH_FAILED).await?,
         ))
+    }
+
+    /// Issues a new channel-scoped confirmation key. Only its digest is stored, and
+    /// the plaintext is returned once for the administrator to copy.
+    pub async fn rotate_manual_key(&self, id: Id, requested: Option<&str>) -> Result<String> {
+        let channel = self.load(id, keys::CHANNEL_FETCH_FAILED).await?;
+        if channel.provider() != provider::MANUAL_QR {
+            return Err(Error::bad_request(keys::PROVIDER_NOT_SUPPORTED));
+        }
+        let key = match requested.map(str::trim).filter(|value| !value.is_empty()) {
+            Some(value)
+                if value.len() >= 32
+                    && value.len() <= 128
+                    && value
+                        .bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-') =>
+            {
+                value.to_owned()
+            }
+            Some(_) => return Err(Error::bad_request(keys::CHANNEL_CONFIG_INVALID)),
+            None => format!("mqr_{}", crate::integration::credential::random_hex(32)),
+        };
+        let mut draft = ChannelDraft::from(&channel);
+        draft.config_json.insert(
+            "confirmation_api_key_hash".to_owned(),
+            serde_json::Value::String(sha256_hex(key.as_bytes())),
+        );
+        self.repo.update(id, &draft).await?;
+        Ok(key)
+    }
+
+    pub async fn test_manual_notice(&self, id: Id, review_url: &str) -> Result<()> {
+        let channel = self.load(id, keys::CHANNEL_FETCH_FAILED).await?;
+        if channel.provider() != provider::MANUAL_QR {
+            return Err(Error::bad_request(keys::PROVIDER_NOT_SUPPORTED));
+        }
+        let gateway = self
+            .registry
+            .lookup(&channel.provider_type, &channel.channel_type)
+            .ok_or_else(|| Error::bad_request(keys::PROVIDER_NOT_SUPPORTED))?;
+        gateway
+            .notify_manual_payment(
+                &channel.config_json,
+                "TEST-0001",
+                Amount::from_cents(1001),
+                "CNY",
+                "测试商品 × 1",
+                review_url,
+            )
+            .await
+            .map_err(Error::from)
+    }
+
+    pub async fn begin_manual_telegram_binding(&self, id: Id) -> Result<String> {
+        let channel = self.load(id, keys::CHANNEL_FETCH_FAILED).await?;
+        if channel.provider() != provider::MANUAL_QR {
+            return Err(Error::bad_request(keys::PROVIDER_NOT_SUPPORTED));
+        }
+        let gateway = self
+            .registry
+            .lookup(&channel.provider_type, &channel.channel_type)
+            .ok_or_else(|| Error::bad_request(keys::PROVIDER_NOT_SUPPORTED))?;
+        let username = gateway
+            .manual_telegram_username(&channel.config_json)
+            .await
+            .map_err(Error::from)?;
+        let code = crate::integration::credential::random_hex(16);
+        let mut draft = ChannelDraft::from(&channel);
+        draft.config_json.insert(
+            "telegram_bind_code".into(),
+            serde_json::Value::String(code.clone()),
+        );
+        self.repo.update(id, &draft).await?;
+        Ok(format!("https://t.me/{username}?start={code}"))
+    }
+
+    pub async fn finish_manual_telegram_binding(&self, id: Id) -> Result<Option<String>> {
+        let channel = self.load(id, keys::CHANNEL_FETCH_FAILED).await?;
+        if channel.provider() != provider::MANUAL_QR {
+            return Err(Error::bad_request(keys::PROVIDER_NOT_SUPPORTED));
+        }
+        let code = channel
+            .config_json
+            .get("telegram_bind_code")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default();
+        if code.is_empty() {
+            return Ok(None);
+        }
+        let gateway = self
+            .registry
+            .lookup(&channel.provider_type, &channel.channel_type)
+            .ok_or_else(|| Error::bad_request(keys::PROVIDER_NOT_SUPPORTED))?;
+        let Some(chat_id) = gateway
+            .manual_telegram_chat(&channel.config_json, code)
+            .await
+            .map_err(Error::from)?
+        else {
+            return Ok(None);
+        };
+        let mut draft = ChannelDraft::from(&channel);
+        draft.config_json.insert(
+            "telegram_chat_id".into(),
+            serde_json::Value::String(chat_id.clone()),
+        );
+        draft.config_json.remove("telegram_bind_code");
+        self.repo.update(id, &draft).await?;
+        Ok(Some(chat_id))
     }
 
     /// `ValidateChannel`: gateway-independent rules, then the provider's own config check.

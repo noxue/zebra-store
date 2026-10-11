@@ -88,6 +88,7 @@ export const adminChildRoutes: RouteRecordRaw[] = [
 
 export const routes: RouteRecordRaw[] = [
   { path: '/login', name: 'login', component: () => import('@/views/Login') },
+  { path: '/manual-confirm/:id', name: 'manual-payment-confirm', component: () => import('@/views/payments/ManualPaymentConfirm') },
   { path: '/', component: () => import('@/layouts/AdminLayout'), meta: { requiresAuth: true }, children: adminChildRoutes },
   { path: '/:pathMatch(.*)*', redirect: '/' },
 ]

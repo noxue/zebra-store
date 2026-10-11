@@ -255,6 +255,10 @@ export const adminAPI = {
   createPaymentChannel: (data: JsonObject) => api.post<AdminPaymentChannel>('/admin/payment-channels', data),
   updatePaymentChannel: (id: Id, data: JsonObject) => api.put<AdminPaymentChannel>(`/admin/payment-channels/${id}`, data),
   deletePaymentChannel: (id: Id) => api.delete<JsonObject>(`/admin/payment-channels/${id}`),
+  setManualPaymentKey: (id: Id, key?: string) => api.post<{ key: string }>(`/admin/payment-channels/${id}/manual-key`, { key }),
+  testManualPaymentNotice: (id: Id, review_url: string) => api.post<{ sent: boolean }>(`/admin/payment-channels/${id}/manual-test`, { review_url }),
+  beginManualTelegramBind: (id: Id) => api.post<{ url: string }>(`/admin/payment-channels/${id}/manual-telegram-bind`, {}),
+  finishManualTelegramBind: (id: Id) => api.get<{ chat_id: string | null }>(`/admin/payment-channels/${id}/manual-telegram-bind`),
   testWechatPayPublicKey: (id: Id) =>
     api.post<AdminGatewaySecurityTestResult>(`/admin/payment-channels/${id}/wechatpay-public-key-test`, {}),
   queryTradeBill: (id: Id, fileDate: string) =>

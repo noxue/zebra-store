@@ -40,11 +40,18 @@ export default defineComponent({
                       <CreditCard class="size-4" />
                       {t('orderDetail.payNow')}
                     </Button>
+                    {d.hasManualPayment.value && <Button size="sm" variant="secondary" to={{ path: '/pay', query: { order_no: d.order.value.order_no, report: '1' } }}>
+                      {t('payment.manualReportButton')}
+                    </Button>}
                     <Button size="sm" variant="danger" onClick={() => void d.cancelOrder()}>
                       <XCircle class="size-4" />
                       {t('orderDetail.cancel')}
                     </Button>
                   </>
+                ) : d.order.value?.status === 'canceled' && d.hasManualPayment.value ? (
+                  <Button size="sm" variant="secondary" to={{ path: '/pay', query: { order_no: d.order.value.order_no, report: '1' } }}>
+                    {t('payment.manualReportButton')}
+                  </Button>
                 ) : null,
             }}
           </OrderBody>

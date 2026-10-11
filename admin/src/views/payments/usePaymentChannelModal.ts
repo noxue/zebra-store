@@ -5,6 +5,7 @@ import { errorMessage } from '@/api/client'
 import type { AdminGatewaySecurityTestResult, AdminMemberLevel } from '@/api/types'
 import { getLocalizedText } from '@/utils/format'
 import { notifySuccess } from '@/utils/notify'
+import { ADMIN_BASE } from '@/utils/adminBase'
 import {
   applyBepusdtOrderMode,
   applyDujiaopayOrderMode,
@@ -36,15 +37,64 @@ export function usePaymentChannelModal(opts: PaymentChannelModalOptions) {
   const t = i18n.global.t
   const form = reactive<ChannelForm>(defaultChannelForm())
   const siteOrigin = typeof window === 'undefined' ? '' : window.location.origin
-  const configs = reactive<ProviderConfigs>(defaultConfigs(siteOrigin))
+  const manualReviewBase = `${siteOrigin}${ADMIN_BASE}`
+  const configs = reactive<ProviderConfigs>(defaultConfigs(siteOrigin, manualReviewBase))
   const error = ref('')
   const loading = ref(false)
   const submitting = ref(false)
+  const createdId = ref<number | null>(null)
+  const manualKey = ref('')
+  const customManualKey = ref('')
+  const telegramBindUrl = ref('')
+  const manualActionBusy = ref(false)
   const showAdvanced = ref(false)
   /** While loading/resetting, the provider/order-mode side effects must not run. */
   let applying = false
 
-  const isEditing = computed(() => opts.channelId() !== null)
+  const effectiveId = computed(() => opts.channelId() ?? createdId.value)
+  const isEditing = computed(() => effectiveId.value !== null)
+
+  const setManualKey = async () => {
+    const id = effectiveId.value
+    if (!id) return
+    manualActionBusy.value = true
+    try {
+      manualKey.value = (await adminAPI.setManualPaymentKey(id, customManualKey.value || undefined)).data?.key ?? ''
+      customManualKey.value = ''
+    } catch {
+      /* The shared API client displays the failure. */
+    } finally { manualActionBusy.value = false }
+  }
+  const testManualNotice = async () => {
+    const id = effectiveId.value
+    if (!id) return
+    manualActionBusy.value = true
+    try {
+      await adminAPI.testManualPaymentNotice(id, `${configs.manual_qr.review_base_url.replace(/\/$/, '')}/manual-confirm/TEST`)
+      notifySuccess(t('admin.common.operationSuccess'))
+    } catch {
+      /* The shared API client displays the failure. */
+    } finally { manualActionBusy.value = false }
+  }
+  const beginTelegramBind = async () => {
+    const id = effectiveId.value
+    if (!id) return
+    manualActionBusy.value = true
+    try { telegramBindUrl.value = (await adminAPI.beginManualTelegramBind(id)).data?.url ?? '' }
+    catch { /* The shared API client displays the failure. */ }
+    finally { manualActionBusy.value = false }
+  }
+  const finishTelegramBind = async () => {
+    const id = effectiveId.value
+    if (!id) return
+    manualActionBusy.value = true
+    try {
+      const chat = (await adminAPI.finishManualTelegramBind(id)).data?.chat_id
+      if (chat) { configs.manual_qr.telegram_chat_id = chat; telegramBindUrl.value = ''; notifySuccess(t('admin.common.operationSuccess')) }
+    } catch {
+      /* The shared API client displays the failure. */
+    } finally { manualActionBusy.value = false }
+  }
 
   // ---- member levels ----
   const memberLevels = ref<AdminMemberLevel[]>([])
@@ -82,6 +132,7 @@ export function usePaymentChannelModal(opts: PaymentChannelModalOptions) {
     (provider) => {
       if (applying) return
       form.channel_type = channelTypeForProvider(provider, form.channel_type, configs.dujiaopay.order_mode)
+      if (provider === 'manual_qr') form.payment_types = ['order']
       syncInteractionMode()
     },
     { flush: 'sync' },
@@ -151,10 +202,13 @@ export function usePaymentChannelModal(opts: PaymentChannelModalOptions) {
 
   // ---- open / load ----
   const resetForCreate = () => {
+    createdId.value = null
+    manualKey.value = ''
+    telegramBindUrl.value = ''
     error.value = ''
     wechatTestResult.value = null
     showAdvanced.value = false
-    assignState(defaultChannelForm(), defaultConfigs(siteOrigin))
+    assignState(defaultChannelForm(), defaultConfigs(siteOrigin, manualReviewBase))
   }
 
   let loadSeq = 0
@@ -167,7 +221,7 @@ export function usePaymentChannelModal(opts: PaymentChannelModalOptions) {
     try {
       const channel = (await adminAPI.getPaymentChannel(id)).data
       if (seq !== loadSeq || !channel) return
-      const state = channelToState(channel, siteOrigin)
+      const state = channelToState(channel, siteOrigin, manualReviewBase)
       assignState(state.form, state.configs)
     } catch (err) {
       if (seq === loadSeq) error.value = errorMessage(err, t('admin.paymentChannels.errors.fetchFailed'))
@@ -202,9 +256,17 @@ export function usePaymentChannelModal(opts: PaymentChannelModalOptions) {
     }
     submitting.value = true
     try {
-      const id = opts.channelId()
+      const id = effectiveId.value
       if (id !== null) await adminAPI.updatePaymentChannel(id, built.payload)
-      else await adminAPI.createPaymentChannel(built.payload)
+      else {
+        const created = await adminAPI.createPaymentChannel(built.payload)
+        if (form.provider_type === 'manual_qr' && created.data?.id) {
+          createdId.value = created.data.id
+          manualKey.value = (await adminAPI.setManualPaymentKey(created.data.id)).data?.key ?? ''
+          opts.onSuccess()
+          return
+        }
+      }
       notifySuccess(t('admin.common.operationSuccess'))
       opts.close()
       opts.onSuccess()
@@ -221,6 +283,15 @@ export function usePaymentChannelModal(opts: PaymentChannelModalOptions) {
     error,
     loading,
     submitting,
+    manualActionBusy,
+    manualKey,
+    customManualKey,
+    telegramBindUrl,
+    effectiveId,
+    setManualKey,
+    testManualNotice,
+    beginTelegramBind,
+    finishTelegramBind,
     showAdvanced,
     isEditing,
     memberLevels,

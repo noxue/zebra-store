@@ -186,6 +186,7 @@ export const buildCryptoDetails = (payment: { wallet_address?: string; chain_amo
 /** Direct image source for a qr_code value (data URL / image URL), else null (render locally). */
 export const qrImageSource = (content: string): string | null => {
   if (content.startsWith('data:image/')) return content
+  if (/^\/(?!\/)[^?#]+\.(png|jpe?g|gif|webp|svg)(\?.*)?$/i.test(content)) return content
   if (/^https?:\/\/.+\.(png|jpe?g|gif|webp|svg)(\?.*)?$/i.test(content)) return content
   return null
 }

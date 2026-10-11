@@ -1,7 +1,7 @@
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { userOrderAPI } from '@/api/order'
+import { paymentAPI, userOrderAPI } from '@/api/order'
 import type { Order } from '@/api/types'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import { toast } from '@/composables/useToast'
@@ -16,6 +16,7 @@ export function useOrderDetail() {
   const { confirm } = useConfirmDialog()
   const loading = ref(true)
   const order = ref<Order | null>(null)
+  const hasManualPayment = ref(false)
   const fulfillmentDownloading = ref(false)
   const helpers = useOrderDisplayHelpers(order)
   const orderNo = () => String(route.params.order_no || '').trim()
@@ -24,8 +25,16 @@ export function useOrderDetail() {
     loading.value = true
     try {
       order.value = (await userOrderAPI.detail(orderNo())).data
+      hasManualPayment.value = false
+      if (order.value?.status === 'pending_payment' || order.value?.status === 'canceled') {
+        try {
+          const latest = await paymentAPI.latest({ order_no: order.value.order_no })
+          hasManualPayment.value = latest.data?.provider_type === 'manual_qr'
+        } catch { /* No active payment attempt. */ }
+      }
     } catch {
       order.value = null
+      hasManualPayment.value = false
     } finally {
       loading.value = false
     }
@@ -70,5 +79,5 @@ export function useOrderDetail() {
     void loadOrder()
   })
 
-  return { loading, order, loadOrder, cancelOrder, fulfillmentDownloading, handleDownloadFulfillment, helpers }
+  return { loading, order, hasManualPayment, loadOrder, cancelOrder, fulfillmentDownloading, handleDownloadFulfillment, helpers }
 }

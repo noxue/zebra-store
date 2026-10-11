@@ -1,5 +1,14 @@
 // 繁體中文管理後台翻譯。
 const messages = {
+  manualPayment: {
+    title: '人工收款確認', subtitle: '核對收款帳戶實際到帳金額後再操作。', invalidLink: '確認連結無效或缺少憑證。',
+    loadFailed: '載入付款資訊失敗', confirmFailed: '確認失敗', loading: '正在讀取訂單…', orderNo: '訂單號', amount: '應收金額',
+    amountHint: '請以收款帳戶的實際到帳紀錄為準，不要只看買家截圖。', items: '商品資訊', status: '目前狀態',
+    closedWarning: '訂單已關閉，原庫存、優惠券和餘額預留可能已釋放。強制確認後將轉人工處理，不會自動發貨。',
+    receivedAmount: '實際收到金額', forceReason: '強制確認原因', verified: '我已在收款帳戶核對到這筆金額',
+    confirm: '確認收款並處理訂單', forceConfirm: '強制確認並轉人工處理', success: '已確認收款。',
+    buyerReport: '買家付款回報', payerName: '付款人姓名', issue: '問題', issueNotReceived: '付款後長時間未確認到帳', issueWrongAmount: '支付金額與訂單不符', note: '說明', reportedAt: '提交時間',
+  },
   common: {
     api: {
       responseMissing: '回應內容為空',
@@ -1208,7 +1217,18 @@ const messages = {
         okpay: 'OKPAY',
         dujiaopay: 'DujiaoPay',
         tokenpay: 'TokenPay',
+        manual_qr: '人工收款碼',
         wallet: '錢包餘額',
+      },
+      manualQr: {
+        title: '人工收款碼與通知', hint: '分別建立微信和支付寶渠道。付款金額在原應付金額上加 0～0.99 元唯一尾數；確認後才發貨。',
+        qrImage: '收款碼圖片', reviewBase: '確認網頁地址（後台域名）', telegramToken: '機器人 Token', telegramChatId: 'Chat ID',
+        bindTelegram: '產生綁定連結', openTelegram: '開啟 Telegram 綁定', checkBinding: '檢查綁定結果',
+        webhooks: '群機器人 Webhook', wecomWebhook: '企業微信 Webhook URL', dingtalkWebhook: '釘釘 Webhook URL', dingtalkSecret: '釘釘加簽 Secret（可選）',
+        email: '郵件通知', smtpHost: 'SMTP 主機', smtpPort: 'SMTP 連接埠', smtpUsername: 'SMTP 使用者名稱', smtpPassword: 'SMTP 密碼',
+        smtpFrom: '寄件信箱', smtpTo: '收件信箱', smtpTls: 'STARTTLS', smtpSsl: 'SSL/TLS',
+        apiKey: '確認 API 金鑰', keyHint: '儲存後產生或修改。金鑰只顯示一次，請複製保存；確認連結使用獨立訂單憑證。',
+        customKey: '留空自動產生，或輸入至少 32 位自訂金鑰', setKey: '產生 / 更新金鑰', testSend: '測試發送', copyKey: '複製金鑰',
       },
       channelTypes: {
         wechat: '微信',
@@ -1988,8 +2008,9 @@ const messages = {
       secretsLabel: '卡密列表',
       secretsPlaceholder: '一行一個卡密',
       batchNoLabel: '批次號',
-      noteLabel: '備註',
-      notePlaceholder: '補貨說明',
+      noteLabel: '導入來源 / 備註',
+      noteHint: '本批每張卡密都會關聯此備註，可在卡密轉換器的條件規則中比對。建議填寫穩定的渠道標識。',
+      notePlaceholder: '例如：渠道 A',
       deduplicateLabel: '自動去重',
       deduplicateHint: '開啟後，相同卡密只會導入一次；關閉後會依庫存列保留重複卡密。',
       submitBatch: '提交錄入',
@@ -2000,7 +2021,7 @@ const messages = {
       csvPlaceholder: '選擇 CSV 檔案',
       csvHint: '僅支援 .csv 檔案',
       csvClear: '清除',
-      importNotePlaceholder: 'CSV 導入',
+      importNotePlaceholder: '例如：渠道 A',
       importing: '導入中...',
       startImport: '開始導入',
       statsTitle: '庫存統計',

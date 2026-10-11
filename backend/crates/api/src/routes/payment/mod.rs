@@ -3,6 +3,7 @@
 
 mod admin;
 mod callback;
+mod manual;
 mod storefront;
 
 use super::RouteSet;
@@ -11,7 +12,7 @@ use super::RouteSet;
 pub fn routes() -> RouteSet {
     RouteSet {
         admin: admin::routes(),
-        user_open: callback::routes(),
+        user_open: callback::routes().merge(manual::routes()),
         root: callback::custom_routes(),
         user: storefront::user_routes(),
         guest: storefront::guest_routes(),

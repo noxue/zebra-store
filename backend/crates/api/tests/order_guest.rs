@@ -551,7 +551,18 @@ async fn converter_exchange(
     }
     assert_eq!(
         request["extra"].as_object().map(|extra| extra.len()),
-        Some(1)
+        Some(2)
+    );
+    let first_card = request["items"][0]["upstream_card"]
+        .as_str()
+        .unwrap_or_default();
+    assert_eq!(
+        request["extra"]["provider"],
+        if first_card.starts_with("CARD-") {
+            "p1"
+        } else {
+            "manual_review"
+        }
     );
     assert!(
         request["extra"]["chosen_order"]
@@ -606,7 +617,21 @@ async fn local_card_converter_retry_does_not_consume_stock_twice() {
 
     let app = OrderApp::with_local_converter().await;
     let (product, sku) = app.product("converted", json!({})).await;
-    app.secrets(product, sku, 3).await;
+    app.services
+        .catalog
+        .card_secret
+        .create_batch(
+            zs_app::catalog::card_secret::CreateSecretsInput {
+                product_id: product,
+                sku_id: sku,
+                secrets: (0..3).map(|i| format!("CARD-{product}-{i}")).collect(),
+                note: "渠道 A".into(),
+                ..Default::default()
+            },
+            zs_domain::catalog::card_secret::BatchSource::Manual,
+        )
+        .await
+        .unwrap();
     let now = chrono::Utc::now();
     let token_enc = app
         .ctx
@@ -639,7 +664,12 @@ async fn local_card_converter_retry_does_not_consume_stock_twice() {
             sku_id: sku,
             converter_id,
             type_id: "account".into(),
-            extra_template: json!({"chosen_order":"{{order.order_no}}"}),
+            extra_template: json!({
+                "chosen_order":"{{order.order_no}}",
+                "provider":{"$zs_rule":{"cases":[
+                    {"when":{"variable":"card.notes","operator":"eq","value":"渠道 A"},"then":{"literal":"p1"}}
+                ],"else":{"literal":"manual_review"}}}
+            }),
             issues: Vec::new(),
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),

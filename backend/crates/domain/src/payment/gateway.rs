@@ -14,6 +14,18 @@ use super::form::FormMap;
 use super::types::{InteractionMode, PaymentStatus};
 use crate::Id;
 
+/// Buyer-reported facts sent to a manual payment channel's reviewers.
+#[derive(Debug, Clone, Copy)]
+pub struct ManualIssueNotice<'a> {
+    pub order_no: &'a str,
+    pub amount: Amount,
+    pub currency: &'a str,
+    pub payer_name: &'a str,
+    pub issue: &'a str,
+    pub note: &'a str,
+    pub review_url: &'a str,
+}
+
 /// Normalized gateway failure (`contract/gateway_errors.go`); the message is for logs only.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum GatewayError {
@@ -249,6 +261,43 @@ pub trait PaymentGateway: Send + Sync + std::fmt::Debug {
         config: &ChannelConfig,
         input: &GatewayCreateInput,
     ) -> Result<GatewayCreateResult, GatewayError>;
+
+    /// Optional merchant notification after a manual QR payment has been saved.
+    async fn notify_manual_payment(
+        &self,
+        _config: &ChannelConfig,
+        _order_no: &str,
+        _amount: Amount,
+        _currency: &str,
+        _items: &str,
+        _review_url: &str,
+    ) -> Result<(), GatewayError> {
+        Err(GatewayError::Unsupported)
+    }
+
+    /// Sends a buyer's payment discrepancy report to the channel's configured reviewers.
+    async fn notify_manual_issue(
+        &self,
+        _config: &ChannelConfig,
+        _notice: &ManualIssueNotice<'_>,
+    ) -> Result<(), GatewayError> {
+        Err(GatewayError::Unsupported)
+    }
+
+    async fn manual_telegram_username(
+        &self,
+        _config: &ChannelConfig,
+    ) -> Result<String, GatewayError> {
+        Err(GatewayError::Unsupported)
+    }
+
+    async fn manual_telegram_chat(
+        &self,
+        _config: &ChannelConfig,
+        _code: &str,
+    ) -> Result<Option<String>, GatewayError> {
+        Err(GatewayError::Unsupported)
+    }
 
     /// Actively queries (or captures) a payment by provider reference / gateway order number.
     async fn query_payment(

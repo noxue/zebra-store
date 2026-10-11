@@ -1,6 +1,15 @@
 /* eslint-disable */
 // English management-console translations.
 const messages = {
+  manualPayment: {
+    title: 'Manual payment review', subtitle: 'Check the receiving account before confirming.', invalidLink: 'Invalid review link or missing credential.',
+    loadFailed: 'Could not load payment', confirmFailed: 'Confirmation failed', loading: 'Loading order…', orderNo: 'Order number', amount: 'Amount due',
+    amountHint: 'Verify the actual account transaction, not a buyer screenshot.', items: 'Items', status: 'Current status',
+    closedWarning: 'This order is closed. Stock, coupons, and wallet reservations may have been released. Force confirmation sends it to manual handling without automatic fulfillment.',
+    receivedAmount: 'Amount received', forceReason: 'Reason for force confirmation', verified: 'I verified this amount in the receiving account',
+    confirm: 'Confirm payment', forceConfirm: 'Force confirm for manual handling', success: 'Payment confirmed.',
+    buyerReport: 'Buyer payment report', payerName: 'Payer name', issue: 'Issue', issueNotReceived: 'Payment not confirmed after a long wait', issueWrongAmount: 'Paid amount differs from order', note: 'Details', reportedAt: 'Submitted at',
+  },
   common: {
     api: {
       responseMissing: 'Empty response',
@@ -1209,7 +1218,18 @@ const messages = {
         okpay: 'OKPAY',
         dujiaopay: 'DujiaoPay',
         tokenpay: 'TokenPay',
+        manual_qr: 'Manual QR',
         wallet: 'Wallet Balance',
+      },
+      manualQr: {
+        title: 'Manual collection QR and notices', hint: 'Create separate WeChat and Alipay channels. A unique 0–0.99 CNY suffix is added to the payable amount. Fulfillment starts after confirmation.',
+        qrImage: 'Collection QR image', reviewBase: 'Review page base URL (admin site)', telegramToken: 'Bot token', telegramChatId: 'Chat ID',
+        bindTelegram: 'Create bind link', openTelegram: 'Open Telegram bind', checkBinding: 'Check binding',
+        webhooks: 'Group robot webhooks', wecomWebhook: 'WeCom webhook URL', dingtalkWebhook: 'DingTalk webhook URL', dingtalkSecret: 'DingTalk signing secret (optional)',
+        email: 'Email notice', smtpHost: 'SMTP host', smtpPort: 'SMTP port', smtpUsername: 'SMTP username', smtpPassword: 'SMTP password',
+        smtpFrom: 'From email', smtpTo: 'Recipient email', smtpTls: 'STARTTLS', smtpSsl: 'SSL/TLS',
+        apiKey: 'Confirmation API key', keyHint: 'Generate or change after saving. The key is shown once; copy it now. Review links use separate payment credentials.',
+        customKey: 'Leave blank to generate, or enter at least 32 characters', setKey: 'Generate / update key', testSend: 'Send test', copyKey: 'Copy key',
       },
       channelTypes: {
         wechat: 'WeChat',
@@ -1989,8 +2009,9 @@ const messages = {
       secretsLabel: 'Secrets',
       secretsPlaceholder: 'One secret per line',
       batchNoLabel: 'Batch No',
-      noteLabel: 'Note',
-      notePlaceholder: 'Restock note',
+      noteLabel: 'Import source / note',
+      noteHint: 'This note applies to every card in the batch and can be matched by card converter rules. Use a stable source label.',
+      notePlaceholder: 'For example: Provider A',
       deduplicateLabel: 'Auto deduplicate',
       deduplicateHint: 'When enabled, identical secrets are imported once; when disabled, duplicates are kept as separate stock rows.',
       submitBatch: 'Submit batch',
@@ -2001,7 +2022,7 @@ const messages = {
       csvPlaceholder: 'Choose a CSV file',
       csvHint: 'Only .csv files are supported',
       csvClear: 'Clear',
-      importNotePlaceholder: 'CSV import',
+      importNotePlaceholder: 'For example: Provider A',
       importing: 'Importing...',
       startImport: 'Start import',
       statsTitle: 'Inventory Stats',

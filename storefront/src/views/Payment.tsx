@@ -10,7 +10,7 @@ import { PaymentAmountBreakdown } from '@/components/payment/PaymentAmountBreakd
 import { PaymentChannelSelector } from '@/components/payment/PaymentChannelSelector'
 import { PaymentQrPanel } from '@/components/payment/PaymentQrPanel'
 import { WalletBalanceBox } from '@/components/payment/WalletBalanceBox'
-import { Alert, Badge, Button, Card, CardHeader, EmptyState, Mascot, SectionTitle, Skeleton, cn } from '@/components/ui'
+import { Alert, Badge, Button, Card, CardHeader, EmptyState, Input, Mascot, SectionTitle, Skeleton, cn } from '@/components/ui'
 import { usePageTitle } from '@/composables/usePageTitle'
 import { usePayment } from '@/composables/usePayment'
 import { fulfillmentTypeLabel } from '@/utils/fulfillment'
@@ -28,6 +28,44 @@ export default defineComponent({
 
     const statusText = (s: string) => t(`order.status.${s}`)
     const disc = (v?: string) => (hasPositive(v) ? `-${p.money(v)}` : p.money(v))
+
+    const manualReport = () => p.canReportManualPayment.value && (
+      <div class="mt-4 rounded-zs-lg border border-line bg-surface-strong p-4 sm:p-5">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 class="text-base font-bold text-fg">{t('payment.manualReportTitle')}</h3>
+            <p class="mt-1 text-sm text-muted">{t('payment.manualReportHint')}</p>
+          </div>
+          {!p.manualReportOpen.value && <Button variant="secondary" size="sm" onClick={() => { p.manualReportOpen.value = true }}>
+            {t('payment.manualReportButton')}
+          </Button>}
+        </div>
+        {p.manualReportOpen.value && <div class="mt-4 space-y-3 border-t border-line pt-4">
+          {p.manualReportSent.value ? (
+            <p class="rounded-zs bg-success-soft p-3 text-sm text-success-text">{t('payment.manualReportSent')}</p>
+          ) : (
+            <>
+              <label class="block text-sm font-medium text-fg">{t('payment.manualPayerName')}
+                <Input class="mt-1" modelValue={p.manualPayerName.value} maxlength={80} onUpdate:modelValue={(v: string | number) => { p.manualPayerName.value = String(v) }} />
+              </label>
+              <label class="block text-sm font-medium text-fg">{t('payment.manualIssueLabel')}
+                <select class="mt-1 w-full rounded-zs border border-line bg-surface-strong p-2 text-fg" value={p.manualIssue.value} onChange={(event: Event) => { p.manualIssue.value = (event.target as HTMLSelectElement).value as 'not_received' | 'wrong_amount' }}>
+                  <option value="not_received">{t('payment.manualIssueNotReceived')}</option>
+                  <option value="wrong_amount">{t('payment.manualIssueWrongAmount')}</option>
+                </select>
+              </label>
+              <label class="block text-sm font-medium text-fg">{t('payment.manualIssueNote')}
+                <textarea class="mt-1 min-h-20 w-full rounded-zs border border-line bg-surface-strong p-2 text-fg" maxlength={500} value={p.manualIssueNote.value} onInput={(event: Event) => { p.manualIssueNote.value = (event.target as HTMLTextAreaElement).value }} />
+              </label>
+              {p.manualReportError.value && <p class="text-sm text-danger-text">{p.manualReportError.value}</p>}
+              <Button variant="primary" disabled={p.manualReportSubmitting.value || !p.manualPayerName.value.trim()} onClick={() => void p.submitManualReport()}>
+                {t('payment.manualReportSubmit')}
+              </Button>
+            </>
+          )}
+        </div>}
+      </div>
+    )
 
     const skeleton = () => (
       <Card>
@@ -92,6 +130,12 @@ export default defineComponent({
                 telegramHint={p.link.showTelegramPayHint.value}
                 onOpen={() => p.link.openPayLink()}
               />
+              {result.provider_type === 'manual_qr' && (
+                <p class="mt-3 rounded-zs border border-warning-text bg-warning-soft p-3 text-sm text-warning-text">
+                  {t('payment.manualQrExactAmountHint')}
+                </p>
+              )}
+              {manualReport()}
             </div>
             <div class="space-y-4">
               <div class="rounded-zs-lg border border-line bg-surface-strong p-4 text-xs text-muted">
@@ -152,6 +196,7 @@ export default defineComponent({
             <InfoTile label={t('payment.orderStatus')} value={statusText(order.status)} mono={false} />
             <InfoTile label={t('orderDetail.amountTotal')} value={p.money(order.total_amount)} />
           </div>
+          {manualReport()}
         </Card>
       )
     }

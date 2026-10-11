@@ -8,6 +8,7 @@ pub mod epay;
 pub mod epusdt;
 pub mod http;
 pub mod huifu;
+pub mod manual_qr;
 pub mod okpay;
 pub mod paypal;
 pub mod raw_json;
@@ -53,6 +54,11 @@ pub fn build_registry(env: &GatewayEnv) -> GatewayRegistry {
         provider::EPAY,
         "",
         Arc::new(epay::EpayGateway::new(env.clone())),
+    );
+    r.register(
+        provider::MANUAL_QR,
+        "",
+        Arc::new(manual_qr::ManualQrGateway),
     );
     r.register(
         provider::HUIFU,

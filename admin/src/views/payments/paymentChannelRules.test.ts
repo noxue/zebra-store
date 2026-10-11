@@ -108,6 +108,9 @@ describe('Huifu defaults', () => {
     expect(all.epusdt.notify_url).toBe('https://store.example.com/api/v1/payments/callback')
     expect(all.okpay.callback_url).toBe('https://store.example.com/api/v1/payments/callback')
     expect(all.dujiaopay.success_url).toBe('https://store.example.com/pay')
+    const withAdminPath = defaultConfigs('https://store.example.com', 'https://store.example.com/secret-admin')
+    expect(withAdminPath.manual_qr.review_base_url).toBe('https://store.example.com/secret-admin')
+    expect(withAdminPath.epay.notify_url).toBe('https://store.example.com/api/v1/payments/callback')
   })
 
   it('persists a selected method set and keeps old one-method channels compatible', () => {

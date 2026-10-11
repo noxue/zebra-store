@@ -366,6 +366,27 @@ impl OrderService {
             cancel_url: String::new(),
         };
         let config = channel.config_json.clone();
+        let is_manual = channel.provider() == provider::MANUAL_QR;
+        let review_base = zs_domain::payment::channel::config_str(&config, "review_base_url");
+        let review_origin = if review_base.is_empty() {
+            format!("{}://{}/admin", req.scheme, req.tenant.host)
+        } else {
+            review_base
+        };
+        let items = order
+            .all_items()
+            .iter()
+            .map(|item| {
+                let title = item
+                    .title
+                    .get("zh-CN")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("商品");
+                format!("{title} × {}", item.quantity)
+            })
+            .collect::<Vec<_>>()
+            .join("、");
+        let business_no = order.order_no.clone();
         let store = self.deps.payments.clone();
         let clock = self.deps.clock.clone();
         let task = tokio::spawn(async move {
@@ -378,6 +399,33 @@ impl OrderService {
                 .save_started(&payment)
                 .await
                 .map_err(|e| GatewayError::request(e.to_string()))?;
+            if is_manual {
+                let token = payment
+                    .provider_payload
+                    .get("manual_link_token")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default();
+                if !token.is_empty() {
+                    let link = format!(
+                        "{}/manual-confirm/{}#key={token}",
+                        review_origin.trim_end_matches('/'),
+                        payment.id
+                    );
+                    if let Err(error) = gateway
+                        .notify_manual_payment(
+                            &config,
+                            &business_no,
+                            payment.amount,
+                            &payment.currency,
+                            &items,
+                            &link,
+                        )
+                        .await
+                    {
+                        tracing::error!(%error, payment_id = payment.id, "manual_payment_notification_failed");
+                    }
+                }
+            }
             Ok::<Payment, GatewayError>(payment)
         });
         match task.await {
@@ -396,17 +444,33 @@ impl OrderService {
             return Err(Error::bad_request(pay_keys::PAYMENT_INVALID));
         }
         let now = self.deps.clock.now();
-        if order.status != OrderStatus::PendingPayment || order.expires_at.is_some_and(|e| e <= now)
+        let payment = if order.status == OrderStatus::PendingPayment
+            && !order.expires_at.is_some_and(|e| e <= now)
         {
+            self.deps
+                .repo
+                .latest_pending_payment(order.id, now)
+                .await
+                .map_err(|e| e.or_internal(pay_keys::PAYMENT_FETCH_FAILED))?
+                .ok_or_else(|| Error::not_found(pay_keys::PAYMENT_NOT_FOUND))?
+        } else if matches!(
+            order.status,
+            OrderStatus::PendingPayment | OrderStatus::Canceled
+        ) {
+            self.deps
+                .repo
+                .payments_of(order.id)
+                .await?
+                .into_iter()
+                .next()
+                .filter(|payment| {
+                    payment.provider_type == provider::MANUAL_QR
+                        && payment.status != PaymentStatus::Success
+                })
+                .ok_or_else(|| Error::bad_request(keys::ORDER_STATUS_INVALID))?
+        } else {
             return Err(Error::bad_request(keys::ORDER_STATUS_INVALID));
-        }
-        let payment = self
-            .deps
-            .repo
-            .latest_pending_payment(order.id, now)
-            .await
-            .map_err(|e| e.or_internal(pay_keys::PAYMENT_FETCH_FAILED))?
-            .ok_or_else(|| Error::not_found(pay_keys::PAYMENT_NOT_FOUND))?;
+        };
         let channel_name = self
             .deps
             .repo

@@ -214,7 +214,8 @@ pub fn check_currency(channel: &PaymentChannel, currency: &str) -> Result<(), El
         return Err(EligibilityError::CurrencyMismatch);
     }
     let cny_only = (channel.provider() == provider::OFFICIAL
-        || channel.provider() == provider::HUIFU)
+        || channel.provider() == provider::HUIFU
+        || channel.provider() == provider::MANUAL_QR)
         && matches!(
             channel.channel().as_str(),
             channel_type::WECHAT | channel_type::ALIPAY

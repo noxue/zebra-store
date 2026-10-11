@@ -18,7 +18,8 @@ use crate::db::entity::extra::{
     card_converters as converters,
 };
 use crate::db::entity::{
-    procurement_orders, product_mappings, product_skus, products, settings, site_connections,
+    card_secret_batches, card_secrets, procurement_orders, product_mappings, product_skus,
+    products, settings, site_connections,
 };
 use crate::db::repo::support::{DbResultExt, from_json, to_json};
 
@@ -175,6 +176,45 @@ impl ConverterRepo for SeaCardConverterRepo {
             name: row.name,
             protocol: row.protocol,
         }))
+    }
+
+    async fn local_card_notes(&self, order_id: Id) -> Result<Vec<(String, String)>> {
+        let cards = card_secrets::Entity::find()
+            .filter(card_secrets::Column::OrderId.eq(order_id))
+            .filter(card_secrets::Column::Status.eq("used"))
+            .filter(card_secrets::Column::DeletedAt.is_null())
+            .order_by_asc(card_secrets::Column::Id)
+            .all(&self.db)
+            .await
+            .dom()?;
+        let batch_ids = cards
+            .iter()
+            .filter_map(|card| card.batch_id)
+            .collect::<Vec<_>>();
+        let batches = if batch_ids.is_empty() {
+            Vec::new()
+        } else {
+            card_secret_batches::Entity::find()
+                .filter(card_secret_batches::Column::Id.is_in(batch_ids))
+                .all(&self.db)
+                .await
+                .dom()?
+        };
+        let notes = batches
+            .into_iter()
+            .map(|batch| (batch.id, batch.note))
+            .collect::<std::collections::HashMap<_, _>>();
+        Ok(cards
+            .into_iter()
+            .map(|card| {
+                let note = card
+                    .batch_id
+                    .and_then(|id| notes.get(&id))
+                    .cloned()
+                    .unwrap_or_default();
+                (card.secret, note)
+            })
+            .collect())
     }
 
     async fn list(&self) -> Result<Vec<Converter>> {

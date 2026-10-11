@@ -23,7 +23,7 @@
 | 字段 | 说明 |
 |---|---|
 | 名称、图标 | 显示在结算页 |
-| 支付提供方 | 汇付、易支付（epay）、官方（支付宝 / 微信 / PayPal / Stripe）、BEpusdt、epusdt、OKPay、TokenPay、DujiaoPay |
+| 支付提供方 | 人工收款码、汇付、易支付（epay）、官方（支付宝 / 微信 / PayPal / Stripe）、BEpusdt、epusdt、OKPay、TokenPay、DujiaoPay |
 | 渠道类型 | 例如 alipay、wechat、usdt-trc20，可选项取决于提供方 |
 | 交互方式 | 二维码 / 跳转 / 手机网页（wap）/ 电脑网页（page），可选项取决于提供方 |
 | 费率、固定手续费 | 例如 0.6% + 0 |
@@ -35,6 +35,8 @@
 | 高级配置 | 直接编辑 JSON，一般不需要 |
 
 **提供方配置**：每种支付平台要填的商户号、密钥等各不相同，逐个说明见 [支付渠道配置](/payment/)。
+
+使用自己的微信或支付宝收款码时，按[人工收款码支付](/payment/manual-qr)配置通知、确认链接与 API 密钥。
 
 微信支付渠道有 **测试公钥** 按钮，用来检查平台公钥配置是否正确。
 

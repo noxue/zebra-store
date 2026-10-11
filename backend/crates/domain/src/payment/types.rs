@@ -14,6 +14,7 @@ pub mod provider {
     pub const HUIFU: &str = "huifu";
     pub const OKPAY: &str = "okpay";
     pub const TOKENPAY: &str = "tokenpay";
+    pub const MANUAL_QR: &str = "manual_qr";
     pub const WALLET: &str = "wallet";
 }
 

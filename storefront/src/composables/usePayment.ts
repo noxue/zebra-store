@@ -68,6 +68,13 @@ export function usePayment() {
   const submitting = ref(false)
   const order = ref<Order | null>(null)
   const paymentResult = ref<PaymentCreateResult | null>(null)
+  const manualReportOpen = ref(false)
+  const manualPayerName = ref('')
+  const manualIssue = ref<'not_received' | 'wrong_amount'>('not_received')
+  const manualIssueNote = ref('')
+  const manualReportSubmitting = ref(false)
+  const manualReportSent = ref(false)
+  const manualReportError = ref('')
   const cachedPayment = ref<PaymentCreateResult | null>(null)
   const error = ref('')
   const selectedChannelId = ref<number | null>(null)
@@ -146,6 +153,36 @@ export function usePayment() {
     return Number.isFinite(id) && id > 0 ? id : 0
   }
   const providerType = computed(() => String(paymentResult.value?.provider_type || resultChannel.value?.provider_type || '').toLowerCase())
+  const canReportManualPayment = computed(() => providerType.value === 'manual_qr' && currentPaymentId() > 0 &&
+    (order.value?.status === 'pending_payment' || order.value?.status === 'canceled'))
+  const submitManualReport = async () => {
+    const paymentId = currentPaymentId()
+    if (!canReportManualPayment.value || !paymentId || manualReportSubmitting.value) return
+    const name = manualPayerName.value.trim()
+    if (name.length < 2 || name.length > 80) {
+      manualReportError.value = t('payment.manualReportNameInvalid')
+      return
+    }
+    manualReportSubmitting.value = true
+    manualReportError.value = ''
+    try {
+      const data = { payer_name: name, issue: manualIssue.value, note: manualIssueNote.value.trim() }
+      if (isGuest.value) await guestOrderAPI.reportManualIssue(paymentId, guestCreds(), data)
+      else await paymentAPI.reportManualIssue(paymentId, data)
+      manualReportSent.value = true
+    } catch (err) {
+      manualReportError.value = errorMessage(err, t('payment.manualReportFailed'))
+    } finally {
+      manualReportSubmitting.value = false
+    }
+  }
+  watch(() => paymentResult.value?.payment_id, () => {
+    manualReportSent.value = false
+    manualReportError.value = ''
+  })
+  watch([canReportManualPayment, () => readQueryFlag(query.value, 'report')], ([canReport, requested]) => {
+    if (canReport && requested) manualReportOpen.value = true
+  }, { immediate: true })
   const channelType = computed(() => String(paymentResult.value?.channel_type || resultChannel.value?.channel_type || '').toLowerCase())
 
   const link = usePaymentLink(paymentResult)
@@ -325,7 +362,7 @@ export function usePayment() {
   }
 
   const loadLatestPayment = async () => {
-    if (!order.value || order.value.status !== 'pending_payment' || paymentResult.value) return
+    if (!order.value || !['pending_payment', 'canceled'].includes(order.value.status) || paymentResult.value) return
     if (isGuest.value && !hasGuestAuth.value) return
     if (!orderNoResolved.value) return
     try {
@@ -338,10 +375,12 @@ export function usePayment() {
         paymentResult.value = data
         selectedChannelId.value = data.channel_id || null
         selectedChannelType.value = data.channel_type || ''
-        startPolling()
-        void captureCurrentPayment(true)
-        startCountdown()
-        if (shouldAutoOpenPaymentLink(data)) link.openPayLink(true)
+        if (order.value.status === 'pending_payment') {
+          startPolling()
+          void captureCurrentPayment(true)
+          startCountdown()
+          if (shouldAutoOpenPaymentLink(data)) link.openPayLink(true)
+        }
       }
     } catch {
       // no previous payment
@@ -385,9 +424,17 @@ export function usePayment() {
           if (orderCanceled.value) {
             if (!silent) error.value = t('payment.orderCanceled')
             cachedPayment.value = null
+            if (!paymentResult.value && !latestLoaded) {
+              latestLoaded = true
+              await loadLatestPayment()
+            }
           } else if (orderExpired.value) {
             if (!silent) error.value = t('payment.orderExpired')
             cachedPayment.value = null
+            if (!paymentResult.value && !latestLoaded) {
+              latestLoaded = true
+              await loadLatestPayment()
+            }
           } else if (!paymentResult.value && !latestLoaded && order.value.status === 'pending_payment') {
             latestLoaded = true
             await loadLatestPayment()
@@ -737,6 +784,15 @@ export function usePayment() {
     submitting,
     order,
     paymentResult,
+    manualReportOpen,
+    manualPayerName,
+    manualIssue,
+    manualIssueNote,
+    manualReportSubmitting,
+    manualReportSent,
+    manualReportError,
+    canReportManualPayment,
+    submitManualReport,
     selectedChannelId,
     selectedChannelType,
     cachedPayment,

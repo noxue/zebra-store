@@ -113,6 +113,7 @@ A parent order's status is recalculated from its children (`CalcParentStatus`).
 ### Card secrets and gift cards
 - **card_secrets**: product_id, sku_id, batch_id, secret (text), status (`available`/`reserved`/`used`), order_id, reserved_at, used_at
 - **card_secret_batches**: product_id, sku_id, batch_no (unique), source (`manual`/`csv`), total_count, note, created_by
+- 手动录入和 CSV 导入的 `note` 是该批每张卡密的来源标识；本地自动发货时转换器可用 `card.notes` 条件（所有卡密备注均匹配）或同源订单的 `card.note` 占位符/条件。混合备注的订单不能将单一备注写入 `extra`。
 - **gift_cards**: batch_id, name, code (unique; upper-cased on redeem), amount, currency, status (`active`/`redeemed`/`disabled`), expires_at, redeemed_at, redeemed_user_id, wallet_txn_id
 - **gift_card_batches**: batch_no, name, amount, currency, quantity, expires_at, created_by
 
@@ -327,6 +328,10 @@ Wiring is in `internal/app/httpserver/router.go`, `routes_storefront.go`, `route
 | POST | `/payments` | Start payment (`order_no`, `channel_id`, `use_balance`) |
 | POST | `/payments/:id/capture` | Actively query the gateway |
 | GET | `/payments/latest` | Latest payment |
+| POST | `/payments/:id/manual-issue` | Authenticated order owner reports a manual QR payment issue with payer name; records and notifies channel reviewers without settling |
+| POST | `/guest/payments/:id/manual-issue` | Guest order owner reports the same issue using Guest credentials |
+| GET | `/manual-payments/:id` | Bearer-key authenticated manual QR review; link stays valid while unresolved |
+| POST | `/manual-payments/:id/confirm` | Bearer-key authenticated normal or closed-order force confirmation |
 
 *Wallet, gift cards and affiliate*
 
@@ -551,6 +556,9 @@ All four paths can be replaced by admin-set custom paths (settings key `callback
 | GET / POST | `/payment-channels` | List / create |
 | GET / PUT / DELETE | `/payment-channels/:id` | Read / update / delete |
 | POST | `/payment-channels/:id/wechatpay-public-key-test` | Test WeChat Pay key |
+| POST | `/payment-channels/:id/manual-key` | Generate or replace manual QR confirmation API key; plaintext returned once |
+| POST | `/payment-channels/:id/manual-test` | Send a manual QR test notification |
+| POST / GET | `/payment-channels/:id/manual-telegram-bind` | Begin / finish Telegram Chat ID binding |
 | GET | `/payment-channels/:id/trade-bill?file_date=yyyyMMdd` | Query Huifu `TRADE_BILL` generation and files |
 | GET | `/payment-channels/:id/trade-bill/download?file_date=yyyyMMdd&file_id=...` | Re-query, verify and download one Huifu trade-bill file |
 | GET | `/payments`, `/payments/export`, `/payments/:id` | Payment records |
@@ -823,6 +831,7 @@ All four paths can be replaced by admin-set custom paths (settings key `callback
 | `tokenpay` | crypto | gateway_url, notify_secret, currency, base_currency | shared endpoint; reply `ok` |
 | `okpay` | crypto | gateway_url, merchant_id, merchant_token, exchange_rate, coin | shared endpoint; reply `{"status":"success"}` |
 | `dujiaopay` | crypto (transaction or cashier mode) | api_base_url, api_key_id, api_secret, webhook_secret, chain, token_id, fiat_currency | `/payments/webhook/dujiaopay?channel_id=` |
+| `manual_qr` | wechat, alipay (merchant-owned collection QR) | qr_image_url; optional Telegram, WeCom, DingTalk, SMTP notice settings; confirmation key hash | authenticated `/manual-payments/:id/confirm`; see [manual QR guide](../payment/manual-qr.md) |
 | `wallet` | balance | – | internal, no gateway |
 
 - **Shared endpoint** (`modules/payment/transport/http/callback/handler.go`): tries each format in this order — WeChat, OKPay, Alipay, epay, TokenPay, epusdt, BEpusdt. If none matches it returns 404 and queues an alert.

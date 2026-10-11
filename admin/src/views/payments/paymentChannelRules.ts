@@ -6,7 +6,7 @@
 import type { AdminPaymentChannel } from '@/api/types'
 import { resolveOkpayChannelTypeFromConfig } from '@/utils/paymentChannelDisplay'
 
-export const PROVIDER_TYPES = ['official', 'huifu', 'dujiaopay', 'epay', 'bepusdt', 'epusdt', 'okpay', 'tokenpay'] as const
+export const PROVIDER_TYPES = ['official', 'huifu', 'dujiaopay', 'epay', 'bepusdt', 'epusdt', 'okpay', 'tokenpay', 'manual_qr'] as const
 export type ProviderType = (typeof PROVIDER_TYPES)[number]
 
 export interface KeyOption {
@@ -53,6 +53,8 @@ export const channelOptionsFor = (provider: string): KeyOption[] => {
       return HUIFU_CHANNEL_OPTIONS
     case 'epay':
       return EPAY_CHANNEL_OPTIONS
+    case 'manual_qr':
+      return EPAY_CHANNEL_OPTIONS.filter((option) => option.value !== 'qqpay')
     case 'official':
       return OFFICIAL_CHANNEL_OPTIONS
     case 'bepusdt':
@@ -78,6 +80,7 @@ const QR_REDIRECT = ['qr', 'redirect']
 
 /** Allowed interaction modes; the first one is the default. */
 export const interactionModesFor = (provider: string, channelType: string, orderModes: OrderModes): string[] => {
+  if (provider === 'manual_qr') return ['qr']
   if (provider === 'bepusdt') return orderModes.bepusdt === 'cashier' ? ['redirect'] : QR_REDIRECT
   if (provider === 'epusdt') return ['redirect']
   if (provider === 'huifu') return ['qr', 'redirect']
@@ -101,6 +104,7 @@ export const isDujiaopayTokenId = (value: string) => /^[a-z0-9]+(?:-[a-z0-9]+)+$
 export const channelTypeForProvider = (provider: string, current: string, dujiaopayOrderMode: string): string => {
   switch (provider) {
     case 'epay':
+    case 'manual_qr':
     case 'huifu':
     case 'official':
     case 'okpay': {
@@ -258,6 +262,24 @@ export interface HuifuConfig {
   supported_channel_types: string[]
 }
 
+export interface ManualQrConfig {
+  qr_image_url: string
+  review_base_url: string
+  telegram_token: string
+  telegram_chat_id: string
+  wecom_webhook_url: string
+  dingtalk_webhook_url: string
+  dingtalk_secret: string
+  smtp_host: string
+  smtp_port: string
+  smtp_username: string
+  smtp_password: string
+  smtp_from: string
+  smtp_to: string
+  smtp_tls: boolean
+  smtp_ssl: boolean
+}
+
 export interface ProviderConfigs {
   epay: EpayConfig
   paypal: PaypalConfig
@@ -270,6 +292,7 @@ export interface ProviderConfigs {
   okpay: OkpayConfig
   dujiaopay: DujiaopayConfig
   huifu: HuifuConfig
+  manual_qr: ManualQrConfig
 }
 export type ConfigSection = keyof ProviderConfigs
 
@@ -283,12 +306,18 @@ const DUJIAOPAY_API = 'https://www.dujiaopay.com'
 const HUIFU_API = 'https://api.huifu.com'
 
 /** Values used for a fresh "create" dialog (original reset*Config functions). */
-export const defaultConfigs = (siteOrigin = ''): ProviderConfigs => {
+export const defaultConfigs = (siteOrigin = '', manualReviewBase = siteOrigin): ProviderConfigs => {
   const origin = siteOrigin.trim().replace(/\/+$/, '')
   const inferredNotifyUrl = origin ? `${origin}/api/v1/payments/callback` : DEFAULT_NOTIFY_URL
   const inferredReturnUrl = origin ? `${origin}/pay` : DEFAULT_RETURN_URL
 
   return {
+  manual_qr: {
+    qr_image_url: '', review_base_url: manualReviewBase.trim().replace(/\/+$/, ''), telegram_token: '', telegram_chat_id: '',
+    wecom_webhook_url: '', dingtalk_webhook_url: '', dingtalk_secret: '',
+    smtp_host: '', smtp_port: '465', smtp_username: '', smtp_password: '', smtp_from: '', smtp_to: '',
+    smtp_tls: false, smtp_ssl: true,
+  },
   epay: {
     epay_version: 'v2',
     gateway_url: '',
@@ -430,8 +459,8 @@ const str = (raw: Raw, key: string, fallback = '') => {
 const cashierOr = (raw: Raw): OrderMode => (str(raw, 'order_mode', 'transaction') === 'cashier' ? 'cashier' : 'transaction')
 
 /** Parse a stored config_json into every provider form (original apply*Config functions). */
-export const applyConfigs = (raw: Raw, siteOrigin = ''): ProviderConfigs => {
-  const inferred = defaultConfigs(siteOrigin)
+export const applyConfigs = (raw: Raw, siteOrigin = '', manualReviewBase = siteOrigin): ProviderConfigs => {
+  const inferred = defaultConfigs(siteOrigin, manualReviewBase)
   const version = str(raw, 'epay_version').toLowerCase()
   const methodTypes = Array.isArray(raw.payment_method_types)
     ? (raw.payment_method_types as unknown[]).map((item) => String(item ?? '').trim()).filter(Boolean)
@@ -441,6 +470,15 @@ export const applyConfigs = (raw: Raw, siteOrigin = ''): ProviderConfigs => {
   const epusdtMode = cashierOr(raw)
   const dujiaoMode = cashierOr(raw)
   return {
+    manual_qr: {
+      qr_image_url: str(raw, 'qr_image_url'), review_base_url: str(raw, 'review_base_url', inferred.manual_qr.review_base_url),
+      telegram_token: str(raw, 'telegram_token'), telegram_chat_id: str(raw, 'telegram_chat_id'),
+      wecom_webhook_url: str(raw, 'wecom_webhook_url'), dingtalk_webhook_url: str(raw, 'dingtalk_webhook_url'),
+      dingtalk_secret: str(raw, 'dingtalk_secret'), smtp_host: str(raw, 'smtp_host'),
+      smtp_port: str(raw, 'smtp_port', '465'), smtp_username: str(raw, 'smtp_username'),
+      smtp_password: str(raw, 'smtp_password'), smtp_from: str(raw, 'smtp_from'), smtp_to: str(raw, 'smtp_to'),
+      smtp_tls: raw.smtp_tls === true, smtp_ssl: raw.smtp_ssl !== false,
+    },
     epay: {
       epay_version: version === 'v1' ? 'v1' : 'v2',
       gateway_url: str(raw, 'gateway_url'),
@@ -585,7 +623,7 @@ export const configSectionFor = (provider: string, channelType: string): ConfigS
   if (provider === 'official') {
     return channelType === 'paypal' || channelType === 'stripe' || channelType === 'alipay' || channelType === 'wechat' ? channelType : null
   }
-  return provider === 'epay' || provider === 'huifu' || provider === 'bepusdt' || provider === 'epusdt' || provider === 'tokenpay' || provider === 'okpay' || provider === 'dujiaopay'
+  return provider === 'epay' || provider === 'huifu' || provider === 'bepusdt' || provider === 'epusdt' || provider === 'tokenpay' || provider === 'okpay' || provider === 'dujiaopay' || provider === 'manual_qr'
     ? provider
     : null
 }
@@ -746,6 +784,16 @@ export const buildHuifuConfig = (c: HuifuConfig): Raw =>
     supported_channel_types: c.supported_channel_types.filter((item) => HUIFU_CHANNEL_OPTIONS.some((option) => option.value === item)),
   })
 
+export const buildManualQrConfig = (c: ManualQrConfig): Raw => ({
+  ...pickNonEmpty(c, [
+    'qr_image_url', 'review_base_url', 'telegram_token', 'telegram_chat_id',
+    'wecom_webhook_url', 'dingtalk_webhook_url', 'dingtalk_secret',
+    'smtp_host', 'smtp_port', 'smtp_username', 'smtp_password', 'smtp_from', 'smtp_to',
+  ]),
+  smtp_tls: c.smtp_tls,
+  smtp_ssl: c.smtp_ssl,
+})
+
 // ---------------------------------------------------------------------------------------------
 // Order-mode side effects (original order_mode watchers). They mutate the given config.
 // ---------------------------------------------------------------------------------------------
@@ -822,7 +870,7 @@ export const defaultChannelForm = (): ChannelForm => ({
 const moneyText = (v: unknown) => (v !== undefined && v !== null ? String(v) : '0')
 
 /** Map a loaded channel onto the dialog state (form + every provider config). */
-export const channelToState = (channel: AdminPaymentChannel, siteOrigin = ''): { form: ChannelForm; configs: ProviderConfigs } => {
+export const channelToState = (channel: AdminPaymentChannel, siteOrigin = '', manualReviewBase = siteOrigin): { form: ChannelForm; configs: ProviderConfigs } => {
   const raw = channel.config_json && typeof channel.config_json === 'object' ? channel.config_json : null
   const form: ChannelForm = {
     name: channel.name,
@@ -845,7 +893,7 @@ export const channelToState = (channel: AdminPaymentChannel, siteOrigin = ''): {
   if (raw && channel.provider_type === 'okpay' && !String(form.channel_type || '').trim()) {
     form.channel_type = resolveOkpayChannelTypeFromConfig(raw)
   }
-  const configs = raw ? applyConfigs(raw, siteOrigin) : defaultConfigs(siteOrigin)
+  const configs = raw ? applyConfigs(raw, siteOrigin, manualReviewBase) : defaultConfigs(siteOrigin, manualReviewBase)
   if (channel.provider_type === 'huifu' && configs.huifu.supported_channel_types.length === 0) {
     configs.huifu.supported_channel_types = [form.channel_type]
   }
@@ -916,6 +964,9 @@ export const buildConfigJson = (form: ChannelForm, configs: ProviderConfigs): { 
   const section = configSectionFor(form.provider_type, form.channel_type)
   const fx = ['target_currency', 'exchange_rate']
   switch (section) {
+    case 'manual_qr':
+      config = { ...config, ...buildManualQrConfig(configs.manual_qr) }
+      break
     case 'epay':
       config = {
         ...withoutKeys(config, [...(configs.epay.epay_version === 'v1' ? ['private_key', 'platform_public_key'] : ['merchant_key']), ...fx]),

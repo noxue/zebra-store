@@ -55,7 +55,7 @@ export default defineComponent({
               <FormField label={t('admin.cardSecrets.batchNoLabel')}>
                 <Input v-model={f.batchForm.batch_no} placeholder="BATCH-20260203-001" mono />
               </FormField>
-              <FormField label={t('admin.cardSecrets.noteLabel')}>
+              <FormField label={t('admin.cardSecrets.noteLabel')} hint={t('admin.cardSecrets.noteHint')}>
                 <Input v-model={f.batchForm.note} placeholder={t('admin.cardSecrets.notePlaceholder')} />
               </FormField>
             </div>
@@ -99,7 +99,7 @@ export default defineComponent({
               <FormField label={t('admin.cardSecrets.batchNoLabel')}>
                 <Input v-model={f.importForm.batch_no} placeholder="BATCH-20260203-002" mono />
               </FormField>
-              <FormField label={t('admin.cardSecrets.noteLabel')}>
+              <FormField label={t('admin.cardSecrets.noteLabel')} hint={t('admin.cardSecrets.noteHint')}>
                 <Input v-model={f.importForm.note} placeholder={t('admin.cardSecrets.importNotePlaceholder')} />
               </FormField>
             </div>

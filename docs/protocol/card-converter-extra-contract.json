@@ -11,9 +11,10 @@
     "sku.specifications",
     "source.id",
     "source.name",
-    "source.protocol"
+    "source.protocol",
+    "card.note"
   ],
-  "condition_only_variables": ["card"],
+  "condition_only_variables": ["card", "card.notes"],
   "operators": ["eq", "ne", "gt", "gte", "lt", "lte", "regex", "regex_not"],
   "max_cases": 20,
   "max_comparison_bytes": 512

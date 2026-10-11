@@ -4,12 +4,14 @@
 use std::collections::HashSet;
 
 use chrono::{DateTime, Utc};
+use rand::Rng;
 use rust_decimal::Decimal;
 use sea_orm::sea_query::Expr;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseTransaction, EntityTrait, QueryFilter,
     QueryOrder, QuerySelect, Set,
 };
+use serde_json::json;
 use zs_domain::order::model::{Order, OrderStatus, keys};
 use zs_domain::order::ports::{BeginOutcome, BeginPayment, Settled};
 use zs_domain::payment::callback::{
@@ -68,6 +70,64 @@ fn forces_cny(channel: &PaymentChannel) -> bool {
 
 fn has_pay_link(p: &payments::Model) -> bool {
     !p.pay_url.trim().is_empty() || !p.qr_code.trim().is_empty()
+}
+
+/// Finds one distinguishable amount in the base..base+0.99 range. All manual QR
+/// channels share the pool so an operator can identify an order from the amount.
+/// This runs in the same transaction as payment insertion. The outer transaction
+/// retries serialization and SQLite-busy conflicts.
+async fn manual_qr_amount<C: ConnectionTrait>(
+    conn: &C,
+    base: Amount,
+    currency: &str,
+) -> Result<Amount> {
+    // Serialize allocation across all manual channels on one stable row.
+    // The channel selected for this payment may be a different row.
+    let _allocator_lock = payment_channels::Entity::find()
+        .filter(payment_channels::Column::ProviderType.eq(provider::MANUAL_QR))
+        .filter(payment_channels::Column::DeletedAt.is_null())
+        .order_by_asc(payment_channels::Column::Id)
+        .lock_exclusive()
+        .one(conn)
+        .await
+        .dom()?;
+    let upper = base + Amount::from_cents(99);
+    let candidates = payments::Entity::find()
+        .filter(payments::Column::ProviderType.eq(provider::MANUAL_QR))
+        .filter(payments::Column::Currency.eq(currency))
+        .filter(payments::Column::DeletedAt.is_null())
+        .filter(payments::Column::Amount.gte(base.decimal()))
+        .filter(payments::Column::Amount.lte(upper.decimal()))
+        .all(conn)
+        .await
+        .dom()?;
+    let candidate_order_ids: HashSet<Id> = candidates.iter().map(|p| p.order_id).collect();
+    let active_ids: HashSet<Id> = if candidate_order_ids.is_empty() {
+        HashSet::new()
+    } else {
+        orders::Entity::find()
+            .filter(orders::Column::Id.is_in(candidate_order_ids))
+            .filter(orders::Column::Status.eq(OrderStatus::PendingPayment.as_str()))
+            .filter(orders::Column::DeletedAt.is_null())
+            .all(conn)
+            .await
+            .dom()?
+            .into_iter()
+            .map(|order| order.id)
+            .collect()
+    };
+    // An expired attempt may still receive money while its order is pending;
+    // its amount must remain reserved until that order reaches an outcome.
+    let used: HashSet<Decimal> = candidates
+        .into_iter()
+        .filter(|payment| active_ids.contains(&payment.order_id))
+        .map(|payment| payment.amount)
+        .collect();
+    let start = rand::rng().random_range(0..100_i64);
+    (0..100_i64)
+        .map(|step| base + Amount::from_cents((start + step) % 100))
+        .find(|candidate| !used.contains(&candidate.decimal()))
+        .ok_or_else(|| Error::bad_request(pay_keys::CHANNEL_CONFIG_INVALID))
 }
 
 /// Product channel whitelist of every item of the order (PAY-11), inside the transaction.
@@ -260,6 +320,7 @@ pub(crate) async fn begin_in<C: ConnectionTrait>(
     if req.channel_id != 0 {
         let mut ch = payment_channels::Entity::find_by_id(req.channel_id)
             .filter(payment_channels::Column::DeletedAt.is_null())
+            .lock_exclusive()
             .one(conn)
             .await
             .dom()?
@@ -394,12 +455,17 @@ pub(crate) async fn begin_in<C: ConnectionTrait>(
     } else {
         order.currency.clone()
     };
+    let payable = if ch.provider() == provider::MANUAL_QR {
+        manual_qr_amount(conn, amounts.payable, &currency).await?
+    } else {
+        amounts.payable
+    };
     let payment = insert_payment(
         conn,
         NewPayment {
             order: &order,
             channel: Some(&ch),
-            amount: amounts.payable,
+            amount: payable,
             fee_rate: Amount::new(fee_rate),
             fixed_fee,
             fee_amount: amounts.fee,
@@ -609,4 +675,172 @@ pub(crate) async fn settle_in(
         underpaid,
         recharge_credited: None,
     })
+}
+
+/// Human confirmation, with the same locked fact checks as a gateway callback.
+/// A canceled order has already released stock, coupons and wallet balance, so
+/// force confirmation deliberately leaves every child for manual handling.
+pub(crate) async fn manual_confirm_in(
+    conn: &DatabaseTransaction,
+    payment_id: Id,
+    received: Amount,
+    force: bool,
+    note: &str,
+    reseller_confirm_days: i64,
+    now: DateTime<Utc>,
+) -> Result<Settled> {
+    let row = payments::Entity::find_by_id(payment_id)
+        .filter(payments::Column::DeletedAt.is_null())
+        .lock_exclusive()
+        .one(conn)
+        .await
+        .dom()?
+        .ok_or_else(|| Error::not_found(pay_keys::PAYMENT_NOT_FOUND))?;
+    let mut payment = payment_to_domain(row);
+    if payment.provider_type != provider::MANUAL_QR || payment.order_id <= 0 {
+        return Err(Error::bad_request(pay_keys::PAYMENT_INVALID));
+    }
+    if !received.is_positive() || received != payment.amount {
+        return Err(Error::bad_request(pay_keys::PAYMENT_AMOUNT_MISMATCH));
+    }
+    let mut order = map::load_locked(conn, payment.order_id)
+        .await?
+        .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
+    if payment.status == PaymentStatus::Success || order.paid_at.is_some() {
+        return Err(Error::bad_request(keys::ORDER_STATUS_INVALID));
+    }
+    if payments::Entity::find()
+        .filter(payments::Column::OrderId.eq(order.id))
+        .filter(payments::Column::Status.eq(PaymentStatus::Success.as_str()))
+        .filter(payments::Column::Id.ne(payment.id))
+        .filter(payments::Column::DeletedAt.is_null())
+        .one(conn)
+        .await
+        .dom()?
+        .is_some()
+    {
+        return Err(Error::bad_request(keys::ORDER_STATUS_INVALID));
+    }
+    let input = CallbackInput {
+        payment_id,
+        order_no: order.order_no.clone(),
+        channel_id: payment.channel_id,
+        status: PaymentStatus::Success,
+        provider_ref: String::new(),
+        amount: received,
+        currency: payment.currency.clone(),
+        paid_at: Some(now),
+        payload: serde_json::Map::from_iter([(
+            "manual_confirmation".to_owned(),
+            json!({"at": now, "forced": force, "note": note.trim()}),
+        )]),
+        verified_legacy_currency: String::new(),
+    };
+    validate_callback_facts(&payment, &order.order_no, &input)?;
+    if order.status == OrderStatus::PendingPayment {
+        // Match a verified gateway callback: while the order is still pending,
+        // elapsed timestamps and an expired attempt do not erase real receipts.
+        if force {
+            return Err(Error::bad_request(keys::ORDER_STATUS_INVALID));
+        }
+        return settle_in(conn, &input, reseller_confirm_days, now).await;
+    }
+    if order.status != OrderStatus::Canceled || !force || note.trim().is_empty() {
+        return Err(Error::bad_request(keys::ORDER_STATUS_INVALID));
+    }
+    let previous = payment.status;
+    payment.status = PaymentStatus::Success;
+    payment.paid_at = Some(now);
+    payment.callback_at = Some(now);
+    payment.updated_at = now;
+    payment.exception_code = "manual_force_confirmed_closed_order".to_owned();
+    payment.provider_payload.insert(
+        "manual_confirmation".to_owned(),
+        json!({"at": now, "forced": true, "note": note.trim()}),
+    );
+    if save_callback_columns(conn, &payment, Some(previous)).await? != 1 {
+        return Err(Error::internal_msg("payment row changed concurrently"));
+    }
+    for id in order.family_ids() {
+        let paid_amount = if id == order.id {
+            order.total_amount
+        } else {
+            order
+                .children
+                .iter()
+                .find(|child| child.id == id)
+                .map_or(Amount::ZERO, |child| child.total_amount)
+        };
+        orders::Entity::update_many()
+            .col_expr(
+                orders::Column::Status,
+                Expr::value(OrderStatus::Fulfilling.as_str()),
+            )
+            .col_expr(orders::Column::PaidAt, Expr::value(Some(now)))
+            .col_expr(
+                orders::Column::OnlinePaidAmount,
+                Expr::value(paid_amount.decimal()),
+            )
+            .col_expr(orders::Column::UpdatedAt, Expr::value(now))
+            .filter(orders::Column::Id.eq(id))
+            .filter(orders::Column::Status.eq(OrderStatus::Canceled.as_str()))
+            .exec(conn)
+            .await
+            .dom()?;
+    }
+    order.status = OrderStatus::Fulfilling;
+    order.paid_at = Some(now);
+    order.online_paid_amount = order.total_amount;
+    for child in &mut order.children {
+        child.status = OrderStatus::Fulfilling;
+        child.paid_at = Some(now);
+    }
+    Ok(Settled {
+        payment,
+        order: Some(order),
+        order_paid: false,
+        underpaid: false,
+        recharge_credited: None,
+    })
+}
+
+/// Keep the payer name and issue on the payment record for later review.
+pub(crate) async fn record_manual_issue_in(
+    conn: &DatabaseTransaction,
+    payment_id: Id,
+    payer_name: &str,
+    issue: &str,
+    note: &str,
+    now: DateTime<Utc>,
+) -> Result<()> {
+    let row = payments::Entity::find_by_id(payment_id)
+        .filter(payments::Column::DeletedAt.is_null())
+        .lock_exclusive()
+        .one(conn)
+        .await
+        .dom()?
+        .ok_or_else(|| Error::not_found(pay_keys::PAYMENT_NOT_FOUND))?;
+    let mut payment = payment_to_domain(row);
+    if payment.provider_type != provider::MANUAL_QR || payment.status == PaymentStatus::Success {
+        return Err(Error::bad_request(pay_keys::PAYMENT_INVALID));
+    }
+    payment.provider_payload.insert(
+        "manual_buyer_report".to_owned(),
+        json!({"payer_name": payer_name, "issue": issue, "note": note, "reported_at": now}),
+    );
+    let updated = payments::Entity::update_many()
+        .col_expr(
+            payments::Column::ProviderPayload,
+            Expr::value(to_json(&payment.provider_payload)?),
+        )
+        .col_expr(payments::Column::UpdatedAt, Expr::value(now))
+        .filter(payments::Column::Id.eq(payment_id))
+        .filter(payments::Column::Status.ne(PaymentStatus::Success.as_str()))
+        .exec(conn)
+        .await
+        .dom()?;
+    if updated.rows_affected != 1 {
+        return Err(Error::bad_request(pay_keys::PAYMENT_INVALID));
+    }
+    Ok(())
 }

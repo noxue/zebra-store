@@ -15,10 +15,11 @@ export const extraVariables = [
   { label: '上游 ID', value: 'source.id' },
   { label: '上游名称', value: 'source.name' },
   { label: '上游协议', value: 'source.protocol' },
+  { label: '卡密导入备注（单一来源）', value: 'card.note' },
 ] as const
 
 const validVariables = new Set<string>(extraVariables.map((variable) => variable.value))
-export const ruleVariables = [...extraVariables, { label: '卡密（每张均匹配）', value: 'card' }] as const
+export const ruleVariables = [...extraVariables, { label: '卡密（每张均匹配）', value: 'card' }, { label: '卡密导入备注（每张均匹配）', value: 'card.notes' }] as const
 export const ruleOperators = [
   { label: '等于', value: 'eq' }, { label: '不等于', value: 'ne' },
   { label: '大于', value: 'gt' }, { label: '大于等于', value: 'gte' },
