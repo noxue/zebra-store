@@ -375,6 +375,79 @@ async fn huifu_multi_method_selection_is_sent_and_persisted_per_payment() {
     );
 }
 
+/// PAY-04/PAY-14: a signed direct Alipay QR query settles the real guest order once.
+#[tokio::test]
+async fn huifu_direct_alipay_qr_capture_pays_guest_order() {
+    let app = OrderApp::with_transport(Arc::new(MockTransport::new(|request| {
+        let body: Value = serde_json::from_slice(&request.body).map_err(|error| error.to_string())?;
+        let data = &body["data"];
+        let response = if request.url.ends_with("/v2/trade/payment/jspay") {
+            assert_eq!(data["trade_type"], "A_NATIVE");
+            assert_eq!(data["trans_amt"], "0.01");
+            json!({"resp_code":"00000100","resp_desc":"下单成功","qr_code":"https://qr.alipay.com/guest-test","trans_stat":"P"})
+        } else if request.url.ends_with("/v2/trade/payment/scanpay/query") {
+            assert!(data["org_req_seq_id"].as_str().is_some_and(|value| value.starts_with("DJP")));
+            json!({"resp_code":"00000000","trans_stat":"S","trans_amt":"0.01"})
+        } else {
+            return Err(format!("unexpected request: {}", request.url));
+        };
+        let sign = huifu_pay::sign_value(payment_common::PRIV_PEM, &response)
+            .map_err(|error| error.to_string())?;
+        Ok(HttpResponse::new(200, json!({"data":response,"sign":sign}).to_string()))
+    }))).await;
+    let (product, sku) = app
+        .product("huifu-direct-card", json!({"price_amount":"0.01"}))
+        .await;
+    app.secrets(product, sku, 1).await;
+    let channel = app
+        .admin_call(
+            "POST",
+            "/api/v1/admin/payment-channels",
+            Some(json!({
+                "name": "Huifu direct Alipay",
+                "provider_type": "huifu",
+                "channel_type": "alipay",
+                "interaction_mode": "qr",
+                "payment_roles": ["guest", "member"],
+                "payment_types": ["order"],
+                "config_json": {
+                    "collection_mode": "direct_qr",
+                    "api_base_url": "http://127.0.0.1:18766",
+                    "sys_id": "SYS-1",
+                    "product_id": "PROD-1",
+                    "huifu_id": "HU-1",
+                    "merchant_private_key": payment_common::PRIV_PEM,
+                    "huifu_public_key": payment_common::PUB_PEM,
+                    "notify_url": "https://shop.example.com/api/v1/payments/callback"
+                }
+            })),
+        )
+        .await;
+    assert_eq!(channel["status_code"], 0, "{channel}");
+    let paid = create_and_pay(
+        &app,
+        product,
+        sku,
+        1,
+        channel["data"]["id"].as_i64().unwrap(),
+    )
+    .await;
+    assert_eq!(paid["qr_code"], "https://qr.alipay.com/guest-test");
+    let payment_id = paid["payment_id"].as_i64().unwrap();
+    let captured = app
+        .call(
+            "POST",
+            &format!("/api/v1/guest/payments/{payment_id}/capture"),
+            None,
+            &guest(),
+        )
+        .await;
+    assert_eq!(captured["status_code"], 0, "{captured}");
+    assert_eq!(captured["data"]["status"], "success");
+    let order = app.order_by_no(paid["order_no"].as_str().unwrap()).await;
+    assert_eq!(order.status, "paid");
+}
+
 /// Original-route refunds persist the submitted refund locator before the gateway call. A retry
 /// queries that locator instead of issuing a second refund, then commits one local refund record.
 #[tokio::test]

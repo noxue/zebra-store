@@ -14,6 +14,7 @@ import {
   isMobilePaymentDevice,
   resolvePaymentLinkNavigationTarget,
   resolvePaymentPresentationMode,
+  requiresActiveCapture,
   shouldAutoOpenPaymentLink,
 } from '@/utils/paymentResumePolicy'
 
@@ -41,6 +42,12 @@ describe('FE-01 auto redirect opens in the current tab; wap/page are redirects',
     expect(shouldAutoOpenPaymentLink(payment, false)).toBe(false)
     expect(shouldAutoOpenPaymentLink(payment, true)).toBe(true)
     expect(shouldAutoOpenPaymentLink({ ...payment, interaction_mode: 'redirect' }, false)).toBe(true)
+  })
+  it('queries Huifu payments until a signed final status is settled', () => {
+    expect(requiresActiveCapture('huifu', 'alipay')).toBe(true)
+    expect(requiresActiveCapture('huifu', 'wechat')).toBe(true)
+    expect(requiresActiveCapture('official', 'wechat')).toBe(true)
+    expect(requiresActiveCapture('official', 'alipay')).toBe(false)
   })
 })
 

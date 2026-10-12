@@ -45,6 +45,12 @@ export const isRedirectPaymentInteractionMode = (mode: unknown) => {
   return REDIRECT_PAYMENT_INTERACTION_MODES.has(normalizeInteractionMode(mode))
 }
 
+/** These gateways can confirm payment by querying the provider while the page is open. */
+export const requiresActiveCapture = (providerType: unknown, channelType: unknown): boolean => {
+  const provider = normalizeProviderType(providerType)
+  return provider === 'huifu' || (provider === 'official' && String(channelType || '').trim().toLowerCase() === 'wechat')
+}
+
 export const resolvePaymentPresentationMode = (mode: unknown, providerType?: unknown, mobile = false): PaymentPresentationMode => {
   if (normalizeProviderType(providerType) === 'huifu' && normalizeInteractionMode(mode) === 'qr') {
     return mobile ? 'redirect' : 'qr'

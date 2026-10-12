@@ -1,16 +1,16 @@
-//! Huifu hosted Alipay/WeChat payments, signed notifications and original-route refunds.
+//! Huifu hosted Alipay/WeChat and direct Alipay QR payments.
 
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use chrono::{FixedOffset, Offset, Utc};
 use huifu_pay::{
-    Client, Config as SdkConfig, Error as SdkError, HttpRequest as SdkRequest,
+    ApiResponse, Client, Config as SdkConfig, Error as SdkError, HttpRequest as SdkRequest,
     HttpResponse as SdkResponse, PaymentQueryRequest, PreorderRequest, RefundQueryRequest,
     RefundRequest, TradeBillQueryRequest, Transport,
 };
 use serde::Deserialize;
-use serde_json::Value;
+use serde_json::{Map, Value, json};
 use zs_domain::payment::channel::ChannelConfig;
 use zs_domain::payment::form::{FormMap, form_raw};
 use zs_domain::payment::gateway::{
@@ -27,10 +27,23 @@ use super::http::{HttpRequest, HttpTransport};
 
 const DEFAULT_API: &str = huifu_pay::DEFAULT_BASE_URL;
 const LOCAL_SANDBOX_SKILL_SOURCE: &str = "hfps/1.3.1;sandbox/1.0.0";
+const DIRECT_PAY_PATH: &str = "/v2/trade/payment/jspay";
+const DIRECT_QUERY_PATH: &str = "/v2/trade/payment/scanpay/query";
+const DIRECT_REFUND_PATH: &str = "/v2/trade/payment/scanpay/refund";
+const DIRECT_REFUND_QUERY_PATH: &str = "/v2/trade/payment/scanpay/refundquery";
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CollectionMode {
+    #[default]
+    Hosted,
+    DirectQr,
+}
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default)]
 pub struct Config {
+    pub collection_mode: CollectionMode,
     pub api_base_url: String,
     pub sys_id: String,
     pub product_id: String,
@@ -63,14 +76,24 @@ impl Config {
             ("huifu_id", &self.huifu_id),
             ("merchant_private_key", &self.merchant_private_key),
             ("huifu_public_key", &self.huifu_public_key),
-            ("project_id", &self.project_id),
             ("notify_url", &self.notify_url),
-            ("return_url", &self.return_url),
         ] {
             if value.trim().is_empty() {
                 return Err(GatewayError::config(format!(
                     "huifu config invalid: {name} is required"
                 )));
+            }
+        }
+        if self.collection_mode == CollectionMode::Hosted {
+            for (name, value) in [
+                ("project_id", &self.project_id),
+                ("return_url", &self.return_url),
+            ] {
+                if value.trim().is_empty() {
+                    return Err(GatewayError::config(format!(
+                        "huifu config invalid: {name} is required"
+                    )));
+                }
             }
         }
         self.sdk().map(|_| ())
@@ -145,6 +168,63 @@ impl HuifuGateway {
         )
         .map_err(map_error)?;
         Ok((config, client))
+    }
+
+    async fn direct_post(
+        &self,
+        config: &Config,
+        path: &str,
+        data: Map<String, Value>,
+    ) -> Result<ApiResponse, GatewayError> {
+        let sdk = config.sdk()?;
+        let value = Value::Object(data);
+        let sign = huifu_pay::sign_value(&sdk.merchant_private_key, &value).map_err(map_error)?;
+        let envelope = json!({
+            "sys_id": sdk.sys_id,
+            "product_id": sdk.product_id,
+            "data": value,
+            "sign": sign,
+        });
+        let body = huifu_pay::canonical_json(&envelope).map_err(map_error)?;
+        let response = self
+            .env
+            .http
+            .send(
+                HttpRequest::new(
+                    "POST",
+                    format!("{}{}", sdk.base_url.trim_end_matches('/'), path),
+                )
+                .header("content-type", "application/json;charset=UTF-8")
+                .header("jpt-x-skill-source", sdk.skill_source)
+                .header("jpt-x-skill-huifu_id", sdk.huifu_id)
+                .body(body.into_bytes()),
+            )
+            .await
+            .map_err(GatewayError::request)?;
+        if !response.is_success() {
+            return Err(GatewayError::request(format!(
+                "huifu HTTP {}",
+                response.status
+            )));
+        }
+        let envelope: Value = serde_json::from_slice(&response.body).map_err(|error| {
+            GatewayError::response(format!("huifu response JSON invalid: {error}"))
+        })?;
+        let signed_data = envelope
+            .get("data")
+            .ok_or_else(|| GatewayError::response("huifu response data is missing"))?;
+        let response_sign = envelope
+            .get("sign")
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| GatewayError::response("huifu response sign is missing"))?;
+        huifu_pay::verify_value(&config.huifu_public_key, signed_data, response_sign)
+            .map_err(map_error)?;
+        let data = signed_data
+            .as_object()
+            .cloned()
+            .ok_or_else(|| GatewayError::response("huifu response data is not an object"))?;
+        Ok(ApiResponse { data })
     }
 
     fn date(&self) -> String {
@@ -252,7 +332,13 @@ impl PaymentGateway for HuifuGateway {
         if !matches!(channel.trim(), channel_type::ALIPAY | channel_type::WECHAT) {
             return Err(GatewayError::UnsupportedChannel(channel.to_owned()));
         }
-        Config::parse(config).map(|_| ())
+        let config = Config::parse(config)?;
+        if config.collection_mode == CollectionMode::DirectQr
+            && channel.trim() != channel_type::ALIPAY
+        {
+            return Err(GatewayError::UnsupportedChannel(channel.to_owned()));
+        }
+        Ok(())
     }
 
     async fn create_payment(
@@ -281,6 +367,47 @@ impl PaymentGateway for HuifuGateway {
         } else {
             input.notify_url.trim().to_owned()
         };
+        if config.collection_mode == CollectionMode::DirectQr {
+            if input.channel_type.trim() != channel_type::ALIPAY || !direct {
+                return Err(GatewayError::UnsupportedChannel(
+                    "huifu direct_qr supports Alipay QR only".into(),
+                ));
+            }
+            let data = json!({
+                "req_date": date,
+                "req_seq_id": input.order_no,
+                "huifu_id": config.huifu_id,
+                "goods_desc": input.subject,
+                "trade_type": "A_NATIVE",
+                "trans_amt": input.amount.to_string(),
+                "notify_url": notify_url,
+            });
+            let response = self
+                .direct_post(
+                    &config,
+                    DIRECT_PAY_PATH,
+                    data.as_object()
+                        .cloned()
+                        .ok_or_else(|| GatewayError::response("huifu direct request invalid"))?,
+                )
+                .await?;
+            require_accepted(&response)?;
+            let qr_url = response.string("qr_code");
+            if !qr_url.starts_with("https://qr.alipay.com/") {
+                return Err(GatewayError::response("huifu Alipay qr_code is invalid"));
+            }
+            let mut payload = response.data;
+            payload.insert("req_date".into(), Value::String(date.clone()));
+            payload.insert("req_seq_id".into(), Value::String(input.order_no.clone()));
+            return Ok(GatewayCreateResult {
+                provider_ref: locator(&date, &input.order_no),
+                redirect_url: qr_url.clone(),
+                qr_code_url: qr_url,
+                payload,
+                display_channel_type: input.channel_type.clone(),
+                ..GatewayCreateResult::default()
+            });
+        }
         let return_url = if input.return_url.trim().is_empty() {
             config.return_url.clone()
         } else {
@@ -330,17 +457,33 @@ impl PaymentGateway for HuifuGateway {
         raw: &ChannelConfig,
         provider_ref: &str,
     ) -> Result<GatewayQueryResult, GatewayError> {
-        let (_, client) = self.client(raw)?;
+        let (config, client) = self.client(raw)?;
         let (org_date, org_sequence) = split_locator(provider_ref)?;
-        let response = client
-            .query_payment(&PaymentQueryRequest {
-                req_date: self.date(),
-                req_seq_id: self.query_no("ZSQ"),
-                org_req_date: org_date.into(),
-                org_req_seq_id: org_sequence.into(),
-            })
-            .await
-            .map_err(map_error)?;
+        let response = if config.collection_mode == CollectionMode::DirectQr {
+            let data = json!({
+                "huifu_id": config.huifu_id,
+                "org_req_date": org_date,
+                "org_req_seq_id": org_sequence,
+            });
+            self.direct_post(
+                &config,
+                DIRECT_QUERY_PATH,
+                data.as_object()
+                    .cloned()
+                    .ok_or_else(|| GatewayError::response("huifu query request invalid"))?,
+            )
+            .await?
+        } else {
+            client
+                .query_payment(&PaymentQueryRequest {
+                    req_date: self.date(),
+                    req_seq_id: self.query_no("ZSQ"),
+                    org_req_date: org_date.into(),
+                    org_req_seq_id: org_sequence.into(),
+                })
+                .await
+                .map_err(map_error)?
+        };
         require_accepted(&response)?;
         Ok(GatewayQueryResult {
             provider_ref: provider_ref.into(),
@@ -393,23 +536,43 @@ impl PaymentGateway for HuifuGateway {
             input.request_date.trim().to_owned()
         };
         let notify_url = if input.notify_url.trim().is_empty() {
-            config.notify_url
+            config.notify_url.clone()
         } else {
             input.notify_url.clone()
         };
-        let response = client
-            .refund(&RefundRequest {
-                req_date: date.clone(),
-                req_seq_id: input.refund_no.clone(),
-                org_req_date: org_date.into(),
-                org_req_seq_id: org_sequence.into(),
-                ord_amt: input.amount.to_string(),
-                notify_url,
-                remark: input.remark.clone(),
-                client_ip: input.client_ip.clone(),
-            })
-            .await
-            .map_err(map_error)?;
+        let response = if config.collection_mode == CollectionMode::DirectQr {
+            let data = json!({
+                "req_date": date,
+                "req_seq_id": input.refund_no,
+                "huifu_id": config.huifu_id,
+                "ord_amt": input.amount.to_string(),
+                "org_req_date": org_date,
+                "org_req_seq_id": org_sequence,
+                "notify_url": notify_url,
+            });
+            self.direct_post(
+                &config,
+                DIRECT_REFUND_PATH,
+                data.as_object()
+                    .cloned()
+                    .ok_or_else(|| GatewayError::response("huifu refund request invalid"))?,
+            )
+            .await?
+        } else {
+            client
+                .refund(&RefundRequest {
+                    req_date: date.clone(),
+                    req_seq_id: input.refund_no.clone(),
+                    org_req_date: org_date.into(),
+                    org_req_seq_id: org_sequence.into(),
+                    ord_amt: input.amount.to_string(),
+                    notify_url,
+                    remark: input.remark.clone(),
+                    client_ip: input.client_ip.clone(),
+                })
+                .await
+                .map_err(map_error)?
+        };
         require_accepted(&response)?;
         Ok(GatewayRefundResult {
             provider_ref: locator(&date, &input.refund_no),
@@ -423,17 +586,33 @@ impl PaymentGateway for HuifuGateway {
         raw: &ChannelConfig,
         provider_ref: &str,
     ) -> Result<GatewayRefundResult, GatewayError> {
-        let (_, client) = self.client(raw)?;
+        let (config, client) = self.client(raw)?;
         let (org_date, org_sequence) = split_locator(provider_ref)?;
-        let response = client
-            .query_refund(&RefundQueryRequest {
-                req_date: self.date(),
-                req_seq_id: self.query_no("ZSRQ"),
-                org_req_date: org_date.into(),
-                org_req_seq_id: org_sequence.into(),
-            })
-            .await
-            .map_err(map_error)?;
+        let response = if config.collection_mode == CollectionMode::DirectQr {
+            let data = json!({
+                "huifu_id": config.huifu_id,
+                "org_req_date": org_date,
+                "org_req_seq_id": org_sequence,
+            });
+            self.direct_post(
+                &config,
+                DIRECT_REFUND_QUERY_PATH,
+                data.as_object()
+                    .cloned()
+                    .ok_or_else(|| GatewayError::response("huifu refund query invalid"))?,
+            )
+            .await?
+        } else {
+            client
+                .query_refund(&RefundQueryRequest {
+                    req_date: self.date(),
+                    req_seq_id: self.query_no("ZSRQ"),
+                    org_req_date: org_date.into(),
+                    org_req_seq_id: org_sequence.into(),
+                })
+                .await
+                .map_err(map_error)?
+        };
         require_accepted(&response)?;
         Ok(GatewayRefundResult {
             provider_ref: provider_ref.into(),
@@ -511,12 +690,15 @@ impl PaymentGateway for HuifuGateway {
 mod tests {
     use std::sync::{Arc, Mutex};
 
-    use super::{GatewayError, HuifuGateway, huifu_request_type, require_accepted};
+    use super::{
+        DIRECT_PAY_PATH, DIRECT_QUERY_PATH, GatewayError, HuifuGateway, huifu_request_type,
+        require_accepted,
+    };
     use huifu_pay::ApiResponse;
     use serde_json::{Map, Value, json};
     use zs_domain::payment::channel::ChannelConfig;
-    use zs_domain::payment::gateway::{GatewayRefundInput, PaymentGateway};
-    use zs_domain::payment::types::PaymentStatus;
+    use zs_domain::payment::gateway::{GatewayCreateInput, GatewayRefundInput, PaymentGateway};
+    use zs_domain::payment::types::{InteractionMode, PaymentStatus};
     use zs_shared::money::Amount;
 
     use crate::payment::http::{HttpResponse, MockTransport};
@@ -555,6 +737,74 @@ mod tests {
 
         let other = require_accepted(&response("OTHER", "some other rejection"));
         assert!(matches!(other, Err(GatewayError::ResponseInvalid(_))));
+    }
+
+    #[tokio::test]
+    async fn direct_alipay_qr_creates_and_queries_signed_order_without_project() {
+        let transport = MockTransport::new(|request| {
+            let body: Value =
+                serde_json::from_slice(&request.body).map_err(|error| error.to_string())?;
+            let data = &body["data"];
+            huifu_pay::verify_value(PUB_PEM, data, body["sign"].as_str().unwrap_or_default())
+                .map_err(|error| error.to_string())?;
+            let response = if request.url.ends_with(DIRECT_PAY_PATH) {
+                assert_eq!(data["trade_type"], "A_NATIVE");
+                assert_eq!(data["trans_amt"], "0.01");
+                assert_eq!(
+                    data["notify_url"],
+                    "https://shop.example.com/api/v1/payments/callback"
+                );
+                assert!(data.get("hosting_data").is_none());
+                json!({"resp_code":"00000100","resp_desc":"下单成功","qr_code":"https://qr.alipay.com/test-code","trans_stat":"P"})
+            } else if request.url.ends_with(DIRECT_QUERY_PATH) {
+                assert_eq!(data["org_req_seq_id"], "PAY-1");
+                json!({"resp_code":"00000000","trans_stat":"S","trans_amt":"0.01"})
+            } else {
+                return Err(format!("unexpected Huifu path: {}", request.url));
+            };
+            let sign =
+                huifu_pay::sign_value(PRIV_PEM, &response).map_err(|error| error.to_string())?;
+            Ok(HttpResponse::new(
+                200,
+                json!({"data":response,"sign":sign}).to_string(),
+            ))
+        });
+        let gateway = HuifuGateway::new(env_with(transport));
+        let config: ChannelConfig = serde_json::from_value(json!({
+            "collection_mode": "direct_qr",
+            "sys_id": "SYS-1",
+            "product_id": "PROD-1",
+            "huifu_id": "HU-1",
+            "merchant_private_key": PRIV_PEM,
+            "huifu_public_key": PUB_PEM,
+            "notify_url": "https://shop.example.com/api/v1/payments/callback",
+        }))
+        .expect("test config");
+        gateway
+            .validate_config(&config, "alipay")
+            .expect("direct Alipay config");
+        assert!(gateway.validate_config(&config, "wechat").is_err());
+        let created = gateway
+            .create_payment(
+                &config,
+                &GatewayCreateInput {
+                    order_no: "PAY-1".into(),
+                    subject: "test order".into(),
+                    amount: Amount::new("0.01".parse().expect("amount")),
+                    channel_type: "alipay".into(),
+                    interaction_mode: Some(InteractionMode::Qr),
+                    ..GatewayCreateInput::default()
+                },
+            )
+            .await
+            .expect("create direct QR");
+        assert_eq!(created.qr_code_url, "https://qr.alipay.com/test-code");
+        let queried = gateway
+            .query_payment(&config, &created.provider_ref)
+            .await
+            .expect("query direct QR");
+        assert_eq!(queried.status, Some(PaymentStatus::Success));
+        assert_eq!(queried.amount.to_string(), "0.01");
     }
 
     #[tokio::test]

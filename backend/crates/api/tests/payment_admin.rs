@@ -291,6 +291,34 @@ async fn huifu_channel_validation_and_secret_redaction() {
         "error.payment_channel_config_invalid",
     )
     .await;
+
+    let mut direct_qr = huifu_body();
+    direct_qr["interaction_mode"] = json!("qr");
+    direct_qr["config_json"]["collection_mode"] = json!("direct_qr");
+    direct_qr["config_json"]
+        .as_object_mut()
+        .unwrap()
+        .remove("project_id");
+    direct_qr["config_json"]
+        .as_object_mut()
+        .unwrap()
+        .remove("return_url");
+    let direct_created = app.call("POST", uri, Some(direct_qr.clone())).await;
+    assert_eq!(
+        data(&direct_created)["config_json"]["collection_mode"],
+        "direct_qr"
+    );
+    assert_eq!(data(&direct_created)["channel_type"], "alipay");
+    direct_qr["channel_type"] = json!("wechat");
+    expect_error(
+        &app,
+        "POST",
+        uri,
+        Some(direct_qr),
+        400,
+        "error.payment_provider_not_supported",
+    )
+    .await;
 }
 
 /// Huifu trade bills are queried through a signed API response and downloaded through the
