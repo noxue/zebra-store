@@ -9,8 +9,10 @@ import { useCart, cartLineAvailableStock } from '@/composables/useCart'
 import { useCheckout } from '@/composables/useCheckout'
 import { useGuestOrderDetail } from '@/composables/useGuestOrderDetail'
 import { usePayment } from '@/composables/usePayment'
+import { PaymentChannelSelector } from '@/components/payment/PaymentChannelSelector'
 import i18n, { detectLocale, setI18nLocale } from '@/i18n'
 import { useAppStore } from '@/stores/app'
+import { useBuyNowStore } from '@/stores/buyNow'
 import { useCartStore, type CartItem } from '@/stores/cart'
 import { checkoutItemAvailableStock, checkoutItemStockExceeded } from '@/utils/checkoutStock'
 import { clearGuestOrderAuth, isGeneratedGuestOrderAuth, loadGuestOrderAuth } from '@/utils/guestOrderAuth'
@@ -164,6 +166,30 @@ it('PAY-11 keeps an order with no common product channels unavailable on the pay
   } as NonNullable<typeof page.order.value>
   expect(page.hasChannelRestriction.value).toBe(true)
   expect(page.channels.value).toEqual([])
+})
+
+it('PAY-17 refreshes buy-now channel restrictions and selects the only available method', async () => {
+  route.query = { mode: 'buynow' }
+  const app = useAppStore()
+  app.config = { payment_channels: [{ id: 3, name: 'Alipay', provider_type: 'huifu', channel_type: 'alipay', interaction_mode: 'qr' }] }
+  useBuyNowStore().setItem(line({ paymentChannelIds: [2], quantity: 1 }))
+  vi.spyOn(productAPI, 'detail').mockResolvedValue(response(product({ payment_channel_ids: [3] })))
+  const page = harness(useCheckout)
+  await flushPromises()
+  expect(useBuyNowStore().item?.paymentChannelIds).toEqual([3])
+  expect(page.paymentChannels.value.map((channel) => channel.id)).toEqual([3])
+  expect(page.selectedChannelId.value).toBe(3)
+  expect(page.selectedChannelType.value).toBe('alipay')
+})
+
+it('PAY-17 shows a single payment method so it remains visible and selectable', async () => {
+  const channel = { id: 3, name: 'Alipay', provider_type: 'huifu', channel_type: 'alipay', interaction_mode: 'qr' }
+  const wrapper = mount(PaymentChannelSelector, { props: { channels: [channel] }, global: { plugins: [i18n] } })
+  wrappers.push(wrapper)
+  expect(wrapper.findAll('button')).toHaveLength(1)
+  await wrapper.find('button').trigger('click')
+  expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([3])
+  expect(wrapper.emitted('update:channelType')?.[0]).toEqual(['alipay'])
 })
 
 it('FE-04 preserves withdrawal success and clears the form when every subsequent refresh fails', async () => {
