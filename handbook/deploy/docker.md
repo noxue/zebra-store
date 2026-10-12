@@ -77,6 +77,15 @@ bootstrap:
 可以执行 `openssl rand -hex 32` 生成密钥。Docker 内监听地址保持 `0.0.0.0:8081`，SQLite 地址保持
 `sqlite://data/zebra.db?mode=rwc`，上传目录保持 `uploads`。
 
+`config.yml` 包含站点密钥与初始管理员密码；支付渠道私钥保存在 SQLite 数据库中，数据库备份也会包含它。容器以 UID `100`、GID `101` 运行。配置完成后将配置文件交给该用户，并只允许其读取：
+
+```bash
+sudo chown 100:101 config.yml
+sudo chmod 600 config.yml
+```
+
+已有站点还应限制 `store_data` 卷中数据库、WAL/SHM 和备份文件的读取权限：目录 `700`、文件 `600`，并保护复制到卷外的备份。不要将 `config.yml` 或数据库备份提交到仓库。
+
 ## 3. 构建并启动
 
 普通 Intel / AMD 服务器：
