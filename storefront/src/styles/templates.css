@@ -1,0 +1,318 @@
+/* Storefront visual systems. The classic values live in theme.css. */
+:root[data-storefront-template='vault'] {
+  --zs-primary: #6366f1;
+  --zs-secondary: #22d3ee;
+  --zs-accent: #fbbf24;
+  --zs-primary-soft: #e4e8ff;
+  --zs-secondary-soft: #dcf8fc;
+  --zs-accent-soft: #fff2c9;
+  --zs-primary-text: #4338ca;
+  --zs-secondary-text: #087a91;
+  --zs-accent-text: #875b00;
+  --zs-bg: #eaf0ff;
+  --zs-bg-pattern: linear-gradient(#6474b314 1px, transparent 1px), linear-gradient(90deg, #6474b314 1px, transparent 1px), radial-gradient(circle at 80% 0%, #818cf833, transparent 44%);
+  --zs-bg-pattern-size: 32px 32px, 32px 32px, auto;
+  --zs-surface: #ffffffeb;
+  --zs-surface-strong: #ffffff;
+  --zs-surface-solid: #ffffff;
+  --zs-surface-muted: #dfe8ff;
+  --zs-border: #7186c233;
+  --zs-border-strong: #586faf77;
+  --zs-text: #19254b;
+  --zs-text-muted: #57658b;
+  --zs-gradient-soft: linear-gradient(130deg, #485fe52b, #22d3ee22 70%, #fbbf2422);
+  --zs-gradient: linear-gradient(135deg, var(--zs-primary), var(--zs-secondary) 58%, var(--zs-accent));
+  --zs-radius-sm: 5px;
+  --zs-radius: 9px;
+  --zs-radius-lg: 12px;
+  --zs-font-display: 'M PLUS Rounded 1c', 'PingFang SC', sans-serif;
+  --zs-font-body: 'M PLUS Rounded 1c', 'PingFang SC', sans-serif;
+  --zs-font-num: ui-monospace, 'SF Mono', Menlo, monospace;
+  --zs-hero-bg: linear-gradient(130deg, #101b42, #1d3273 62%, #0b526c);
+  --zs-shadow: 0 14px 34px -18px #192d7299;
+  --zs-glow: 0 0 0 1px #6366f177, 0 16px 40px -18px #22d3ee99;
+  color-scheme: light;
+}
+
+:root[data-storefront-template='vault'].dark {
+  --zs-primary-soft: #353b73;
+  --zs-secondary-soft: #123950;
+  --zs-accent-soft: #443b22;
+  --zs-primary-text: #b8bcff;
+  --zs-secondary-text: #80e7f4;
+  --zs-accent-text: #fbd671;
+  --zs-bg: #0b1026;
+  --zs-bg-pattern: linear-gradient(#6176c319 1px, transparent 1px), linear-gradient(90deg, #6176c319 1px, transparent 1px), radial-gradient(circle at 80% 0%, #555ff02b, transparent 44%);
+  --zs-surface: #151d3ae8;
+  --zs-surface-strong: #1a2549;
+  --zs-surface-solid: #151d3a;
+  --zs-surface-muted: #263158;
+  --zs-border: #7b90df44;
+  --zs-border-strong: #92a5fa88;
+  --zs-text: #edf4ff;
+  --zs-text-muted: #abb9de;
+  --zs-hero-bg: linear-gradient(130deg, #090f27, #202a64 62%, #073647);
+  color-scheme: dark;
+}
+
+:root[data-storefront-template='aurora'] {
+  --zs-primary: #0f766e;
+  --zs-secondary: #14b8a6;
+  --zs-accent: #a3e635;
+  --zs-primary-soft: #d8f5e9;
+  --zs-secondary-soft: #dafbf5;
+  --zs-accent-soft: #f0fbcf;
+  --zs-primary-text: #076158;
+  --zs-secondary-text: #0d8174;
+  --zs-accent-text: #526b08;
+  --zs-bg: #eefbf7;
+  --zs-bg-pattern: radial-gradient(circle at 3% 14%, #35c8a533, transparent 38%), radial-gradient(circle at 95% 13%, #b8eb6f44, transparent 35%), radial-gradient(circle at 50% 95%, #4fc6ce26, transparent 38%);
+  --zs-bg-pattern-size: auto;
+  --zs-surface: #ffffffc9;
+  --zs-surface-strong: #ffffffee;
+  --zs-surface-solid: #ffffff;
+  --zs-surface-muted: #dff6ed;
+  --zs-border: #15957c38;
+  --zs-border-strong: #15957c66;
+  --zs-text: #123c38;
+  --zs-text-muted: #537e76;
+  --zs-gradient-soft: linear-gradient(130deg, #14b8a632, #a3e63530 65%, #22d3ee27);
+  --zs-gradient: linear-gradient(135deg, var(--zs-primary), var(--zs-secondary) 58%, var(--zs-accent));
+  --zs-radius-sm: 14px;
+  --zs-radius: 24px;
+  --zs-radius-lg: 36px;
+  --zs-shadow: 0 18px 45px -22px #0a88706b;
+  --zs-glow: 0 0 0 1px #0f766e44, 0 18px 48px -20px #14b8a68a;
+  --zs-hero-bg: linear-gradient(125deg, #ddfff1, #e7fff8 60%, #efffdc);
+}
+
+:root[data-storefront-template='aurora'].dark {
+  --zs-primary-soft: #17483f;
+  --zs-secondary-soft: #124e4b;
+  --zs-accent-soft: #31472b;
+  --zs-primary-text: #77e7d1;
+  --zs-secondary-text: #7beadd;
+  --zs-accent-text: #d2f185;
+  --zs-bg: #091c20;
+  --zs-surface: #143136db;
+  --zs-surface-strong: #1a3c40;
+  --zs-surface-solid: #153438;
+  --zs-surface-muted: #24504c;
+  --zs-border: #62d4bb38;
+  --zs-border-strong: #62d4bb70;
+  --zs-text: #e7fff5;
+  --zs-text-muted: #a1cbc2;
+  --zs-hero-bg: linear-gradient(125deg, #103b38, #1b5055 65%, #34512d);
+}
+
+:root[data-storefront-template='atelier'] {
+  --zs-primary: #b45309;
+  --zs-secondary: #7c2d12;
+  --zs-accent: #d97706;
+  --zs-primary-soft: #f8e8d4;
+  --zs-secondary-soft: #f1e0d4;
+  --zs-accent-soft: #ffe8bf;
+  --zs-primary-text: #92400e;
+  --zs-secondary-text: #7c2d12;
+  --zs-accent-text: #9a5500;
+  --zs-bg: #f8f3e9;
+  --zs-bg-pattern: repeating-linear-gradient(0deg, #9f76520b 0 1px, transparent 1px 30px);
+  --zs-bg-pattern-size: auto;
+  --zs-surface: #fffdf8f2;
+  --zs-surface-strong: #fffdf8;
+  --zs-surface-solid: #fffdf8;
+  --zs-surface-muted: #f3e9d8;
+  --zs-border: #9c785b40;
+  --zs-border-strong: #86604388;
+  --zs-text: #3c2f28;
+  --zs-text-muted: #806e5f;
+  --zs-gradient-soft: linear-gradient(115deg, #f7e9d3, #f9f3e8 55%, #f0dcc2);
+  --zs-gradient: linear-gradient(115deg, var(--zs-primary), var(--zs-secondary) 58%, var(--zs-accent));
+  --zs-radius-sm: 2px;
+  --zs-radius: 4px;
+  --zs-radius-lg: 5px;
+  --zs-font-display: Georgia, 'Songti SC', serif;
+  --zs-font-body: 'M PLUS Rounded 1c', 'PingFang SC', sans-serif;
+  --zs-font-num: Georgia, serif;
+  --zs-shadow: 0 12px 32px -24px #5b3d26a8;
+  --zs-glow: 0 0 0 1px #9c785b77, 0 14px 34px -22px #8d5e3da8;
+  --zs-hero-bg: linear-gradient(115deg, #f4e6d1, #fffdf8 65%, #e9d3b5);
+}
+
+:root[data-storefront-template='atelier'].dark {
+  --zs-primary-soft: #5b3b26;
+  --zs-secondary-soft: #4e2d26;
+  --zs-accent-soft: #5c452a;
+  --zs-primary-text: #f0bc7e;
+  --zs-secondary-text: #e7a68e;
+  --zs-accent-text: #f4c17f;
+  --zs-bg: #211b18;
+  --zs-surface: #302722ed;
+  --zs-surface-strong: #382e27;
+  --zs-surface-solid: #302722;
+  --zs-surface-muted: #48382e;
+  --zs-border: #b9937055;
+  --zs-border-strong: #d2a77988;
+  --zs-text: #f7ede0;
+  --zs-text-muted: #c0ab97;
+  --zs-hero-bg: linear-gradient(115deg, #392b22, #2f2823 65%, #60432c);
+}
+
+:root[data-storefront-template='noir'] {
+  --zs-primary: #d4af37;
+  --zs-secondary: #b98b45;
+  --zs-accent: #f5d68a;
+  --zs-primary-soft: #f9f0d9;
+  --zs-secondary-soft: #f3e9d8;
+  --zs-accent-soft: #fff4d5;
+  --zs-primary-text: #775b12;
+  --zs-secondary-text: #78572e;
+  --zs-accent-text: #7b5e18;
+  --zs-bg: #f1eee7;
+  --zs-bg-pattern: linear-gradient(135deg, #d4af3712 0 1px, transparent 1px 20px), radial-gradient(circle at 90% 0%, #d4af3722, transparent 44%);
+  --zs-bg-pattern-size: auto;
+  --zs-surface: #fffdf9ed;
+  --zs-surface-strong: #fffdf9;
+  --zs-surface-solid: #fffdf9;
+  --zs-surface-muted: #f1e9da;
+  --zs-border: #96804855;
+  --zs-border-strong: #968048a3;
+  --zs-text: #26211a;
+  --zs-text-on-primary: #211b11;
+  --zs-text-muted: #716657;
+  --zs-gradient-soft: linear-gradient(120deg, #27221b, #665126 60%, #a78a42);
+  --zs-gradient: linear-gradient(120deg, var(--zs-primary), var(--zs-secondary) 55%, var(--zs-accent));
+  --zs-radius-sm: 4px;
+  --zs-radius: 7px;
+  --zs-radius-lg: 9px;
+  --zs-font-display: Georgia, 'Songti SC', serif;
+  --zs-font-num: Georgia, serif;
+  --zs-shadow: 0 15px 35px -22px #393025ad;
+  --zs-glow: 0 0 0 1px #b98b4577, 0 14px 36px -20px #95702fbd;
+  --zs-hero-bg: linear-gradient(125deg, #161511, #2b2821 64%, #504021);
+}
+
+:root[data-storefront-template='noir'].dark {
+  --zs-primary-soft: #403821;
+  --zs-secondary-soft: #3a3026;
+  --zs-accent-soft: #4c412b;
+  --zs-primary-text: #eacb75;
+  --zs-secondary-text: #ddbb84;
+  --zs-accent-text: #f1d590;
+  --zs-bg: #0d0c0b;
+  --zs-surface: #1b1916ed;
+  --zs-surface-strong: #24211c;
+  --zs-surface-solid: #1b1916;
+  --zs-surface-muted: #2f2a20;
+  --zs-border: #b99d6259;
+  --zs-border-strong: #d4af37a3;
+  --zs-text: #f5eee2;
+  --zs-text-muted: #bcb09b;
+  --zs-hero-bg: linear-gradient(125deg, #10100e, #27231a 64%, #4f401d);
+  color-scheme: dark;
+}
+
+:root[data-storefront-template='vault'] .zs-glass,
+:root[data-storefront-template='atelier'] .zs-glass,
+:root[data-storefront-template='noir'] .zs-glass,
+:root[data-storefront-template='vault'] .zs-card,
+:root[data-storefront-template='atelier'] .zs-card,
+:root[data-storefront-template='noir'] .zs-card {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+:root[data-storefront-template='vault'] .zs-navbar-shell,
+:root[data-storefront-template='atelier'] .zs-navbar-shell,
+:root[data-storefront-template='noir'] .zs-navbar-shell {
+  border-radius: var(--zs-radius);
+}
+
+:root[data-storefront-template='vault'] .zs-home-hero,
+:root[data-storefront-template='noir'] .zs-home-hero {
+  color: #f6f6f3;
+}
+
+:root[data-storefront-template='vault'] .zs-home-hero .zs-soft-bg,
+:root[data-storefront-template='aurora'] .zs-home-hero .zs-soft-bg,
+:root[data-storefront-template='atelier'] .zs-home-hero .zs-soft-bg,
+:root[data-storefront-template='noir'] .zs-home-hero .zs-soft-bg {
+  background: var(--zs-hero-bg);
+}
+
+:root[data-storefront-template='vault'] .zs-home-hero .zs-gradient-text,
+:root[data-storefront-template='noir'] .zs-home-hero .zs-gradient-text {
+  background: linear-gradient(110deg, #ffffff, var(--zs-secondary), var(--zs-accent));
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+:root[data-storefront-template='vault'] .zs-home-hero p {
+  color: #d7ddf1;
+}
+:root[data-storefront-template='noir'] .zs-home-hero p {
+  color: #e5d9bf;
+}
+
+:root[data-storefront-template='vault'] .zs-template-art,
+:root[data-storefront-template='atelier'] .zs-template-art,
+:root[data-storefront-template='noir'] .zs-template-art {
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--zs-border-strong);
+  background: var(--zs-gradient-soft);
+  box-shadow: var(--zs-shadow-lg);
+}
+
+:root[data-storefront-template='vault'] .zs-template-art {
+  clip-path: polygon(50% 0, 93% 24%, 93% 76%, 50% 100%, 7% 76%, 7% 24%);
+  border-radius: 18%;
+  background: radial-gradient(circle at 50% 50%, #22d3ee55, #1c2874 55%, #0d183f);
+  box-shadow: inset 0 0 0 16px #ffffff0a, 0 0 50px #22d3ee77;
+}
+:root[data-storefront-template='vault'] .zs-template-art::before {
+  content: '◆';
+  font-size: clamp(5rem, 12vw, 9rem);
+  color: #9ceeff;
+  text-shadow: 0 0 36px #22d3ee;
+}
+
+:root[data-storefront-template='atelier'] .zs-template-art {
+  border-radius: 0;
+  background: #e8d4b8;
+  color: #6c391e;
+  box-shadow: 16px 16px 0 #8e624c55;
+}
+:root[data-storefront-template='atelier'] .zs-template-art::before {
+  content: 'A';
+  font: italic 10rem Georgia, serif;
+  line-height: 1;
+}
+
+:root[data-storefront-template='noir'] .zs-template-art {
+  border-radius: 50%;
+  background: radial-gradient(circle, #74602d 0, #29231b 62%, #15130e);
+  box-shadow: 0 0 0 14px #d4af371a, 0 0 0 15px #d4af3766;
+}
+:root[data-storefront-template='noir'] .zs-template-art::before {
+  content: '✦';
+  font-size: clamp(6rem, 15vw, 11rem);
+  color: #f8e3a0;
+}
+
+:root[data-storefront-template='atelier'] .zs-product-card img,
+:root[data-storefront-template='noir'] .zs-product-card img {
+  filter: saturate(.8);
+}
+
+:root[data-storefront-template='vault'] .zs-product-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--zs-primary);
+}
+
+@media (min-width: 1280px) {
+  :root[data-storefront-template='atelier'] .zs-product-grid,
+  :root[data-storefront-template='noir'] .zs-product-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}

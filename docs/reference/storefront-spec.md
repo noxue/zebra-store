@@ -287,28 +287,13 @@ A separate layout with ResellerConsoleTopbar. Pages:
 
 Status constants are in `src/constants/reseller.ts`. The reseller console is admin-like; decide whether it is in scope for the anime restyle.
 
-## 4. `src/templates`: storefront template system
+## 4. Storefront visual templates
 
-`src/templates/registry.ts` switches the whole storefront between two skins, **`classic` | `vault`**.
+`storefront_template` in `/api/v1/public/config` selects `classic`, `vault`, `aurora`, `atelier`, or `noir` (unknown values fall back to `classic`). `src/stores/app.ts` applies the selection to `<html data-storefront-template="…">`; `src/styles/templates.css` supplies each template's tokens and visible navbar, hero, card, typography, background, and grid treatments. All templates use the same Vue TSX pages, routes, business flows, and `template_mode` (`card` or `list`).
 
-**Which template is active**, in priority order:
-1. localStorage `dj-storefront-template`, set with `?template=vault|classic`. `?template=reset` clears it. `initTemplateOverride()` handles this in `main.ts`.
-2. `config.storefront_template`.
-3. Default `classic`.
+The admin template card applies the corresponding palette, light/dark default, and effects. Eight palette presets and six editable colours allow further customization. An existing `vault` setting with the historical Sakura colour trio is treated as a legacy combination and receives the vault palette automatically. Explicit custom colour choices remain authoritative.
 
-**How pages are resolved:** `templateView(name, classicLoader)` uses `import.meta.glob('./vault/**/*.vue')`. If vault is active and `./vault/${name}.vue` exists, that file is loaded; otherwise the classic view is used. This lets a template be built one page at a time.
-
-**Vault files:**
-- `src/templates/vault/*` has Home, Products, ProductDetail, Cart, Checkout, Payment, PersonalCenter, OrderDetail, RechargeOrderDetail, GuestOrders, GuestOrderDetail, Blog, BlogDetail, Notice, About, Legal, NotFound, `auth/*`.
-- Sub-components: VaultBannerHero, VaultCategorySidebar, VaultProductCard, VaultProductListItem, VaultOrderBody, VaultOrderFulfillment, VaultOrderItem, VaultCheckoutSteps, VaultProductMobileBar.
-
-**Vault shell and styling:**
-- `src/App.vue` wraps vault pages in `layout/VaultLayout.vue`, which has its own header/footer/search/menus, loads Rubik and Nunito Sans, and adds the `body.vault-tokens` class.
-- `src/templates/vault/styles/vault.css` holds only design tokens under `.vault-scope` / `body.vault-tokens`. It remaps the shadcn `--ui-*` variables to an indigo/gold palette. The tokens are also placed on `body` because overlays such as Toast and Select render outside the page wrapper.
-
-**Shared logic:** both templates use the same composables (`usePostList`, `useAbout`, `useLegal`, `usePersonalCenter`, `useCheckout`, …), and vault PersonalCenter reuses the classic `views/personal/*Panel.vue` components.
-
-**For the rewrite:** a new "anime" template can be added the same way (e.g. `templates/anime/*.tsx`, extending the glob to include `.tsx`), or it can replace the views outright.
+Three booleans under `site_config.theme` control independent page sections. `show_home_hero=false` hides both the default mascot hero and configured banners; `show_footer_quick_links=false` hides the quick link heading and list (including custom footer links); `show_repository_link=false` hides only the GitHub link. Missing fields mean visible. The legal links remain in the footer.
 
 ## 5. Stores (Pinia, `src/stores`)
 

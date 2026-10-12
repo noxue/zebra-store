@@ -87,7 +87,7 @@ export const Navbar = defineComponent({
       <header class="sticky top-0 z-40 w-full px-2 pt-2 sm:px-4">
         <div
           class={cn(
-            'zs-glass mx-auto flex max-w-7xl items-center justify-between gap-3 rounded-full px-3 transition-all duration-300 sm:px-5',
+            'zs-glass zs-navbar-shell mx-auto flex max-w-7xl items-center justify-between gap-3 rounded-full px-3 transition-all duration-300 sm:px-5',
             scrolled.value ? 'h-14 shadow-zs' : 'h-16',
           )}
         >

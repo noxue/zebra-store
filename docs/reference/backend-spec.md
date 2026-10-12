@@ -851,7 +851,7 @@ All four paths can be replaced by admin-set custom paths (settings key `callback
 
 | Key | Contents |
 |---|---|
-| `site_config` | `brand{site_name, site_url, site_icon, site_logo, site_description(ml)}`, `contact{telegram, whatsapp}`, `seo{title, keywords, description}` (ml), `legal{terms, privacy}` (ml), `about{hero, introduction, services{title, items}, contact{title, text}}`, `scripts[{name, enabled, position: head/body_end, code}]` (max 20), `footer_links[{name, url}]` (max 20), `currency` (3 letters, default CNY), `template_mode` (card/list), `storefront_template` (classic/vault), `languages` |
+| `site_config` | `brand{site_name, site_url, site_icon, site_logo, site_description(ml)}`, `contact{telegram, whatsapp}`, `seo{title, keywords, description}` (ml), `legal{terms, privacy}` (ml), `about{hero, introduction, services{title, items}, contact{title, text}}`, `scripts[{name, enabled, position: head/body_end, code}]` (max 20), `footer_links[{name, url}]` (max 20), `currency` (3 letters, default CNY), `template_mode` (card/list), `storefront_template` (classic/vault/aurora/atelier/noir), `theme` (colours, images, effects, `show_home_hero`, `show_footer_quick_links`, `show_repository_link`), `languages` |
 | `order_config` | payment_expire_minutes, max_refund_days |
 | `smtp_config` | enabled, host, port, username, password, from, from_name, use_tls, use_ssl, order_notification_enabled, verify_code{expire_minutes, send_interval_seconds, max_attempts, length} |
 | `captcha_config` | provider, scenes{…}, image{length, width, height, noise_count, show_line, expire_seconds, max_store}, turnstile{site_key, secret_key, verify_url, timeout_ms} |

@@ -4,7 +4,7 @@ import vueJsx from '@vitejs/plugin-vue-jsx'
 import tailwindcss from '@tailwindcss/vite'
 
 const target = process.env.VITE_API_TARGET || 'http://localhost:8080'
-const proxied = { target, changeOrigin: false }
+const proxied = { target, changeOrigin: true }
 
 export default defineConfig({
   plugins: [vueJsx(), tailwindcss()],

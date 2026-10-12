@@ -9,6 +9,7 @@ import { ProductGrid } from '@/components/product/ProductGrid'
 import { ProductListItem } from '@/components/product/ProductListItem'
 import { ProductQuickBuy } from '@/components/product/ProductQuickBuy'
 import { useHome } from '@/composables/useHome'
+import { useAppStore } from '@/stores/app'
 import type { Product } from '@/api/types'
 import { Button, EmptyState, Pagination, SectionTitle, SmartImage } from '@/components/ui'
 
@@ -17,6 +18,7 @@ export default defineComponent({
   setup() {
     const { t } = useI18n()
     const h = useHome()
+    const appStore = useAppStore()
 
     const cardMode = () => (
       <>
@@ -152,7 +154,7 @@ export default defineComponent({
 
     return () => (
       <div class="zs-page space-y-14 py-6">
-        <HomeHero carousel={h.banner} />
+        {appStore.config?.theme?.show_home_hero !== false && <HomeHero carousel={h.banner} />}
         {h.isListMode.value ? listMode() : cardMode()}
         <ProductQuickBuy product={h.quickBuy.product.value} open={h.quickBuy.open.value} onClose={h.quickBuy.close} />
         {h.announcement.value && (

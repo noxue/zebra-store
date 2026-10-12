@@ -1,6 +1,7 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import './styles/theme.css'
+import './styles/templates.css'
 import App from './App'
 import i18n, { detectLocale, setI18nLocale } from './i18n'
 import router from './router'

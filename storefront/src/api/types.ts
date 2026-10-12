@@ -85,11 +85,17 @@ export interface ThemeConfig {
   primary_color?: string
   secondary_color?: string
   accent_color?: string
+  background_color?: string
+  surface_color?: string
+  text_color?: string
   background_image?: string
   mascot_image?: string
   login_background?: string
   effects?: ThemeEffects
   default_mode?: 'light' | 'dark' | 'system' | string
+  show_home_hero?: boolean
+  show_footer_quick_links?: boolean
+  show_repository_link?: boolean
 }
 
 export interface ConfigPaymentChannel {

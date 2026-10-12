@@ -44,7 +44,7 @@ export const ProductCard = defineComponent({
       return (
         <article
           class={cn(
-            'zs-card group relative flex h-full cursor-pointer flex-col overflow-hidden p-0 transition-all duration-300',
+            'zs-card zs-product-card group relative flex h-full cursor-pointer flex-col overflow-hidden p-0 transition-all duration-300',
             soldOut ? 'cursor-default opacity-85 saturate-50' : 'hover:-translate-y-1.5 hover:shadow-glow',
           )}
           style={{ animation: `zs-pop .4s ${props.index * 50}ms both` }}

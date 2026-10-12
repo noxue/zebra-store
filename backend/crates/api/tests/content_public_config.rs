@@ -93,6 +93,9 @@ async fn public_config_shape() {
         json!({"sakura": true, "sparkle": true})
     );
     assert_eq!(d["theme"]["default_mode"], "system");
+    assert_eq!(d["theme"]["show_home_hero"], true);
+    assert_eq!(d["theme"]["show_footer_quick_links"], true);
+    assert_eq!(d["theme"]["show_repository_link"], true);
     // only active, guest-visible channels; no secrets
     let channels = d["payment_channels"].as_array().unwrap();
     assert_eq!(channels.len(), 1);
@@ -100,6 +103,36 @@ async fn public_config_shape() {
     assert_eq!(channels[0]["max_amount"], "1000.00");
     assert!(channels[0].get("config_json").is_none());
     assert!(channels[0].get("fee_rate").is_none());
+}
+
+#[tokio::test]
+async fn storefront_template_and_visibility_are_public_after_save() {
+    let app = TestApp::new().await;
+    app.put(
+        "/api/v1/admin/settings",
+        json!({"key": "site_config", "value": {
+            "storefront_template": "vault",
+            "theme": {
+                "background_color": "#101a32",
+                "surface_color": "#1b2746",
+                "text_color": "#eaf1ff",
+                "show_home_hero": false,
+                "show_footer_quick_links": false,
+                "show_repository_link": false
+            }
+        }}),
+    )
+    .await;
+
+    let config = app.call("GET", "/api/v1/public/config", None, None).await;
+    let public = data(&config);
+    assert_eq!(public["storefront_template"], "vault");
+    assert_eq!(public["theme"]["background_color"], "#101a32");
+    assert_eq!(public["theme"]["surface_color"], "#1b2746");
+    assert_eq!(public["theme"]["text_color"], "#eaf1ff");
+    assert_eq!(public["theme"]["show_home_hero"], false);
+    assert_eq!(public["theme"]["show_footer_quick_links"], false);
+    assert_eq!(public["theme"]["show_repository_link"], false);
 }
 
 // CNT-07: saving a setting that feeds the public config invalidates the 60 s cache.

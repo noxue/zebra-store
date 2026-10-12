@@ -19,6 +19,11 @@ export function applyThemeOverrides(theme?: SiteTheme) {
   set('--zs-primary', theme?.primary_color)
   set('--zs-secondary', theme?.secondary_color)
   set('--zs-accent', theme?.accent_color)
+  set('--zs-bg', theme?.background_color)
+  set('--zs-surface', theme?.surface_color)
+  set('--zs-surface-strong', theme?.surface_color)
+  set('--zs-surface-solid', theme?.surface_color)
+  set('--zs-text', theme?.text_color)
   const bg = theme?.background_image ? getImageUrl(theme.background_image) : ''
   document.body.classList.toggle('zs-custom-bg', !!bg)
   if (bg) root.style.setProperty('--zs-custom-bg', `url("${bg.replace(/"/g, '%22')}")`)
