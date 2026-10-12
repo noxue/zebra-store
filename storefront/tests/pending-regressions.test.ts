@@ -15,6 +15,7 @@ import { useCartStore, type CartItem } from '@/stores/cart'
 import { checkoutItemAvailableStock, checkoutItemStockExceeded } from '@/utils/checkoutStock'
 import { clearGuestOrderAuth, isGeneratedGuestOrderAuth, loadGuestOrderAuth } from '@/utils/guestOrderAuth'
 import { localizedText } from '@/utils/localized'
+import { intersectAllowedChannelIds, restrictChannels } from '@/utils/orderPayment'
 
 const route = vi.hoisted(() => ({ query: {} as Record<string, string>, params: { order_no: 'DJ1' }, fullPath: '/checkout' }))
 vi.mock('vue-router', async (original) => ({ ...await original<object>(), useRoute: () => route, useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }))
@@ -136,6 +137,21 @@ it('FE-02 clears removed wholesale tiers and preserves the price for invalid or 
   await refreshCartStockSnapshots(cart)
   expect(cart.items[0]?.priceAmount).toBe('10.00')
   expect(cart.items[0]?.wholesalePrices).toBeUndefined()
+})
+
+it('PAY-17 refreshes a stale cart channel binding before checkout', async () => {
+  const { refreshCartStockSnapshots } = await import('@/utils/cartStock')
+  const cart = useCartStore()
+  cart.addItem(line({ paymentChannelIds: [2] }), 1)
+  vi.spyOn(productAPI, 'detail').mockResolvedValue(response(product({ payment_channel_ids: [3] })))
+  await refreshCartStockSnapshots(cart)
+  expect(cart.items[0]?.paymentChannelIds).toEqual([3])
+  const channel = { id: 3, provider_type: 'huifu', channel_type: 'alipay' }
+  expect(restrictChannels([channel], intersectAllowedChannelIds(cart.items.map((item) => item.paymentChannelIds)))).toEqual([channel])
+
+  vi.spyOn(productAPI, 'detail').mockResolvedValue(response(product({ payment_channel_ids: null })))
+  await refreshCartStockSnapshots(cart)
+  expect(cart.items[0]?.paymentChannelIds).toBeUndefined()
 })
 
 it('FE-04 preserves withdrawal success and clears the form when every subsequent refresh fails', async () => {

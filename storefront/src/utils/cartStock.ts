@@ -92,6 +92,9 @@ export const buildCartStockPatch = (item: CartItem, product: Product, sku: Produ
     skuStockSnapshotAt: new Date().toISOString(),
     minPurchaseQuantity: normalizeOptionalLimitNumber(product.min_purchase_quantity),
     maxPurchaseQuantity: normalizeOptionalLimitNumber(product.max_purchase_quantity),
+    paymentChannelIds: Array.isArray(product.payment_channel_ids) && product.payment_channel_ids.length > 0
+      ? product.payment_channel_ids
+      : undefined,
   }
 }
 
