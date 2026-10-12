@@ -220,9 +220,9 @@ export default defineComponent({
             </FormField>
             <FormField
               label={t('admin.products.form.manualStockTotal')}
-              hint={f.skus.length > 0 ? t('admin.products.form.manualStockTotalSkuTip') : t('admin.products.form.manualStockTotalTip')}
+              hint={f.fulfillment_type === 'auto' ? t('admin.products.form.manualStockTotalAutoTip') : f.skus.length > 0 ? t('admin.products.form.manualStockTotalSkuTip') : t('admin.products.form.manualStockTotalTip')}
             >
-              <Input v-model={f.manual_stock_total} type="number" min={-1} placeholder={t('admin.products.form.manualStockTotalPlaceholder')} disabled={f.skus.length > 0} />
+              <Input v-model={f.manual_stock_total} type="number" min={-1} placeholder={t('admin.products.form.manualStockTotalPlaceholder')} disabled={f.skus.length > 0 || f.fulfillment_type === 'auto'} />
             </FormField>
 
             {(f.fulfillment_type === 'manual' || mapped.value) && (
@@ -252,6 +252,7 @@ export default defineComponent({
                 <div>
                   <h3 class="text-sm font-semibold text-fg">{t('admin.products.form.skuTitle')}</h3>
                   <p class="mt-1 text-xs text-muted">{t('admin.products.form.skuTip')}</p>
+                  {f.fulfillment_type === 'auto' && <p class="mt-1 text-xs text-secondary">{t('admin.products.form.skuAutoStockTip')}</p>}
                   {mapped.value && <p class="mt-1 text-xs text-secondary">{t('admin.products.mappedSkuLocked')}</p>}
                 </div>
                 {!mapped.value && (
