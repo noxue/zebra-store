@@ -89,7 +89,7 @@ export const PaymentChannelSelector = defineComponent({
               >
                 <div class="flex items-center justify-between gap-2">
                   <div class="flex min-w-0 items-center gap-2">
-                    <span class={cn('flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-zs-sm', selected ? 'zs-gradient-bg text-on-primary' : 'bg-surface-muted text-primary-text')}>
+                    <span class={cn('flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-zs-sm', icon ? 'bg-[var(--zs-payment-brand-icon-bg)]' : selected ? 'zs-gradient-bg text-on-primary' : 'bg-surface-muted text-primary-text')}>
                       {type === 'balance' ? (
                         <Wallet class="size-4" />
                       ) : ['trx', 'epusdt', 'bepusdt', 'tokenpay', 'okpay'].includes(type) || (type.includes('usdt') && !icon) ? (

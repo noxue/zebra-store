@@ -192,6 +192,19 @@ it('PAY-17 shows a single payment method so it remains visible and selectable', 
   expect(wrapper.emitted('update:channelType')?.[0]).toEqual(['alipay'])
 })
 
+it('PAY-17 keeps the selected Alipay brand icon legible against its own light tile', () => {
+  const channel = { id: 3, name: 'Alipay', provider_type: 'huifu', channel_type: 'alipay', interaction_mode: 'qr' }
+  const wrapper = mount(PaymentChannelSelector, {
+    props: { channels: [channel], modelValue: 3, channelType: 'alipay' },
+    global: { plugins: [i18n] },
+  })
+  wrappers.push(wrapper)
+  const icon = wrapper.find('svg[role="img"]')
+  expect(icon.attributes('fill')).toBe('#1677FF')
+  expect(icon.element.parentElement?.classList.contains('bg-[var(--zs-payment-brand-icon-bg)]')).toBe(true)
+  expect(icon.element.parentElement?.classList.contains('zs-gradient-bg')).toBe(false)
+})
+
 it('FE-04 preserves withdrawal success and clears the form when every subsequent refresh fails', async () => {
   const { resellerAPI } = await import('@/api/reseller')
   const { useResellerWithdraws } = await import('@/composables/reseller/useResellerWithdraws')
