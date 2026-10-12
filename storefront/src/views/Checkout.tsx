@@ -159,7 +159,7 @@ export default defineComponent({
                 isDisabled={c.isChannelDisabledForAmount}
                 limitHint={c.channelAmountLimitHint}
                 fixedFee={c.formatChannelFixedFee}
-                emptyText={t('checkout.noPaymentChannels')}
+                emptyText={t(c.hasChannelRestriction.value ? 'checkout.noPaymentChannelsRestricted' : 'checkout.noPaymentChannels')}
                 onUpdate:modelValue={(id: number) => {
                   const ch = c.paymentChannels.value.find((x) => Number(x.id) === id)
                   if (ch) c.selectChannel(ch, c.selectedChannelType.value)

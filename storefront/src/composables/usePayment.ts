@@ -115,8 +115,9 @@ export function usePayment() {
     const source: PaymentChannel[] =
       !isGuest.value && orderPaymentChannelsLoaded.value ? orderPaymentChannels.value : (appStore.config?.payment_channels ?? [])
     const allowed = order.value?.allowed_payment_channel_ids
-    return restrictChannels(filterSupportedChannels(source), Array.isArray(allowed) && allowed.length > 0 ? allowed.map(Number) : null)
+    return restrictChannels(filterSupportedChannels(source), Array.isArray(allowed) ? allowed.map(Number) : null)
   })
+  const hasChannelRestriction = computed(() => Array.isArray(order.value?.allowed_payment_channel_ids))
   const configReady = computed(() => !appStore.loading && (!!appStore.config || (!isGuest.value && orderPaymentChannelsLoaded.value)))
   const findChannel = (id: unknown) => {
     const target = String(id ?? '').trim()
@@ -808,6 +809,7 @@ export function usePayment() {
     showBalanceOption,
     configReady,
     channels,
+    hasChannelRestriction,
     selectedChannel,
     selectedChannelName,
     showChannelSelector,

@@ -149,6 +149,7 @@ export function useCheckout() {
     const allowed = intersectAllowedChannelIds(cartItems.value.map((item) => item.paymentChannelIds))
     return restrictChannels(filterSupportedChannels(source), cartItems.value.length > 0 ? allowed : null)
   })
+  const hasChannelRestriction = computed(() => cartItems.value.some((item) => Array.isArray(item.paymentChannelIds) && item.paymentChannelIds.length > 0))
 
   const isChannelDisabledForAmount = (channel: PaymentChannel) =>
     channelDisabled(channel, expectedOnlinePayCents.value, requiresOnlineChannel.value)
@@ -579,6 +580,7 @@ export function useCheckout() {
     expectedOnlinePayCents,
     requiresOnlineChannel,
     paymentChannels,
+    hasChannelRestriction,
     selectedChannelId,
     selectedChannelType,
     isChannelDisabledForAmount,
