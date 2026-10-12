@@ -44,6 +44,7 @@ const sidebar: DefaultTheme.Sidebar = {
       text: '前台使用（买家）',
       items: [
         { text: '前台总览', link: '/storefront/' },
+        { text: '店铺模板效果对比', link: '/storefront/templates' },
         { text: '浏览、搜索、语言与主题', link: '/storefront/browse' },
         { text: '注册、登录与账户安全', link: '/storefront/account' },
         { text: '购物车与下单', link: '/storefront/checkout' },

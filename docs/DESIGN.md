@@ -27,9 +27,11 @@
 | `--zs-text-muted` | `#7a6f93` | `#a9a0c8` | 次要文字 |
 | `--zs-gradient` | `linear-gradient(135deg,#ff5fa2,#8b5cf6 55%,#38bdf8)` | 同左提亮 | 标题渐变字、主按钮、进度条 |
 
-**主题由后台配置**：`site_config.storefront_template` 选择经典、数字保险库、极光清新、暖调杂志或曜金典藏；前台用 `data-storefront-template` 切换 `storefront/src/styles/templates.css` 的配色、背景纹理、字体、圆角、首页主视觉和商品卡片样式。三种主色以及可选的页面背景、卡片背景、文字色由 `theme` 覆盖。旧站点曾保存 `vault` 搭配经典粉色，前台会识别该组合并改用数字保险库默认色。模板设置只影响用户前台；后台提供八组快捷配色和逐项颜色输入。
+**主题由后台配置**：`site_config.storefront_template` 选择经典、数字保险库、极光清新、暖调杂志或曜金典藏；前台用 `data-storefront-template` 切换 `storefront/src/styles/templates.css` 的配色、背景纹理、字体、圆角、首页主视觉和商品卡片样式。三种主色以及可选的页面背景、卡片背景、文字色由 `theme` 覆盖。旧站点曾保存 `vault` 搭配经典粉色、`system` 模式及樱花动效，前台会识别该组合并改用数字保险库默认色；主动选择樱花配色并使用深色模式，或关掉樱花动效时，仍保留所选配色。模板设置只影响用户前台；后台提供八组快捷配色和逐项颜色输入，“恢复默认配色”采用当前模板的默认色。
 
 `theme.show_home_hero`、`show_footer_quick_links`、`show_repository_link` 分别控制首页顶部横幅（含轮播）、页脚快速链接和仓库链接，未配置时均显示。隐私政策和服务条款始终保留。
+
+五种模板的首页和商品列表截图见[店铺模板效果对比](../handbook/storefront/templates.md)。
 
 ## 形状与质感
 - 圆角：`--zs-radius-sm 10px`、`--zs-radius 16px`、`--zs-radius-lg 24px`、胶囊 `999px`

@@ -23,6 +23,18 @@ Zebra Store 支持通过汇付进行支付宝、微信 H5 和 PC 收款，包括
 |---|---|
 | <a href="handbook/public/screenshots/storefront/home.png"><img src="handbook/public/screenshots/storefront/home.png" width="440" alt="商城首页"></a><br>商城首页 | <a href="handbook/public/screenshots/storefront/product-detail.png"><img src="handbook/public/screenshots/storefront/product-detail.png" width="440" alt="商品详情"></a><br>商品详情 |
 
+### 店铺模板效果
+
+五种模板的首页与商品列表使用相同的演示商品截图。更多说明见[模板效果对比文档](https://zebra-store-docs.noxue.com/storefront/templates)。
+
+| 模板 | 首页 | 商品列表 |
+|---|---|---|
+| 经典模板 | [<img src="handbook/public/screenshots/templates/classic-home.png" width="360" alt="经典模板首页">](handbook/public/screenshots/templates/classic-home.png) | [<img src="handbook/public/screenshots/templates/classic-products.png" width="360" alt="经典模板商品列表">](handbook/public/screenshots/templates/classic-products.png) |
+| 数字保险库 | [<img src="handbook/public/screenshots/templates/vault-home.png" width="360" alt="数字保险库首页">](handbook/public/screenshots/templates/vault-home.png) | [<img src="handbook/public/screenshots/templates/vault-products.png" width="360" alt="数字保险库商品列表">](handbook/public/screenshots/templates/vault-products.png) |
+| 极光清新 | [<img src="handbook/public/screenshots/templates/aurora-home.png" width="360" alt="极光清新首页">](handbook/public/screenshots/templates/aurora-home.png) | [<img src="handbook/public/screenshots/templates/aurora-products.png" width="360" alt="极光清新商品列表">](handbook/public/screenshots/templates/aurora-products.png) |
+| 暖调杂志 | [<img src="handbook/public/screenshots/templates/atelier-home.png" width="360" alt="暖调杂志首页">](handbook/public/screenshots/templates/atelier-home.png) | [<img src="handbook/public/screenshots/templates/atelier-products.png" width="360" alt="暖调杂志商品列表">](handbook/public/screenshots/templates/atelier-products.png) |
+| 曜金典藏 | [<img src="handbook/public/screenshots/templates/noir-home.png" width="360" alt="曜金典藏首页">](handbook/public/screenshots/templates/noir-home.png) | [<img src="handbook/public/screenshots/templates/noir-products.png" width="360" alt="曜金典藏商品列表">](handbook/public/screenshots/templates/noir-products.png) |
+
 <details>
 <summary>查看全部前台页面截图（22 张）</summary>
 

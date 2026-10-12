@@ -29,7 +29,7 @@ beforeEach(() => {
 it('SET-04 applies the saved vault template instead of the legacy Sakura colours', async () => {
   const config: SiteConfig = {
     storefront_template: 'vault',
-    theme: { primary_color: '#ff5fa2', secondary_color: '#8b5cf6', accent_color: '#38bdf8', effects: { sakura: true } },
+    theme: { primary_color: '#ff5fa2', secondary_color: '#8b5cf6', accent_color: '#38bdf8', default_mode: 'system', effects: { sakura: true } },
   }
   expect(hasLegacyClassicPalette(config)).toBe(true)
   vi.spyOn(configAPI, 'get').mockResolvedValue({ data: config, status_code: 0, msg: 'ok' } as Awaited<ReturnType<typeof configAPI.get>>)
@@ -41,6 +41,28 @@ it('SET-04 applies the saved vault template instead of the legacy Sakura colours
   expect(document.documentElement.style.getPropertyValue('--zs-primary')).toBe('')
   expect(storefrontTemplate('atelier')).toBe('atelier')
   expect(storefrontTemplate('unexpected')).toBe('classic')
+})
+
+it('SET-04 preserves a deliberately selected Sakura palette on a dark vault template', async () => {
+  const config: SiteConfig = {
+    storefront_template: 'vault',
+    theme: { primary_color: '#ff5fa2', secondary_color: '#8b5cf6', accent_color: '#38bdf8', default_mode: 'dark' },
+  }
+  expect(hasLegacyClassicPalette(config)).toBe(false)
+  vi.spyOn(configAPI, 'get').mockResolvedValue({ data: config, status_code: 0, msg: 'ok' } as Awaited<ReturnType<typeof configAPI.get>>)
+  await useAppStore().loadConfig(true)
+  expect(document.documentElement.style.getPropertyValue('--zs-primary')).toBe('#ff5fa2')
+})
+
+it('SET-04 preserves Sakura colours with system mode when vault Sakura effects are off', async () => {
+  const config: SiteConfig = {
+    storefront_template: 'vault',
+    theme: { primary_color: '#ff5fa2', secondary_color: '#8b5cf6', accent_color: '#38bdf8', default_mode: 'system', effects: { sakura: false } },
+  }
+  expect(hasLegacyClassicPalette(config)).toBe(false)
+  vi.spyOn(configAPI, 'get').mockResolvedValue({ data: config, status_code: 0, msg: 'ok' } as Awaited<ReturnType<typeof configAPI.get>>)
+  await useAppStore().loadConfig(true)
+  expect(document.documentElement.style.getPropertyValue('--zs-primary')).toBe('#ff5fa2')
 })
 
 it('SET-04 keeps custom palette colours when switching the storefront template', async () => {
