@@ -64,7 +64,6 @@ export const PaymentChannelSelector = defineComponent({
     return () => {
       if (props.channels.length === 0) return <div class="rounded-zs border border-dashed border-line px-4 py-6 text-center text-sm text-muted">{props.emptyText || t('payment.channelEmpty')}</div>
       const options = choices()
-      if (options.length === 1) return null
       return (
         <div class={cn('grid gap-3', props.compact ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2')}>
           {options.map(({ channel, type }) => {

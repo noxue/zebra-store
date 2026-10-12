@@ -762,7 +762,7 @@ export function usePayment() {
         selectedChannelType.value = ''
       }
     },
-    { deep: true },
+    { deep: true, immediate: true },
   )
   watch(expiresAtMs, (value) => {
     stopCountdown()

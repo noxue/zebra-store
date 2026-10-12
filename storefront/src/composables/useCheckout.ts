@@ -429,7 +429,7 @@ export function useCheckout() {
         selectedChannelType.value = ''
       }
     },
-    { deep: true },
+    { deep: true, immediate: true },
   )
 
   const loadWalletBalance = async () => {
@@ -457,10 +457,22 @@ export function useCheckout() {
       guestPassword.value = saved.order_password
     }
     if (!appStore.config) await appStore.loadConfig()
-    if (!isBuyNowMode.value && !syncingStock.value) {
+    if (!syncingStock.value) {
       syncingStock.value = true
       try {
-        await refreshCartStockSnapshots(cartStore)
+        if (isBuyNowMode.value && buyNowStore.item) {
+          await refreshCartStockSnapshots({
+            items: [buyNowStore.item],
+            patchItem: (productId, skuId, patch) => {
+              const current = buyNowStore.item
+              if (current?.productId === productId && normalizeSkuId(current.skuId) === normalizeSkuId(skuId)) {
+                buyNowStore.setItem({ ...current, ...patch })
+              }
+            },
+          })
+        } else if (!isBuyNowMode.value) {
+          await refreshCartStockSnapshots(cartStore)
+        }
       } finally {
         syncingStock.value = false
       }
