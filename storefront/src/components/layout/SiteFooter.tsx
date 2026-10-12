@@ -5,7 +5,7 @@ import { Github, Mail, MessageCircle, Send } from 'lucide-vue-next'
 import { useLocalized } from '@/composables/useLocalized'
 import { useNavConfig } from '@/composables/useNavConfig'
 import { useAppStore } from '@/stores/app'
-import { WaveDivider } from '@/components/ui'
+import { WaveDivider, cn } from '@/components/ui'
 import { SiteLogo } from './SiteLogo'
 
 export const SiteFooter = defineComponent({
@@ -37,12 +37,18 @@ export const SiteFooter = defineComponent({
       <footer class="relative mt-16">
         <WaveDivider />
         <div class="zs-glass border-x-0 border-b-0">
-          <div class="zs-page grid gap-10 py-12 md:grid-cols-[1.4fr_1fr_1fr]">
+          <div class={cn('zs-page grid gap-10 py-12',
+            appStore.config?.theme?.show_footer_quick_links !== false && contacts.value.length > 0
+              ? 'md:grid-cols-[1.4fr_1fr_1fr]'
+              : appStore.config?.theme?.show_footer_quick_links !== false || contacts.value.length > 0
+                ? 'md:grid-cols-[1.4fr_1fr]'
+                : 'md:grid-cols-1',
+          )}>
             <div class="space-y-4">
               <SiteLogo />
               <p class="max-w-md text-sm leading-relaxed text-muted">{description.value}</p>
             </div>
-            <div>
+            {appStore.config?.theme?.show_footer_quick_links !== false && <div>
               <h4 class="zs-title mb-4 text-base text-fg">{t('footer.quickLinks')}</h4>
               <ul class="grid grid-cols-2 gap-2.5 text-sm">
                 {primaryNavItems.value.map((item) => {
@@ -71,7 +77,7 @@ export const SiteFooter = defineComponent({
                   </li>
                 ))}
               </ul>
-            </div>
+            </div>}
             {contacts.value.length > 0 && (
               <div>
                 <h4 class="zs-title mb-4 text-base text-fg">{t('footer.contact')}</h4>
@@ -102,7 +108,7 @@ export const SiteFooter = defineComponent({
               © {year} {appStore.siteName}. {t('footer.rights')}
             </div>
             <div class="flex flex-wrap items-center gap-4">
-              <a
+              {appStore.config?.theme?.show_repository_link !== false && <a
                 href="https://github.com/noxue/zebra-store"
                 target="_blank"
                 rel="noopener noreferrer"
@@ -110,7 +116,7 @@ export const SiteFooter = defineComponent({
               >
                 <Github class="size-4" />
                 github.com/noxue/zebra-store
-              </a>
+              </a>}
               <RouterLink to="/privacy" class="hover:text-primary-text">
                 {t('footer.privacy')}
               </RouterLink>

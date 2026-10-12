@@ -17,6 +17,7 @@ import {
   splitRecipients,
   toColorInputValue,
 } from './settingsUtils'
+import { applyTemplatePreset, COLOR_PRESETS, normalizeStorefrontTemplate, TEMPLATE_COLORS } from './themePresets'
 
 describe('settingsUtils: basic tab', () => {
   it('clamps numbers with fallback for empty/NaN', () => {
@@ -63,6 +64,37 @@ describe('settingsUtils: basic tab', () => {
 })
 
 describe('settingsUtils: theme', () => {
+  it('keeps every storefront template selectable and gives vault its own dark palette', () => {
+    expect(['classic', 'vault', 'aurora', 'atelier', 'noir'].map(normalizeStorefrontTemplate))
+      .toEqual(['classic', 'vault', 'aurora', 'atelier', 'noir'])
+    expect(normalizeStorefrontTemplate('unknown')).toBe('classic')
+    const theme = normalizeTheme({})
+    applyTemplatePreset(theme, 'vault')
+    expect(theme.primary_color).toBe(TEMPLATE_COLORS.vault.primary_color)
+    expect(theme.default_mode).toBe('dark')
+    expect(theme.effects.sakura).toBe(false)
+    theme.background_color = '#123456'
+    applyTemplatePreset(theme, 'aurora')
+    expect(theme.background_color).toBe('')
+    expect(theme.default_mode).toBe('light')
+    expect(COLOR_PRESETS).toHaveLength(8)
+  })
+
+  it('preserves independent page-section switches and optional colours', () => {
+    const theme = normalizeTheme({
+      show_home_hero: false, show_footer_quick_links: false, show_repository_link: false,
+      background_color: '#123456', surface_color: '#fafafa', text_color: '#abcdef',
+    })
+    expect(theme.show_home_hero).toBe(false)
+    expect(theme.show_footer_quick_links).toBe(false)
+    expect(theme.show_repository_link).toBe(false)
+    expect(buildThemePayload(theme, {})).toMatchObject({
+      show_home_hero: false, show_footer_quick_links: false, show_repository_link: false,
+      background_color: '#123456', surface_color: '#fafafa', text_color: '#abcdef',
+    })
+    theme.text_color = 'red'
+    expect(invalidThemeColors(theme)).toEqual(['text_color'])
+  })
   it('fills defaults for missing/invalid theme values', () => {
     const th = normalizeTheme({ primary_color: 'red', accent_color: '#0af', effects: { sakura: false }, default_mode: 'dark' })
     expect(th.primary_color).toBe('#ff5fa2')

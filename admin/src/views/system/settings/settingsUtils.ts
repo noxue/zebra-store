@@ -151,11 +151,17 @@ export interface ThemeForm {
   primary_color: string
   secondary_color: string
   accent_color: string
+  background_color: string
+  surface_color: string
+  text_color: string
   background_image: string
   mascot_image: string
   login_background: string
   effects: { sakura: boolean; sparkle: boolean }
   default_mode: ThemeMode
+  show_home_hero: boolean
+  show_footer_quick_links: boolean
+  show_repository_link: boolean
 }
 
 export const DEFAULT_THEME_COLORS = {
@@ -177,11 +183,17 @@ export const toColorInputValue = (v: string, fallback: string): string => {
 
 export const createThemeForm = (): ThemeForm => ({
   ...DEFAULT_THEME_COLORS,
+  background_color: '',
+  surface_color: '',
+  text_color: '',
   background_image: '',
   mascot_image: '',
   login_background: '',
   effects: { sakura: true, sparkle: true },
   default_mode: 'system',
+  show_home_hero: true,
+  show_footer_quick_links: true,
+  show_repository_link: true,
 })
 
 export const normalizeTheme = (raw: unknown): ThemeForm => {
@@ -194,28 +206,42 @@ export const normalizeTheme = (raw: unknown): ThemeForm => {
     primary_color: color(raw.primary_color, d.primary_color),
     secondary_color: color(raw.secondary_color, d.secondary_color),
     accent_color: color(raw.accent_color, d.accent_color),
+    background_color: color(raw.background_color, ''),
+    surface_color: color(raw.surface_color, ''),
+    text_color: color(raw.text_color, ''),
     background_image: asString(raw.background_image),
     mascot_image: asString(raw.mascot_image),
     login_background: asString(raw.login_background),
     effects: { sakura: effects.sakura !== false, sparkle: effects.sparkle !== false },
     default_mode: mode === 'light' || mode === 'dark' ? mode : 'system',
+    show_home_hero: raw.show_home_hero !== false,
+    show_footer_quick_links: raw.show_footer_quick_links !== false,
+    show_repository_link: raw.show_repository_link !== false,
   }
 }
 
 /** Returns the list of invalid colour fields (empty = OK). */
 export const invalidThemeColors = (theme: ThemeForm): string[] =>
-  (['primary_color', 'secondary_color', 'accent_color'] as const).filter((k) => !isHexColor(theme[k]))
+  (['primary_color', 'secondary_color', 'accent_color', 'background_color', 'surface_color', 'text_color'] as const)
+    .filter((k) => theme[k] !== '' || ['primary_color', 'secondary_color', 'accent_color'].includes(k))
+    .filter((k) => !isHexColor(theme[k]))
 
 export const buildThemePayload = (theme: ThemeForm, rawTheme: unknown): Record<string, unknown> => ({
   ...asRecord(rawTheme),
   primary_color: theme.primary_color.trim().toLowerCase(),
   secondary_color: theme.secondary_color.trim().toLowerCase(),
   accent_color: theme.accent_color.trim().toLowerCase(),
+  background_color: theme.background_color.trim().toLowerCase(),
+  surface_color: theme.surface_color.trim().toLowerCase(),
+  text_color: theme.text_color.trim().toLowerCase(),
   background_image: theme.background_image,
   mascot_image: theme.mascot_image,
   login_background: theme.login_background,
   effects: { ...asRecord(asRecord(rawTheme).effects), sakura: theme.effects.sakura, sparkle: theme.effects.sparkle },
   default_mode: theme.default_mode,
+  show_home_hero: theme.show_home_hero,
+  show_footer_quick_links: theme.show_footer_quick_links,
+  show_repository_link: theme.show_repository_link,
 })
 
 // ---- notification center ----

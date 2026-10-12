@@ -15,7 +15,7 @@ export const ProductGrid = defineComponent({
   emits: { open: (_slug: string) => true, quickBuy: (_p: Product) => true },
   setup(props, { emit }) {
     return () => {
-      const grid = cn('grid grid-cols-2 gap-3 md:gap-5', props.cols === 'wide' ? 'md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' : 'md:grid-cols-3 xl:grid-cols-4')
+      const grid = cn('zs-product-grid grid grid-cols-2 gap-3 md:gap-5', props.cols === 'wide' ? 'md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' : 'md:grid-cols-3 xl:grid-cols-4')
       if (props.loading) {
         return (
           <div class={grid}>

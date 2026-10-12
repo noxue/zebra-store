@@ -25,8 +25,12 @@ export const HomeHero = defineComponent({
       </div>
     )
 
+    const heroVisual = () => appStore.template === 'classic' || appStore.template === 'aurora'
+      ? heroMascot('relative mx-auto h-40 w-32 sm:h-56 sm:w-48 md:mr-0 md:h-72 md:w-60 lg:h-80 lg:w-64')
+      : <div class="zs-template-art relative mx-auto size-40 sm:size-56 md:mr-0 md:size-72" aria-hidden="true" />
+
     const mascotHero = () => (
-      <div class="zs-card relative overflow-hidden p-0">
+      <div class="zs-card zs-home-hero relative overflow-hidden p-0">
         {appStore.heroBackground ? (
           <img src={appStore.heroBackground} alt="" class="absolute inset-0 size-full object-cover opacity-40" />
         ) : (
@@ -35,7 +39,7 @@ export const HomeHero = defineComponent({
         <div class="pointer-events-none absolute -left-10 top-10 size-40 rounded-full bg-primary/25 blur-3xl zs-float" />
         <div class="pointer-events-none absolute right-1/3 -top-10 size-48 rounded-full bg-secondary/25 blur-3xl zs-float" style={{ animationDelay: '1.5s' }} />
         <div class="pointer-events-none absolute bottom-0 right-10 size-40 rounded-full bg-accent/25 blur-3xl zs-float" style={{ animationDelay: '3s' }} />
-        <div class="relative grid items-center gap-6 px-6 py-10 sm:px-12 md:grid-cols-[1.3fr_1fr] md:py-14">
+        <div class="zs-home-hero-content relative grid items-center gap-6 px-6 py-10 sm:px-12 md:grid-cols-[1.3fr_1fr] md:py-14">
           <div class="space-y-5">
             <span class="inline-flex items-center gap-2 rounded-full border border-line bg-surface-strong px-3 py-1 text-xs font-bold text-primary-text">
               <Sparkles class="size-3.5" />
@@ -52,7 +56,7 @@ export const HomeHero = defineComponent({
               </Button>
             </div>
           </div>
-          {heroMascot('relative mx-auto h-40 w-32 sm:h-56 sm:w-48 md:mr-0 md:h-72 md:w-60 lg:h-80 lg:w-64')}
+          {heroVisual()}
         </div>
       </div>
     )
@@ -64,7 +68,7 @@ export const HomeHero = defineComponent({
       const cur = c.current.value
       return (
         <section
-          class="group relative flex min-h-[22rem] flex-col overflow-hidden rounded-zs-lg border border-line shadow-zs-lg sm:aspect-[21/8] sm:min-h-0"
+          class="zs-banner-hero group relative flex min-h-[22rem] flex-col overflow-hidden rounded-zs-lg border border-line shadow-zs-lg sm:aspect-[21/8] sm:min-h-0"
           onTouchstart={c.onTouchStart}
           onTouchend={c.onTouchEnd}
         >
@@ -72,7 +76,7 @@ export const HomeHero = defineComponent({
             {cur && <img key={cur.id} src={c.imageOf(cur)} alt={c.titleOf(cur)} class="absolute inset-0 size-full object-cover" />}
           </Transition>
           <div class="absolute inset-0 bg-gradient-to-r from-black/65 via-black/30 to-transparent" />
-          {heroMascot('absolute bottom-0 right-[6%] hidden aspect-[5/6] h-[88%] md:block')}
+          {(appStore.template === 'classic' || appStore.template === 'aurora') && heroMascot('absolute bottom-0 right-[6%] hidden aspect-[5/6] h-[88%] md:block')}
           <div class="relative flex flex-1 flex-col justify-end gap-4 p-6 pb-10 sm:justify-center sm:p-12 md:pr-[38%] lg:pr-[34%]">
             <span class="inline-flex w-fit items-center gap-2 rounded-full border border-white/30 bg-white/15 px-3 py-1 text-xs font-bold text-white backdrop-blur">
               <span class="size-1.5 rounded-full bg-success" />

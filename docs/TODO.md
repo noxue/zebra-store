@@ -119,6 +119,7 @@
 - [x] 分销商控制台：概览、申请、域名、站点、商品、订单、财务、流水、提现
 
 - [x] 打磨：首页 Hero 加入看板娘（theme.mascot_image / 内置 SVG）
+- [x] 店面模板生效与扩展、快捷配色、首页横幅及页脚区块显示开关
 - [x] 修正 src/api/reseller.ts：product-settings 列表类型与 keyword/configured 过滤参数
 
 ## M11 管理后台 UI（admin）

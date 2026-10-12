@@ -4,16 +4,18 @@ import { Palette, RotateCcw } from 'lucide-vue-next'
 import { Button, Card, FormField, Input, Mascot, RadioGroup, cn } from '@/components/ui'
 import { MediaPicker } from '@/components/MediaPicker'
 import { getImageUrl } from '@/utils/image'
-import { DEFAULT_THEME_COLORS, isHexColor, toColorInputValue, type ThemeForm, type ThemeMode } from './settingsUtils'
+import { isHexColor, toColorInputValue, type ThemeForm, type ThemeMode } from './settingsUtils'
+import { COLOR_PRESETS, TEMPLATE_BASES, TEMPLATE_COLORS, type StorefrontTemplate } from './themePresets'
 import { ToggleRow } from './SettingsUi'
 
-type ColorKey = 'primary_color' | 'secondary_color' | 'accent_color'
+type ColorKey = 'primary_color' | 'secondary_color' | 'accent_color' | 'background_color' | 'surface_color' | 'text_color'
 
 /** Zebra Store addition: edits `site_config.theme` (colours, images, effects, default colour mode) with a live preview. */
 export default defineComponent({
   name: 'SettingsThemeSection',
   props: {
     theme: { type: Object as PropType<ThemeForm>, required: true },
+    template: { type: String as PropType<StorefrontTemplate>, required: true },
   },
   emits: { resetColors: () => true },
   setup(props, { emit }) {
@@ -23,19 +25,27 @@ export default defineComponent({
       { key: 'primary_color', label: 'admin.themeSettings.primaryColor' },
       { key: 'secondary_color', label: 'admin.themeSettings.secondaryColor' },
       { key: 'accent_color', label: 'admin.themeSettings.accentColor' },
+      { key: 'background_color', label: 'admin.themeSettings.backgroundColor' },
+      { key: 'surface_color', label: 'admin.themeSettings.surfaceColor' },
+      { key: 'text_color', label: 'admin.themeSettings.textColor' },
     ]
 
-    const effective = (key: ColorKey) => toColorInputValue(props.theme[key], DEFAULT_THEME_COLORS[key])
+    const colorFallback = (key: ColorKey) => ({ ...TEMPLATE_COLORS[props.template], ...TEMPLATE_BASES[props.template] })[key]
+    const effective = (key: ColorKey) => toColorInputValue(props.theme[key], colorFallback(key))
 
     /** Scoped CSS-variable overrides so the preview (and the Mascot inside it) uses the edited colours. */
     const previewVars = computed(() => ({
       '--zs-primary': effective('primary_color'),
       '--zs-secondary': effective('secondary_color'),
       '--zs-accent': effective('accent_color'),
+      '--zs-bg': effective('background_color'),
+      '--zs-surface-solid': effective('surface_color'),
+      '--zs-text': effective('text_color'),
     }))
     const gradient = computed(
       () => `linear-gradient(135deg, ${effective('primary_color')}, ${effective('secondary_color')} 55%, ${effective('accent_color')})`,
     )
+    const previewGlyph = () => ({ classic: '✦', vault: '◆', aurora: '◌', atelier: 'A', noir: '✦' })[props.template]
 
     const renderColor = (key: ColorKey, label: string) => {
       const value = props.theme[key]
@@ -51,7 +61,7 @@ export default defineComponent({
               class="h-9 w-12 shrink-0 cursor-pointer rounded-zs-sm border border-line-strong bg-surface-strong p-1"
               onInput={(e: Event) => (props.theme[key] = (e.target as HTMLInputElement).value)}
             />
-            <Input v-model={props.theme[key]} mono maxlength={7} placeholder={DEFAULT_THEME_COLORS[key]} />
+            <Input v-model={props.theme[key]} mono maxlength={7} placeholder={colorFallback(key)} />
           </div>
         </FormField>
       )
@@ -85,6 +95,24 @@ export default defineComponent({
             default: () => (
               <div class="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_280px]">
                 <div class="space-y-6">
+                  <div>
+                    <p class="mb-3 text-sm font-semibold text-fg">{t('admin.themeSettings.palettePresets')}</p>
+                    <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                      {COLOR_PRESETS.map(({ key, colors }) => (
+                        <button
+                          key={key}
+                          type="button"
+                          class="flex items-center gap-2 rounded-zs border border-line bg-surface-strong px-3 py-2 text-xs text-fg transition hover:border-primary"
+                          onClick={() => Object.assign(props.theme, colors)}
+                        >
+                          <span class="flex shrink-0 -space-x-1" aria-hidden="true">
+                            {Object.values(colors).map((color) => <span key={color} class="size-4 rounded-full border border-surface-solid" style={{ backgroundColor: color }} />)}
+                          </span>
+                          <span>{t(`admin.themeSettings.palette.${key}`)}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <div class="grid grid-cols-1 gap-5 md:grid-cols-3">{colorFields.map((c) => renderColor(c.key, c.label))}</div>
 
                   <div class="grid grid-cols-1 gap-5 md:grid-cols-3">
@@ -115,7 +143,7 @@ export default defineComponent({
 
                 <div class="space-y-2" style={previewVars.value}>
                   <p class="text-xs font-medium text-fg/85">{t('admin.themeSettings.preview')}</p>
-                  <div class="relative overflow-hidden rounded-zs-lg border border-line bg-surface-strong">
+                  <div class="relative overflow-hidden rounded-zs-lg border border-line" style={{ backgroundColor: effective('surface_color'), color: effective('text_color') }}>
                     {bg && <img src={bg} alt="" class="absolute inset-0 h-full w-full object-cover opacity-40" />}
                     <div class="relative space-y-3 p-4">
                       <div class="h-10 rounded-zs shadow-zs-sm" style={{ background: gradient.value }} data-testid="theme-preview-gradient" />
@@ -135,9 +163,13 @@ export default defineComponent({
                         </div>
                         {mascot ? (
                           <img src={mascot} alt="" class="h-28 w-28 object-contain" />
-                        ) : (
+                        ) : props.template === 'classic' || props.template === 'aurora' ? (
                           <div class={cn('shrink-0')}>
                             <Mascot size={112} mood="wink" />
+                          </div>
+                        ) : (
+                          <div class="flex size-24 shrink-0 items-center justify-center rounded-zs border border-line text-5xl" style={{ color: effective('primary_color') }} aria-hidden="true">
+                            {previewGlyph()}
                           </div>
                         )}
                       </div>

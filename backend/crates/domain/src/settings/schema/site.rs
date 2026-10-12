@@ -16,6 +16,9 @@ pub const CURRENCY_DEFAULT: &str = "CNY";
 /// Default storefront template.
 pub const STOREFRONT_TEMPLATE_DEFAULT: &str = "classic";
 const STOREFRONT_TEMPLATE_VAULT: &str = "vault";
+const STOREFRONT_TEMPLATE_AURORA: &str = "aurora";
+const STOREFRONT_TEMPLATE_ATELIER: &str = "atelier";
+const STOREFRONT_TEMPLATE_NOIR: &str = "noir";
 
 // Limits from the original `site_normalize.go`.
 const SCRIPTS_MAX: usize = 20;
@@ -188,10 +191,12 @@ fn normalize_template_mode(raw: Option<&Value>) -> String {
 }
 
 fn normalize_storefront_template(raw: Option<&Value>) -> String {
-    if text(raw) == STOREFRONT_TEMPLATE_VAULT {
-        STOREFRONT_TEMPLATE_VAULT
-    } else {
-        STOREFRONT_TEMPLATE_DEFAULT
+    match text(raw).as_str() {
+        STOREFRONT_TEMPLATE_VAULT => STOREFRONT_TEMPLATE_VAULT,
+        STOREFRONT_TEMPLATE_AURORA => STOREFRONT_TEMPLATE_AURORA,
+        STOREFRONT_TEMPLATE_ATELIER => STOREFRONT_TEMPLATE_ATELIER,
+        STOREFRONT_TEMPLATE_NOIR => STOREFRONT_TEMPLATE_NOIR,
+        _ => STOREFRONT_TEMPLATE_DEFAULT,
     }
     .to_owned()
 }
@@ -247,10 +252,16 @@ pub fn normalize_theme(raw: Option<&Value>) -> Value {
         "primary_color": hex_color(get("primary_color"), THEME_PRIMARY_DEFAULT),
         "secondary_color": hex_color(get("secondary_color"), THEME_SECONDARY_DEFAULT),
         "accent_color": hex_color(get("accent_color"), THEME_ACCENT_DEFAULT),
+        "background_color": hex_color(get("background_color"), ""),
+        "surface_color": hex_color(get("surface_color"), ""),
+        "text_color": hex_color(get("text_color"), ""),
         "background_image": safe_url(get("background_image")),
         "mascot_image": safe_url(get("mascot_image")),
         "login_background": safe_url(get("login_background")),
         "effects": { "sakura": effect("sakura"), "sparkle": effect("sparkle") },
+        "show_home_hero": get("show_home_hero").and_then(Value::as_bool).unwrap_or(true),
+        "show_footer_quick_links": get("show_footer_quick_links").and_then(Value::as_bool).unwrap_or(true),
+        "show_repository_link": get("show_repository_link").and_then(Value::as_bool).unwrap_or(true),
         "default_mode": mode,
     })
 }
@@ -668,11 +679,41 @@ mod tests {
     }
 
     #[test]
+    fn storefront_templates_and_hero_visibility_survive_normalization() {
+        for template in ["classic", "vault", "aurora", "atelier", "noir"] {
+            let out = normalize_site(&json!({
+                "storefront_template": template,
+                "theme": {
+                    "show_home_hero": false,
+                    "show_footer_quick_links": false,
+                    "show_repository_link": false,
+                    "background_color": "#102040",
+                    "surface_color": "#fafafa",
+                    "text_color": "#bad",
+                },
+            }));
+            assert_eq!(out["storefront_template"], template);
+            assert_eq!(out["theme"]["show_home_hero"], false);
+            assert_eq!(out["theme"]["show_footer_quick_links"], false);
+            assert_eq!(out["theme"]["show_repository_link"], false);
+            assert_eq!(out["theme"]["background_color"], "#102040");
+            assert_eq!(out["theme"]["surface_color"], "#fafafa");
+            assert_eq!(out["theme"]["text_color"], "#bad");
+        }
+        let fallback = normalize_site(&json!({"storefront_template": "unknown"}));
+        assert_eq!(fallback["storefront_template"], "classic");
+        assert_eq!(fallback["theme"]["show_home_hero"], true);
+        assert_eq!(fallback["theme"]["show_footer_quick_links"], true);
+        assert_eq!(fallback["theme"]["show_repository_link"], true);
+    }
+
+    #[test]
     fn theme_rejects_bad_colors_and_script_urls() {
         let t = normalize_theme(Some(&json!({
             "primary_color": "#ABC",
             "secondary_color": "red",
             "accent_color": "#12345g",
+            "background_color": "javascript:bad",
             "background_image": "javascript:alert(1)",
             "mascot_image": "/uploads/m.png",
             "login_background": "//evil.com/x.png",
@@ -682,6 +723,7 @@ mod tests {
         assert_eq!(t["primary_color"], "#abc");
         assert_eq!(t["secondary_color"], THEME_SECONDARY_DEFAULT);
         assert_eq!(t["accent_color"], THEME_ACCENT_DEFAULT);
+        assert_eq!(t["background_color"], "");
         assert_eq!(t["background_image"], "");
         assert_eq!(t["mascot_image"], "/uploads/m.png");
         assert_eq!(t["login_background"], "");

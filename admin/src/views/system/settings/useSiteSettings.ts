@@ -31,6 +31,7 @@ import {
   type LocalizedField,
   type SiteScriptItem,
 } from './settingsUtils'
+import { applyTemplatePreset, isClassicPalette, normalizeStorefrontTemplate, type StorefrontTemplate } from './themePresets'
 
 /**
  * site_config + registration_config + order_config — shared by the basic / template / about / legal tabs
@@ -70,7 +71,7 @@ export function useSiteSettings() {
     legal: { terms: createLocalizedField(), privacy: createLocalizedField() },
     scripts: [] as SiteScriptItem[],
     footer_links: [] as FooterLinkItem[],
-    storefront_template: 'classic' as 'classic' | 'vault',
+    storefront_template: 'classic' as StorefrontTemplate,
     template_mode: 'card' as 'card' | 'list',
     theme: createThemeForm(),
   })
@@ -111,8 +112,12 @@ export function useSiteSettings() {
     form.scripts = normalizeSiteScripts(data.scripts)
     form.footer_links = normalizeFooterLinks(data.footer_links)
     form.template_mode = String(data.template_mode || 'card').trim() === 'list' ? 'list' : 'card'
-    form.storefront_template = String(data.storefront_template || 'classic').trim() === 'vault' ? 'vault' : 'classic'
+    form.storefront_template = normalizeStorefrontTemplate(data.storefront_template)
     form.theme = normalizeTheme(data.theme)
+    // Existing vault installations saved classic colours while the storefront ignored the template.
+    if (form.storefront_template !== 'classic' && isClassicPalette(form.theme)) {
+      applyTemplatePreset(form.theme, form.storefront_template)
+    }
   }
 
   const loadOrder = (raw: unknown) => {
@@ -154,7 +159,13 @@ export function useSiteSettings() {
     form.footer_links.push(createFooterLinkItem())
   }
   const removeFooterLinkItem = (i: number) => form.footer_links.splice(i, 1)
-  const resetThemeColors = () => Object.assign(form.theme, DEFAULT_THEME_COLORS)
+  const resetThemeColors = () => Object.assign(form.theme, DEFAULT_THEME_COLORS, {
+    background_color: '', surface_color: '', text_color: '',
+  })
+  const selectTemplate = (template: StorefrontTemplate) => {
+    form.storefront_template = template
+    applyTemplatePreset(form.theme, template)
+  }
 
   // ---- save ----
   const saveRegistration = () =>
@@ -239,6 +250,7 @@ export function useSiteSettings() {
     addFooterLinkItem,
     removeFooterLinkItem,
     resetThemeColors,
+    selectTemplate,
     buildSitePayload,
     save,
   }

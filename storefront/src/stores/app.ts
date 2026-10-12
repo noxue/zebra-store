@@ -8,13 +8,19 @@ import { applyCustomScripts } from '@/utils/customScripts'
 import { getImageUrl } from '@/utils/image'
 import { localizedText } from '@/utils/localized'
 import { applyDefaultThemeMode } from '@/utils/theme'
+import { hasLegacyClassicPalette, storefrontTemplate } from '@/utils/storefrontTemplate'
 
 const THEME_VAR_MAP: Array<[keyof NonNullable<SiteConfig['theme']>, string]> = [
   ['primary_color', '--zs-primary'],
   ['secondary_color', '--zs-secondary'],
   ['accent_color', '--zs-accent'],
+  ['background_color', '--zs-bg'],
+  ['surface_color', '--zs-surface'],
+  ['surface_color', '--zs-surface-strong'],
+  ['surface_color', '--zs-surface-solid'],
+  ['text_color', '--zs-text'],
 ]
-const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i
+const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i
 
 export const useAppStore = defineStore('app', () => {
   const locale = ref<string>(detectLocale())
@@ -40,7 +46,8 @@ export const useAppStore = defineStore('app', () => {
   const isResellerTenant = computed(() => String(config.value?.tenant?.mode || '').trim().toLowerCase() === 'reseller')
   const canAccessResellerConsole = computed(() => !!config.value && !isResellerTenant.value)
   const isListMode = computed(() => config.value?.template_mode === 'list')
-  const sakuraEnabled = computed(() => config.value?.theme?.effects?.sakura !== false)
+  const template = computed(() => storefrontTemplate(config.value?.storefront_template))
+  const sakuraEnabled = computed(() => config.value?.theme?.effects?.sakura !== false && !hasLegacyClassicPalette(config.value))
   const sparkleEnabled = computed(() => config.value?.theme?.effects?.sparkle !== false)
   const mascotImage = computed(() => getImageUrl(config.value?.theme?.mascot_image || ''))
   const heroBackground = computed(() => getImageUrl(config.value?.theme?.background_image || ''))
@@ -63,12 +70,16 @@ export const useAppStore = defineStore('app', () => {
   const applyThemeOverrides = (cfg: SiteConfig | null) => {
     if (typeof document === 'undefined') return
     const root = document.documentElement
+    root.dataset.storefrontTemplate = storefrontTemplate(cfg?.storefront_template)
+    const legacyPalette = hasLegacyClassicPalette(cfg)
     for (const [key, cssVar] of THEME_VAR_MAP) {
       const value = String(cfg?.theme?.[key] || '').trim()
-      if (HEX_COLOR.test(value)) root.style.setProperty(cssVar, value)
+      if (!legacyPalette && HEX_COLOR.test(value)) root.style.setProperty(cssVar, value)
+      else if (legacyPalette && !['primary_color', 'secondary_color', 'accent_color'].includes(key) && HEX_COLOR.test(value)) root.style.setProperty(cssVar, value)
       else root.style.removeProperty(cssVar)
     }
-    applyDefaultThemeMode(cfg?.theme?.default_mode)
+    const mode = cfg?.theme?.default_mode
+    applyDefaultThemeMode(mode === 'system' && legacyPalette && template.value === 'vault' ? 'dark' : mode)
   }
 
   const fetchConfig = async (force: boolean) => {
@@ -143,6 +154,7 @@ export const useAppStore = defineStore('app', () => {
     isResellerTenant,
     canAccessResellerConsole,
     isListMode,
+    template,
     sakuraEnabled,
     sparkleEnabled,
     mascotImage,
