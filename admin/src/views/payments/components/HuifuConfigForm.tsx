@@ -1,17 +1,18 @@
 import { defineComponent, type PropType } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { FormField, MultiSelect } from '@/components/ui'
+import { FormField, MultiSelect, Select } from '@/components/ui'
 import type { HuifuConfig } from '../paymentChannelRules'
 import { ExternalLink } from 'lucide-vue-next'
 import { ProviderSection, useConfigFields } from './configFields'
 
 const HUIFU_APPLICATION_URL = 'https://paas.huifu.com/login?inviteCode=TAXG4QKSR'
 
-/** Huifu hosted Alipay/WeChat H5 and PC payment configuration. */
+/** Huifu direct Alipay QR or hosted Alipay/WeChat configuration. */
 export const HuifuConfigForm = defineComponent({
   name: 'HuifuConfigForm',
   props: {
     config: { type: Object as PropType<HuifuConfig>, required: true },
+    onCollectionModeChange: { type: Function as PropType<(mode: string) => void>, required: false },
   },
   setup(props) {
     const { m, text } = useConfigFields()
@@ -20,10 +21,26 @@ export const HuifuConfigForm = defineComponent({
       const c = props.config
       return (
         <ProviderSection title="huifuSection" hint="huifuHint">
+          <FormField label={m('huifuCollectionMode')} required>
+            <Select
+              modelValue={c.collection_mode}
+              options={[
+                { value: 'direct_qr', label: m('huifuDirectQr') },
+                { value: 'hosted', label: m('huifuHosted') },
+              ]}
+              onUpdate:modelValue={(value: string | number) => {
+                c.collection_mode = String(value)
+                if (c.collection_mode === 'direct_qr') c.supported_channel_types = ['alipay']
+                props.onCollectionModeChange?.(c.collection_mode)
+              }}
+            />
+          </FormField>
           <FormField label={m('huifuMethods')} required>
             <MultiSelect
               modelValue={c.supported_channel_types}
-              options={[
+              options={c.collection_mode === 'direct_qr' ? [
+                { value: 'alipay', label: t('admin.paymentChannels.channelTypes.alipay') },
+              ] : [
                 { value: 'wechat', label: t('admin.paymentChannels.channelTypes.wechat') },
                 { value: 'alipay', label: t('admin.paymentChannels.channelTypes.alipay') },
               ]}
@@ -36,12 +53,12 @@ export const HuifuConfigForm = defineComponent({
           {text(c, 'sys_id', 'huifuSysId', { required: true })}
           {text(c, 'product_id', 'huifuProductId', { required: true })}
           {text(c, 'huifu_id', 'huifuMerchantId', { required: true })}
-          {text(c, 'project_id', 'huifuProjectId', { required: true, hint: 'huifuProjectIdHint' })}
-          {text(c, 'project_title', 'huifuProjectTitle')}
+          {c.collection_mode === 'hosted' && text(c, 'project_id', 'huifuProjectId', { required: true, hint: 'huifuProjectIdHint' })}
+          {c.collection_mode === 'hosted' && text(c, 'project_title', 'huifuProjectTitle')}
           {text(c, 'merchant_private_key', 'huifuMerchantPrivateKey', { wide: true, rows: 5, required: true })}
           {text(c, 'huifu_public_key', 'huifuPublicKey', { wide: true, rows: 5, required: true })}
           {text(c, 'notify_url', 'huifuNotifyUrl', { wide: true, required: true })}
-          {text(c, 'return_url', 'huifuReturnUrl', { wide: true, required: true })}
+          {c.collection_mode === 'hosted' && text(c, 'return_url', 'huifuReturnUrl', { wide: true, required: true })}
           <div class="md:col-span-2 rounded-zs border border-line bg-surface p-3 text-xs leading-relaxed text-muted">
             {c.supported_channel_types.includes('wechat') && (
               <p class="mb-2">{m('huifuWechatConfigHint')}</p>

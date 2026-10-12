@@ -206,6 +206,42 @@ async fn huifu_signed_notify_settles_and_replays_safely() {
     assert_eq!(format!("{:.2}", order.online_paid_amount), "9.90");
 }
 
+#[tokio::test]
+async fn huifu_direct_alipay_signed_notify_settles_order() {
+    let app = PayApp::offline().await;
+    let mut config = huifu_config();
+    config["collection_mode"] = json!("direct_qr");
+    config.as_object_mut().unwrap().remove("project_id");
+    config.as_object_mut().unwrap().remove("return_url");
+    let channel = app.seed_channel("huifu", "alipay", "qr", config).await;
+    let order = app.seed_order("DJP-HUIFU-DIRECT", "0.01").await;
+    let payment = app
+        .seed_payment(order, channel, "DJP-HUIFU-DIRECT", "0.01", "CNY")
+        .await;
+    let form = huifu_form("DJP-HUIFU-DIRECT", "6666000100000001", "0.01", "S");
+    let (status, _, body) = app
+        .callback(
+            "POST",
+            "/api/v1/payments/callback",
+            "application/x-www-form-urlencoded;charset=UTF-8",
+            &[],
+            form,
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, "RECV_ORD_ID_DJP-HUIFU-DIRECT");
+    assert_eq!(app.payment(payment).await.status, "success");
+    assert_eq!(
+        orders::Entity::find_by_id(order)
+            .one(&app.db)
+            .await
+            .unwrap()
+            .unwrap()
+            .status,
+        "paid"
+    );
+}
+
 /// Invalid signature, merchant, amount and non-final state cannot accidentally settle a Huifu
 /// payment. Pending callbacks are acknowledged but leave both payment and order pending.
 #[tokio::test]

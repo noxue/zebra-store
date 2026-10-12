@@ -110,7 +110,7 @@ export const PaymentChannelModal = defineComponent({
         case 'dujiaopay':
           return <DujiaopayConfigForm config={configs.dujiaopay} v-model:channelType={form.channel_type} />
         case 'huifu':
-          return <HuifuConfigForm config={configs.huifu} />
+          return <HuifuConfigForm config={configs.huifu} onCollectionModeChange={(mode) => { if (mode === 'direct_qr') form.interaction_mode = 'qr' }} />
         default:
           return null
       }
@@ -140,7 +140,7 @@ export const PaymentChannelModal = defineComponent({
             </FormField>
           )}
           <FormField label={pc('interactionMode')}>
-            <Select modelValue={form.interaction_mode} onUpdate:modelValue={(v) => (form.interaction_mode = String(v))} options={s.interactionOptions.value} />
+            <Select modelValue={form.interaction_mode} onUpdate:modelValue={(v) => (form.interaction_mode = String(v))} options={form.provider_type === 'huifu' && configs.huifu.collection_mode === 'direct_qr' ? s.interactionOptions.value.filter((option) => option.value === 'qr') : s.interactionOptions.value} />
           </FormField>
           <FormField label={pc('sortOrder')}>
             <Input type="number" v-model={form.sort_order} placeholder="10" />

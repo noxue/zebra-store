@@ -164,6 +164,27 @@ describe('Huifu defaults', () => {
     })
     expect(legacy.configs.huifu.supported_channel_types).toEqual(['alipay'])
   })
+
+  it('stores direct Alipay QR without a hosted project', () => {
+    const configs = defaultConfigs('https://store.example.com/')
+    configs.huifu.collection_mode = 'direct_qr'
+    configs.huifu.supported_channel_types = ['wechat', 'alipay']
+    const built = buildChannelPayload(form({
+      provider_type: 'huifu',
+      channel_type: 'wechat',
+      interaction_mode: 'redirect',
+      config_json: '{"project_id":"old-hosted","project_title":"old","return_url":"https://old.example/pay"}',
+    }), configs)
+    expect(built.ok).toBe(true)
+    if (built.ok) {
+      expect(built.payload.channel_type).toBe('alipay')
+      expect(built.payload.interaction_mode).toBe('qr')
+      expect(built.payload.config_json).toMatchObject({ collection_mode: 'direct_qr', supported_channel_types: ['alipay'] })
+      expect(built.payload.config_json).not.toHaveProperty('project_id')
+      expect(built.payload.config_json).not.toHaveProperty('project_title')
+      expect(built.payload.config_json).not.toHaveProperty('return_url')
+    }
+  })
 })
 
 describe('applyConfigs', () => {

@@ -249,6 +249,7 @@ export interface DujiaopayConfig {
   cancel_url: string
 }
 export interface HuifuConfig {
+  collection_mode: string
   api_base_url: string
   sys_id: string
   product_id: string
@@ -438,6 +439,7 @@ export const defaultConfigs = (siteOrigin = '', manualReviewBase = siteOrigin): 
     cancel_url: inferredReturnUrl,
   },
   huifu: {
+    collection_mode: 'hosted',
     api_base_url: HUIFU_API,
     sys_id: '',
     product_id: '',
@@ -611,6 +613,7 @@ export const applyConfigs = (raw: Raw, siteOrigin = '', manualReviewBase = siteO
       cancel_url: str(raw, 'cancel_url', inferred.dujiaopay.cancel_url),
     },
     huifu: {
+      collection_mode: str(raw, 'collection_mode', 'hosted') === 'direct_qr' ? 'direct_qr' : 'hosted',
       api_base_url: str(raw, 'api_base_url', HUIFU_API),
       sys_id: str(raw, 'sys_id'),
       product_id: str(raw, 'product_id'),
@@ -781,6 +784,7 @@ export const buildDujiaopayConfig = (c: DujiaopayConfig, channelType: string): R
 
 export const buildHuifuConfig = (c: HuifuConfig): Raw =>
   ({
+    collection_mode: c.collection_mode === 'direct_qr' ? 'direct_qr' : 'hosted',
     ...pickNonEmpty(c, [
       'api_base_url',
       'sys_id',
@@ -788,12 +792,12 @@ export const buildHuifuConfig = (c: HuifuConfig): Raw =>
       'huifu_id',
       'merchant_private_key',
       'huifu_public_key',
-      'project_id',
-      'project_title',
       'notify_url',
-      'return_url',
+      ...(c.collection_mode === 'direct_qr' ? [] : ['project_id', 'project_title', 'return_url']),
     ]),
-    supported_channel_types: c.supported_channel_types.filter((item) => HUIFU_CHANNEL_OPTIONS.some((option) => option.value === item)),
+    supported_channel_types: c.collection_mode === 'direct_qr'
+      ? ['alipay']
+      : c.supported_channel_types.filter((item) => HUIFU_CHANNEL_OPTIONS.some((option) => option.value === item)),
   })
 
 export const buildManualQrConfig = (c: ManualQrConfig): Raw => ({
@@ -911,6 +915,11 @@ export const channelToState = (channel: AdminPaymentChannel, siteOrigin = '', ma
   if (channel.provider_type === 'huifu' && configs.huifu.supported_channel_types.length === 0) {
     configs.huifu.supported_channel_types = [form.channel_type]
   }
+  if (channel.provider_type === 'huifu' && configs.huifu.collection_mode === 'direct_qr') {
+    configs.huifu.supported_channel_types = ['alipay']
+    form.channel_type = 'alipay'
+    form.interaction_mode = 'qr'
+  }
   if (channel.provider_type === 'epay' && configs.epay.supported_channel_types.length === 0) {
     configs.epay.supported_channel_types = [form.channel_type]
   }
@@ -944,7 +953,7 @@ export const resolvePayloadChannelType = (form: Pick<ChannelForm, 'provider_type
     case 'dujiaopay':
       return configs.dujiaopay.order_mode === 'cashier' ? 'dujiaopay' : String(form.channel_type || '').trim().toLowerCase()
     case 'huifu':
-      return configs.huifu.supported_channel_types[0] || form.channel_type
+      return configs.huifu.collection_mode === 'direct_qr' ? 'alipay' : configs.huifu.supported_channel_types[0] || form.channel_type
     case 'epay':
       return configs.epay.supported_channel_types.includes(form.channel_type)
         ? form.channel_type
@@ -1039,6 +1048,9 @@ export const buildConfigJson = (form: ChannelForm, configs: ProviderConfigs): { 
       break
   }
   for (const key of explicitNulls) config[key] = null
+  if (section === 'huifu' && configs.huifu.collection_mode === 'direct_qr') {
+    config = withoutKeys(config, ['project_id', 'project_title', 'return_url'])
+  }
   return { ok: true, config }
 }
 
@@ -1055,7 +1067,7 @@ export const buildChannelPayload = (form: ChannelForm, configs: ProviderConfigs)
       icon: form.icon || '',
       provider_type: form.provider_type,
       channel_type: resolvePayloadChannelType(form, configs),
-      interaction_mode: form.interaction_mode,
+      interaction_mode: form.provider_type === 'huifu' && configs.huifu.collection_mode === 'direct_qr' ? 'qr' : form.interaction_mode,
       fee_rate: trimOr0(form.fee_rate),
       fixed_fee: trimOr0(form.fixed_fee),
       min_amount: trimOr0(form.min_amount),

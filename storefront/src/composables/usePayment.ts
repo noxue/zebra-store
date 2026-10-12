@@ -30,6 +30,7 @@ import {
   isCustomerSurchargePayment,
   resolvePaymentInteractionLabelKey,
   resolvePaymentResultTitleKey,
+  requiresActiveCapture,
   shouldAutoOpenPaymentLink,
   type PaymentResetReason,
 } from '@/utils/paymentResumePolicy'
@@ -340,9 +341,9 @@ export function usePayment() {
     else await paymentAPI.capture(paymentId)
   }
 
-  /** Official WeChat needs an active capture poll (original behaviour). */
+  /** Huifu also needs active capture when the browser cannot receive its callback. */
   const shouldCaptureCurrentPayment = () =>
-    !!currentPaymentId() && order.value?.status === 'pending_payment' && providerType.value === 'official' && channelType.value === 'wechat'
+    !!currentPaymentId() && order.value?.status === 'pending_payment' && requiresActiveCapture(providerType.value, channelType.value)
 
   const captureCurrentPayment = async (silent = false) => {
     if (capturing.value || !shouldCaptureCurrentPayment()) return

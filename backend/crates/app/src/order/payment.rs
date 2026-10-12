@@ -524,8 +524,7 @@ impl OrderService {
         Ok(payment)
     }
 
-    /// Actively queries the gateway and settles the result (`CapturePayment`); only
-    /// official gateways support it.
+    /// Actively queries a supported gateway and settles the result (`CapturePayment`).
     pub async fn capture(&self, payment: Payment) -> Result<Payment> {
         if payment.status == PaymentStatus::Success {
             return Ok(payment);
@@ -536,7 +535,10 @@ impl OrderService {
             .channel(payment.channel_id)
             .await?
             .ok_or_else(|| Error::not_found(pay_keys::CHANNEL_NOT_FOUND))?;
-        if channel.provider() != provider::OFFICIAL {
+        if !matches!(
+            channel.provider().as_str(),
+            provider::OFFICIAL | provider::HUIFU
+        ) {
             return Err(Error::bad_request(pay_keys::PROVIDER_NOT_SUPPORTED));
         }
         if payment.provider_ref.trim().is_empty() {
