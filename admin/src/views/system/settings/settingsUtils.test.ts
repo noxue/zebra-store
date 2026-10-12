@@ -18,6 +18,7 @@ import {
   toColorInputValue,
 } from './settingsUtils'
 import { applyTemplatePreset, COLOR_PRESETS, normalizeStorefrontTemplate, TEMPLATE_COLORS } from './themePresets'
+import { useSiteSettings } from './useSiteSettings'
 
 describe('settingsUtils: basic tab', () => {
   it('clamps numbers with fallback for empty/NaN', () => {
@@ -64,6 +65,25 @@ describe('settingsUtils: basic tab', () => {
 })
 
 describe('settingsUtils: theme', () => {
+  it('keeps an intentional Sakura palette and resets colours to the selected template', () => {
+    const settings = useSiteSettings()
+    settings.loadSite({
+      storefront_template: 'vault',
+      theme: { ...TEMPLATE_COLORS.classic, default_mode: 'dark' },
+    })
+    expect(settings.form.theme.primary_color).toBe(TEMPLATE_COLORS.classic.primary_color)
+    settings.resetThemeColors()
+    expect(settings.form.theme.primary_color).toBe(TEMPLATE_COLORS.vault.primary_color)
+    expect(settings.form.theme.default_mode).toBe('dark')
+  })
+  it('keeps Sakura with system mode when the selected vault has Sakura effects off', () => {
+    const settings = useSiteSettings()
+    settings.loadSite({
+      storefront_template: 'vault',
+      theme: { ...TEMPLATE_COLORS.classic, default_mode: 'system', effects: { sakura: false } },
+    })
+    expect(settings.form.theme.primary_color).toBe(TEMPLATE_COLORS.classic.primary_color)
+  })
   it('keeps every storefront template selectable and gives vault its own dark palette', () => {
     expect(['classic', 'vault', 'aurora', 'atelier', 'noir'].map(normalizeStorefrontTemplate))
       .toEqual(['classic', 'vault', 'aurora', 'atelier', 'noir'])

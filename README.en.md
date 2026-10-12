@@ -23,6 +23,18 @@ Guest checkout can leave both email and order password empty. The storefront per
 |---|---|
 | <a href="handbook/public/screenshots/storefront/home.png"><img src="handbook/public/screenshots/storefront/home.png" width="440" alt="Storefront home"></a><br>Storefront home | <a href="handbook/public/screenshots/storefront/product-detail.png"><img src="handbook/public/screenshots/storefront/product-detail.png" width="440" alt="Product details"></a><br>Product details |
 
+### Storefront templates
+
+Each pair shows the home page and product list with the same demo products. See the [template comparison guide](https://zebra-store-docs.noxue.com/storefront/templates) for setup details.
+
+| Template | Home | Product list |
+|---|---|---|
+| Classic | [<img src="handbook/public/screenshots/templates/classic-home.png" width="360" alt="Classic home">](handbook/public/screenshots/templates/classic-home.png) | [<img src="handbook/public/screenshots/templates/classic-products.png" width="360" alt="Classic products">](handbook/public/screenshots/templates/classic-products.png) |
+| Digital vault | [<img src="handbook/public/screenshots/templates/vault-home.png" width="360" alt="Digital vault home">](handbook/public/screenshots/templates/vault-home.png) | [<img src="handbook/public/screenshots/templates/vault-products.png" width="360" alt="Digital vault products">](handbook/public/screenshots/templates/vault-products.png) |
+| Aurora | [<img src="handbook/public/screenshots/templates/aurora-home.png" width="360" alt="Aurora home">](handbook/public/screenshots/templates/aurora-home.png) | [<img src="handbook/public/screenshots/templates/aurora-products.png" width="360" alt="Aurora products">](handbook/public/screenshots/templates/aurora-products.png) |
+| Atelier | [<img src="handbook/public/screenshots/templates/atelier-home.png" width="360" alt="Atelier home">](handbook/public/screenshots/templates/atelier-home.png) | [<img src="handbook/public/screenshots/templates/atelier-products.png" width="360" alt="Atelier products">](handbook/public/screenshots/templates/atelier-products.png) |
+| Noir | [<img src="handbook/public/screenshots/templates/noir-home.png" width="360" alt="Noir home">](handbook/public/screenshots/templates/noir-home.png) | [<img src="handbook/public/screenshots/templates/noir-products.png" width="360" alt="Noir products">](handbook/public/screenshots/templates/noir-products.png) |
+
 <details>
 <summary>View all storefront screenshots (22)</summary>
 

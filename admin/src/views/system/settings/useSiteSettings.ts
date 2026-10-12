@@ -7,7 +7,6 @@ import { notifyError, notifySuccess } from '@/utils/notify'
 import { notifyFailure, tr } from './common'
 import {
   ABOUT_SERVICES_MAX,
-  DEFAULT_THEME_COLORS,
   FOOTER_LINKS_MAX,
   SITE_SCRIPTS_MAX,
   asRecord,
@@ -31,7 +30,7 @@ import {
   type LocalizedField,
   type SiteScriptItem,
 } from './settingsUtils'
-import { applyTemplatePreset, isClassicPalette, normalizeStorefrontTemplate, type StorefrontTemplate } from './themePresets'
+import { applyTemplatePreset, isClassicPalette, normalizeStorefrontTemplate, TEMPLATE_COLORS, type StorefrontTemplate } from './themePresets'
 
 /**
  * site_config + registration_config + order_config — shared by the basic / template / about / legal tabs
@@ -115,7 +114,7 @@ export function useSiteSettings() {
     form.storefront_template = normalizeStorefrontTemplate(data.storefront_template)
     form.theme = normalizeTheme(data.theme)
     // Existing vault installations saved classic colours while the storefront ignored the template.
-    if (form.storefront_template !== 'classic' && isClassicPalette(form.theme)) {
+    if (form.storefront_template !== 'classic' && form.theme.default_mode === 'system' && form.theme.effects.sakura && isClassicPalette(form.theme)) {
       applyTemplatePreset(form.theme, form.storefront_template)
     }
   }
@@ -159,7 +158,7 @@ export function useSiteSettings() {
     form.footer_links.push(createFooterLinkItem())
   }
   const removeFooterLinkItem = (i: number) => form.footer_links.splice(i, 1)
-  const resetThemeColors = () => Object.assign(form.theme, DEFAULT_THEME_COLORS, {
+  const resetThemeColors = () => Object.assign(form.theme, TEMPLATE_COLORS[form.storefront_template], {
     background_color: '', surface_color: '', text_color: '',
   })
   const selectTemplate = (template: StorefrontTemplate) => {

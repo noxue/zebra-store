@@ -22,6 +22,8 @@
 
 ![前台首页](/screenshots/storefront/home.png)
 
+想比较不同风格的首页和商品列表，可查看[五种店铺模板效果对比](/storefront/templates)。
+
 ## 一次典型的购物
 
 1. 买家在首页或商品页找到商品，选择规格和数量；

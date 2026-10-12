@@ -12,5 +12,7 @@ export const storefrontTemplate = (value: unknown): StorefrontTemplate =>
 export const hasLegacyClassicPalette = (config: SiteConfig | null): boolean => {
   const colors = [config?.theme?.primary_color, config?.theme?.secondary_color, config?.theme?.accent_color]
   return storefrontTemplate(config?.storefront_template) !== 'classic'
+    && config?.theme?.default_mode === 'system'
+    && config?.theme?.effects?.sakura !== false
     && colors.every((color, index) => color?.toLowerCase() === CLASSIC_COLORS[index])
 }
