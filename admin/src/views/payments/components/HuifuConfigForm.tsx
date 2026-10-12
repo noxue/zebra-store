@@ -5,7 +5,7 @@ import type { HuifuConfig } from '../paymentChannelRules'
 import { ExternalLink } from 'lucide-vue-next'
 import { ProviderSection, useConfigFields } from './configFields'
 
-const HUIFU_APPLICATION_URL = 'https://paas.huifu.com/login?inviteCode=TAXG4QKSR'
+const HUIFU_APPLICATION_GUIDE_URL = 'https://zebra-store-docs.noxue.com/payment/huifu#个人申请资料'
 
 /** Huifu direct Alipay QR or hosted Alipay/WeChat configuration. */
 export const HuifuConfigForm = defineComponent({
@@ -66,7 +66,7 @@ export const HuifuConfigForm = defineComponent({
             <p>{m('huifuApplicationHint')}</p>
             <a
               class="mt-2 inline-flex items-center gap-1 font-medium text-primary hover:underline"
-              href={HUIFU_APPLICATION_URL}
+              href={HUIFU_APPLICATION_GUIDE_URL}
               target="_blank"
               rel="noopener noreferrer"
             >
