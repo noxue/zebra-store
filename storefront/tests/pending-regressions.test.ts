@@ -154,6 +154,18 @@ it('PAY-17 refreshes a stale cart channel binding before checkout', async () => 
   expect(cart.items[0]?.paymentChannelIds).toBeUndefined()
 })
 
+it('PAY-11 keeps an order with no common product channels unavailable on the payment page', () => {
+  const app = useAppStore()
+  app.config = { payment_channels: [{ id: 3, name: 'Alipay', provider_type: 'huifu', channel_type: 'alipay', interaction_mode: 'qr' }] }
+  const page = harness(usePayment)
+  page.order.value = {
+    order_no: 'DJ1', status: 'pending_payment', currency: 'CNY', total_amount: '1.00',
+    created_at: '2026-10-12T00:00:00Z', allowed_payment_channel_ids: [],
+  } as NonNullable<typeof page.order.value>
+  expect(page.hasChannelRestriction.value).toBe(true)
+  expect(page.channels.value).toEqual([])
+})
+
 it('FE-04 preserves withdrawal success and clears the form when every subsequent refresh fails', async () => {
   const { resellerAPI } = await import('@/api/reseller')
   const { useResellerWithdraws } = await import('@/composables/reseller/useResellerWithdraws')
