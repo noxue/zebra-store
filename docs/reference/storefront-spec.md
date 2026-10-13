@@ -177,7 +177,7 @@ Page states:
 - Channel type labels: wechat, wxpay, alipay, qqpay, paypal, stripe, usdt, usdt-trc20, usdc-trc20, trx.
 
 ### OrderDetail (`views/OrderDetail.vue`, `useOrderDetail`, `useOrderDisplayHelpers`)
-- **APIs:** `userOrderAPI.detail`, `cancel` (with confirm dialog), `downloadFulfillment` (blob).
+- **APIs:** `userOrderAPI.detail`, `cancel` (with confirm dialog), `downloadFulfillment` (blob), `requestRefund` (`POST /orders/:order_no/refund`).
 - **Header:** order number, status badge, "Pay now" (when pending), "Cancel".
 - **Amount card:** original, discount, promotion, wholesale, member, total, wallet paid, online paid, refunded.
 - **Time card:** created, paid, expires, canceled.
@@ -185,7 +185,7 @@ Page states:
 - **Fulfillment:** `order.fulfillment{type,status,payload,payload_line_count}` with copy and download buttons and a "truncated" hint; per-item `instructions` HTML blocks.
 - **Child orders:** `order.children[]`, each with its own items and fulfillment.
 - **Current Zebra Store behavior:** even one purchased product has one child order; when children are present the parent item list is omitted to avoid duplicate display. After delivery, the shared order body offers TXT export of the order number, full delivery payload and plain-text instructions. A truncated payload is fetched through the existing authenticated download endpoint.
-- **Refunds:** `refund_records[{amount,currency,remark,created_at}]`.
+- **Refunds:** `refund_records[{amount,currency,remark,created_at}]`, `refund_mode: none|automatic|contact_support`, and `refund_state: none|checking|processing|awaiting_support|syncing|succeeded|needs_review`. Order detail explains original-route refund. Automatic mode submits a full refund; other paid orders link to the configured contact page for manual support. `awaiting_support` means the card is locked while staff completes an external original-route transfer.
 
 ### GuestOrders (`views/GuestOrders.vue`, `useGuestOrders`)
 - **Form:** email, order password, optional order number. The last credentials are saved, with a "clear saved" action.
@@ -193,7 +193,7 @@ Page states:
 - **List:** order rows with view and pay actions, pagination.
 
 ### GuestOrderDetail (`views/GuestOrderDetail.vue`, `useGuestOrderDetail`)
-Asks for guest auth, then shows the same body as OrderDetail using `guestOrderAPI.detail` and `downloadFulfillment`.
+Asks for guest auth, then shows the same body as OrderDetail using `guestOrderAPI.detail`, `downloadFulfillment`, and authenticated `POST /guest/orders/:order_no/refund`.
 
 ### RechargeOrderDetail (`views/RechargeOrderDetail.vue`, `useRechargeOrderDetail`)
 - **APIs:** `walletAPI.rechargeDetail`, `walletAPI.captureRechargePayment`.

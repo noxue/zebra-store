@@ -9,7 +9,11 @@ use zs_shared::money::Amount;
 use crate::{Id, Result};
 
 pub mod status {
+    pub const PREPARING: &str = "preparing";
     pub const PENDING: &str = "pending";
+    pub const MANUAL_PREPARING: &str = "manual_preparing";
+    pub const MANUAL_LOCKING: &str = "manual_locking";
+    pub const MANUAL_AWAITING: &str = "manual_awaiting";
     pub const FAILED: &str = "failed";
     pub const SUCCEEDED: &str = "succeeded";
 }
@@ -27,6 +31,7 @@ pub struct GatewayRefundAttempt {
     pub status: String,
     pub remark: String,
     pub payment_fee_refunded: bool,
+    pub card_confirmed: bool,
     pub payload: Map<String, serde_json::Value>,
     pub error: String,
     pub refund_record_id: Option<Id>,
@@ -46,6 +51,7 @@ pub struct NewGatewayRefundAttempt {
     pub remark: String,
     pub payment_fee_refunded: bool,
     pub now: DateTime<Utc>,
+    pub initial_status: String,
 }
 
 #[derive(Debug, Clone)]
@@ -67,6 +73,8 @@ pub struct ReservedGatewayRefund {
 #[async_trait]
 pub trait GatewayRefundStore: Send + Sync {
     async fn reserve(&self, input: &NewGatewayRefundAttempt) -> Result<ReservedGatewayRefund>;
+    /// Exactly one worker may switch a prepared attempt to pending before submitting it.
+    async fn claim_submission(&self, id: Id) -> Result<bool>;
     async fn get(&self, id: Id) -> Result<Option<GatewayRefundAttempt>>;
     async fn list_for_order(&self, order_id: Id) -> Result<Vec<GatewayRefundAttempt>>;
     async fn update(

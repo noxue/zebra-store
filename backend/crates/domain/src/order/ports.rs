@@ -347,8 +347,20 @@ pub trait OrderStore: Send + Sync {
         &self,
         input: &NewGatewayRefundAttempt,
     ) -> Result<ReservedGatewayRefund>;
+    async fn claim_gateway_refund_submission(
+        &self,
+        attempt_id: Id,
+        now: DateTime<Utc>,
+    ) -> Result<bool>;
+    async fn claim_manual_refund_preparation(
+        &self,
+        attempt_id: Id,
+        now: DateTime<Utc>,
+    ) -> Result<bool>;
     async fn gateway_refund_attempt(&self, id: Id) -> Result<Option<GatewayRefundAttempt>>;
     async fn gateway_refund_attempts(&self, order_id: Id) -> Result<Vec<GatewayRefundAttempt>>;
+    async fn unfinished_gateway_refund_attempts(&self) -> Result<Vec<GatewayRefundAttempt>>;
+    async fn mark_gateway_refund_card_confirmed(&self, attempt_id: Id) -> Result<()>;
     async fn update_gateway_refund_attempt(
         &self,
         id: Id,

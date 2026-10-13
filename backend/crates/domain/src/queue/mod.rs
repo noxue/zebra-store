@@ -13,6 +13,7 @@ pub mod kinds {
     pub const ORDER_STATUS_EMAIL: &str = "order:status_email";
     pub const ORDER_AUTO_FULFILL: &str = "order:auto_fulfill";
     pub const ORDER_TIMEOUT_CANCEL: &str = "order:timeout_cancel";
+    pub const ORDER_REFUND_RECONCILE: &str = "order:refund_reconcile";
     pub const WALLET_RECHARGE_EXPIRE: &str = "wallet_recharge:timeout_expire";
     pub const NOTIFICATION_DISPATCH: &str = "notification:dispatch";
     pub const AFFILIATE_CONFIRM: &str = "affiliate:confirm_commissions";

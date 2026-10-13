@@ -605,6 +605,8 @@ export type OrderStatus =
 export interface Order {
   id?: number
   order_no: string
+  refund_mode?: 'none' | 'automatic' | 'contact_support'
+  refund_state?: 'none' | 'checking' | 'processing' | 'awaiting_support' | 'syncing' | 'succeeded' | 'needs_review'
   parent_order_no?: string
   guest_email?: string
   guest_locale?: string
@@ -627,6 +629,11 @@ export interface Order {
   fulfillment?: Fulfillment | null
   children?: Order[] | null
   refund_records?: RefundRecord[] | null
+}
+
+export interface OriginalRefundResponse {
+  status: 'preparing' | 'pending' | 'succeeded' | 'failed'
+  refund_no: string
 }
 
 export interface OrderListParams {

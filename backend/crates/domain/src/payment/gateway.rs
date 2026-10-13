@@ -245,10 +245,27 @@ pub struct GatewaySecurityTestResult {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct GatewayCapabilities {
     pub query: bool,
+    /// The provider supports original-route refunds for this integration.
+    pub refund: bool,
+    /// A refund smaller than the original gateway payment is supported and verified.
+    pub partial_refund: bool,
     pub webhook: bool,
     pub callback: bool,
     pub security_test: bool,
     pub trade_bills: bool,
+}
+
+/// Only verified gateway refund capabilities may be used for the requested amount.
+pub fn supports_refund_amount(
+    capabilities: GatewayCapabilities,
+    paid: Amount,
+    requested: Amount,
+) -> bool {
+    capabilities.refund
+        && paid.is_positive()
+        && requested.is_positive()
+        && requested <= paid
+        && (requested == paid || capabilities.partial_refund)
 }
 
 /// A payment provider adapter.
@@ -466,5 +483,29 @@ mod tests {
         let h = Headers::from([("Stripe-Signature", " t=1 "), ("stripe-signature", "x")]);
         assert_eq!(h.get("STRIPE-SIGNATURE"), "t=1");
         assert_eq!(h.get("missing"), "");
+    }
+
+    #[test]
+    fn refund_capability_rejects_unsupported_channels_and_partial_amounts() {
+        let paid = Amount::from(10);
+        let half = Amount::from(5);
+        assert!(!supports_refund_amount(
+            GatewayCapabilities::default(),
+            paid,
+            paid
+        ));
+        let full_only = GatewayCapabilities {
+            refund: true,
+            ..Default::default()
+        };
+        assert!(supports_refund_amount(full_only, paid, paid));
+        assert!(!supports_refund_amount(full_only, paid, half));
+        assert!(!supports_refund_amount(full_only, paid, Amount::from(11)));
+        assert!(!supports_refund_amount(full_only, paid, Amount::ZERO));
+        let partial = GatewayCapabilities {
+            partial_refund: true,
+            ..full_only
+        };
+        assert!(supports_refund_amount(partial, paid, half));
     }
 }

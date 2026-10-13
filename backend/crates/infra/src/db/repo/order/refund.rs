@@ -4,8 +4,8 @@
 use chrono::{DateTime, Utc};
 use sea_orm::sea_query::Expr;
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, ConnectionTrait, EntityTrait, IntoActiveModel, QueryFilter,
-    QueryOrder, QuerySelect, Set,
+    ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, EntityTrait, IntoActiveModel,
+    QueryFilter, QueryOrder, QuerySelect, Set,
 };
 use zs_domain::order::model::{Order, RefundRecord, keys, refund_type};
 use zs_domain::order::ports::{RefundDone, RefundRequest};
@@ -47,6 +47,7 @@ fn gateway_attempt_to_domain(model: gateway_refund_attempts::Model) -> GatewayRe
         status: model.status,
         remark: model.remark,
         payment_fee_refunded: model.payment_fee_refunded,
+        card_confirmed: model.card_confirmed,
         payload,
         error: model.error,
         refund_record_id: model.refund_record_id,
@@ -59,9 +60,26 @@ pub(crate) async fn reserve_gateway_refund_in<C: ConnectionTrait>(
     conn: &C,
     input: &NewGatewayRefundAttempt,
 ) -> Result<ReservedGatewayRefund> {
-    // Locking the successful payment serializes retries across processes, so a pending
-    // provider request is always queried instead of being submitted a second time.
+    // Locking the successful payment serializes retries across processes. A preparing
+    // attempt can be resumed; a pending provider request is only queried.
     payments::Entity::find_by_id(input.payment_id)
+        .lock_exclusive()
+        .one(conn)
+        .await
+        .dom()?
+        .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
+    // Delivery takes the order row lock before checking attempts. Hold that same lock
+    // while publishing the reservation so delivery cannot pass the check concurrently.
+    // Fulfillment of a child may update its parent. Lock children first to match
+    // that ordering and avoid a child -> parent / parent -> child deadlock.
+    orders::Entity::find()
+        .filter(orders::Column::ParentId.eq(input.order_id))
+        .order_by_asc(orders::Column::Id)
+        .lock_exclusive()
+        .all(conn)
+        .await
+        .dom()?;
+    orders::Entity::find_by_id(input.order_id)
         .lock_exclusive()
         .one(conn)
         .await
@@ -69,7 +87,13 @@ pub(crate) async fn reserve_gateway_refund_in<C: ConnectionTrait>(
         .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
     if let Some(existing) = gateway_refund_attempts::Entity::find()
         .filter(gateway_refund_attempts::Column::PaymentId.eq(input.payment_id))
-        .filter(gateway_refund_attempts::Column::Status.eq(gateway_refund_status::PENDING))
+        .filter(gateway_refund_attempts::Column::Status.is_in([
+            gateway_refund_status::PREPARING,
+            gateway_refund_status::PENDING,
+            gateway_refund_status::MANUAL_PREPARING,
+            gateway_refund_status::MANUAL_LOCKING,
+            gateway_refund_status::MANUAL_AWAITING,
+        ]))
         .order_by_desc(gateway_refund_attempts::Column::Id)
         .lock_exclusive()
         .one(conn)
@@ -108,9 +132,10 @@ pub(crate) async fn reserve_gateway_refund_in<C: ConnectionTrait>(
         refund_no: Set(input.refund_no.clone()),
         provider_ref: Set(input.provider_ref.clone()),
         amount: Set(input.amount.decimal()),
-        status: Set(gateway_refund_status::PENDING.to_owned()),
+        status: Set(input.initial_status.clone()),
         remark: Set(input.remark.clone()),
         payment_fee_refunded: Set(input.payment_fee_refunded),
+        card_confirmed: Set(false),
         payload: Set(Some(serde_json::Value::Object(Default::default()))),
         error: Set(String::new()),
         refund_record_id: Set(None),
@@ -125,6 +150,61 @@ pub(crate) async fn reserve_gateway_refund_in<C: ConnectionTrait>(
         attempt: gateway_attempt_to_domain(model),
         created: true,
     })
+}
+
+pub(crate) async fn claim_gateway_refund_submission_in<C: ConnectionTrait>(
+    conn: &C,
+    attempt_id: Id,
+    now: DateTime<Utc>,
+) -> Result<bool> {
+    let changed = gateway_refund_attempts::Entity::update_many()
+        .col_expr(
+            gateway_refund_attempts::Column::Status,
+            Expr::value(gateway_refund_status::PENDING),
+        )
+        .col_expr(gateway_refund_attempts::Column::UpdatedAt, Expr::value(now))
+        .filter(gateway_refund_attempts::Column::Id.eq(attempt_id))
+        .filter(gateway_refund_attempts::Column::Status.eq(gateway_refund_status::PREPARING))
+        .exec(conn)
+        .await
+        .dom()?
+        .rows_affected;
+    Ok(changed == 1)
+}
+
+pub(crate) async fn claim_manual_refund_preparation_in<C: ConnectionTrait>(
+    conn: &C,
+    attempt_id: Id,
+    now: DateTime<Utc>,
+) -> Result<bool> {
+    let stale = now - chrono::Duration::seconds(30);
+    let changed = gateway_refund_attempts::Entity::update_many()
+        .col_expr(
+            gateway_refund_attempts::Column::Status,
+            Expr::value(gateway_refund_status::MANUAL_LOCKING),
+        )
+        .col_expr(gateway_refund_attempts::Column::UpdatedAt, Expr::value(now))
+        .filter(gateway_refund_attempts::Column::Id.eq(attempt_id))
+        .filter(
+            Condition::any()
+                .add(
+                    gateway_refund_attempts::Column::Status
+                        .eq(gateway_refund_status::MANUAL_PREPARING),
+                )
+                .add(
+                    Condition::all()
+                        .add(
+                            gateway_refund_attempts::Column::Status
+                                .eq(gateway_refund_status::MANUAL_LOCKING),
+                        )
+                        .add(gateway_refund_attempts::Column::UpdatedAt.lte(stale)),
+                ),
+        )
+        .exec(conn)
+        .await
+        .dom()?
+        .rows_affected;
+    Ok(changed == 1)
 }
 
 pub(crate) async fn get_gateway_refund_attempt_in<C: ConnectionTrait>(
@@ -151,6 +231,57 @@ pub(crate) async fn list_gateway_refund_attempts_in<C: ConnectionTrait>(
         .into_iter()
         .map(gateway_attempt_to_domain)
         .collect())
+}
+
+pub(crate) async fn unfinished_gateway_refund_attempts_in<C: ConnectionTrait>(
+    conn: &C,
+) -> Result<Vec<GatewayRefundAttempt>> {
+    Ok(gateway_refund_attempts::Entity::find()
+        .filter(
+            Condition::any()
+                .add(gateway_refund_attempts::Column::Status.is_in([
+                    gateway_refund_status::PREPARING,
+                    gateway_refund_status::PENDING,
+                    gateway_refund_status::MANUAL_PREPARING,
+                    gateway_refund_status::MANUAL_LOCKING,
+                ]))
+                .add(
+                    Condition::all()
+                        .add(
+                            gateway_refund_attempts::Column::Status
+                                .eq(gateway_refund_status::SUCCEEDED),
+                        )
+                        .add(gateway_refund_attempts::Column::CardConfirmed.eq(false)),
+                ),
+        )
+        .order_by_asc(gateway_refund_attempts::Column::Id)
+        .all(conn)
+        .await
+        .dom()?
+        .into_iter()
+        .map(gateway_attempt_to_domain)
+        .collect())
+}
+
+pub(crate) async fn mark_gateway_refund_card_confirmed_in<C: ConnectionTrait>(
+    conn: &C,
+    attempt_id: Id,
+) -> Result<()> {
+    let changed = gateway_refund_attempts::Entity::update_many()
+        .col_expr(
+            gateway_refund_attempts::Column::CardConfirmed,
+            Expr::value(true),
+        )
+        .filter(gateway_refund_attempts::Column::Id.eq(attempt_id))
+        .filter(gateway_refund_attempts::Column::Status.eq(gateway_refund_status::SUCCEEDED))
+        .exec(conn)
+        .await
+        .dom()?
+        .rows_affected;
+    if changed == 0 {
+        return Err(Error::not_found(keys::ORDER_NOT_FOUND));
+    }
+    Ok(())
 }
 
 pub(crate) async fn update_gateway_refund_attempt_in<C: ConnectionTrait>(
@@ -261,6 +392,25 @@ pub(crate) async fn refund_in<C: ConnectionTrait>(
         if attempt.order_id != order.id || Amount::new(attempt.amount) != req.amount {
             return Err(Error::invalid());
         }
+        if attempt.refund_no.starts_with("MR") {
+            let transfer_ref = req.gateway_refund_provider_ref.trim();
+            if transfer_ref.is_empty() {
+                return Err(Error::invalid());
+            }
+            if gateway_refund_attempts::Entity::find()
+                .filter(gateway_refund_attempts::Column::ProviderRef.eq(transfer_ref))
+                .filter(
+                    gateway_refund_attempts::Column::Status.eq(gateway_refund_status::SUCCEEDED),
+                )
+                .filter(gateway_refund_attempts::Column::Id.ne(attempt.id))
+                .one(conn)
+                .await
+                .dom()?
+                .is_some()
+            {
+                return Err(Error::bad_request("error.gateway_refund_pending"));
+            }
+        }
         if let Some(record_id) = attempt.refund_record_id {
             let record = order_refund_records::Entity::find_by_id(record_id)
                 .filter(order_refund_records::Column::DeletedAt.is_null())
@@ -276,8 +426,28 @@ pub(crate) async fn refund_in<C: ConnectionTrait>(
         }
         Some(attempt)
     } else {
+        // A wallet or staff-entered refund cannot race an in-flight provider refund.
+        // Otherwise both paths can return funds while each sees the old balance.
+        let active = gateway_refund_attempts::Entity::find()
+            .filter(gateway_refund_attempts::Column::OrderId.is_in([order.id, root_id(&order)]))
+            .filter(gateway_refund_attempts::Column::Status.is_in([
+                gateway_refund_status::PREPARING,
+                gateway_refund_status::PENDING,
+                gateway_refund_status::MANUAL_PREPARING,
+                gateway_refund_status::MANUAL_LOCKING,
+                gateway_refund_status::MANUAL_AWAITING,
+            ]))
+            .one(conn)
+            .await
+            .dom()?;
+        if active.is_some() {
+            return Err(Error::bad_request("error.gateway_refund_pending"));
+        }
         None
     };
+    if gateway_attempt.is_none() && order.online_paid_amount.is_positive() {
+        return Err(Error::bad_request("error.gateway_refund_pending"));
+    }
     if req.to_wallet && order.user_id == 0 {
         return Err(Error::invalid());
     }

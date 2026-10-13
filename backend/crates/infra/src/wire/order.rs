@@ -12,7 +12,7 @@ use zs_app::identity::rate_limit::RateLimiter;
 use zs_app::marketing::member_level::MemberLevelService;
 use zs_app::notify::center::QueueNotifier;
 use zs_app::order::affiliate::ServiceAffiliateHooks;
-use zs_app::order::jobs::{AutoFulfillJob, StatusEmailJob, TimeoutCancelJob};
+use zs_app::order::jobs::{AutoFulfillJob, RefundReconcileJob, StatusEmailJob, TimeoutCancelJob};
 use zs_app::order::settlement::OrderSettlement;
 use zs_app::order::upstream::OrderIntegrationPorts;
 use zs_app::order::{GUEST_READ_RULE, GUEST_WRITE_RULE, OrderDeps, OrderService, OrderServices};
@@ -201,5 +201,13 @@ pub fn jobs(_ctx: &WireCtx, services: &zs_app::Services, registry: &mut JobRegis
         .handle(
             kinds::ORDER_STATUS_EMAIL,
             Arc::new(StatusEmailJob(svc.clone())),
+        )
+        .handle(
+            kinds::ORDER_REFUND_RECONCILE,
+            Arc::new(RefundReconcileJob(svc.clone())),
+        )
+        .every(
+            kinds::ORDER_REFUND_RECONCILE,
+            std::time::Duration::from_secs(60),
         );
 }
