@@ -414,25 +414,26 @@ impl CardConverterService {
                 "local card provenance does not match delivery",
             ));
         }
-        if local_cards_match {
-            let preconverted = local_cards.iter().filter(|(_, _, ready)| *ready).count();
-            if preconverted == cards.len() {
-                return Ok(delivery.clone());
-            }
-            if preconverted > 0 {
-                return Err(Error::internal_msg(
-                    "mixed preconverted and raw cards require separate orders",
-                ));
+        let mut outputs = vec![None; cards.len()];
+        let mut raw_indexes = Vec::new();
+        let mut card_notes = Vec::new();
+        for (index, card) in cards.iter().enumerate() {
+            if local_cards_match && local_cards[index].2 {
+                outputs[index] = Some((*card).to_owned());
+            } else {
+                raw_indexes.push(index);
+                if local_cards_match {
+                    card_notes.push(local_cards[index].1.clone());
+                }
             }
         }
-        let card_notes = if local_cards_match {
-            local_cards
-                .into_iter()
-                .map(|(_, note, _)| note)
-                .collect::<Vec<_>>()
-        } else {
-            Vec::new()
-        };
+        if raw_indexes.is_empty() {
+            return Ok(delivery.clone());
+        }
+        let raw_cards = raw_indexes
+            .iter()
+            .map(|&index| cards[index])
+            .collect::<Vec<_>>();
         let shared_note = card_notes
             .first()
             .filter(|note| !note.is_empty() && card_notes.iter().all(|other| other == *note));
@@ -444,10 +445,10 @@ impl CardConverterService {
             "source": source.map(|source| serde_json::json!({"id":source.id,"name":source.name,"protocol":source.protocol})),
             "card": {"note": shared_note, "notes": card_notes},
         });
-        let extra = render_extra(&binding.extra_template, &context, &cards)?;
+        let extra = render_extra(&binding.extra_template, &context, &raw_cards)?;
         let request = ExchangeRequest {
             order_no: order.order_no.clone(),
-            items: cards
+            items: raw_cards
                 .iter()
                 .enumerate()
                 .map(|(index, card)| ExchangeItem {
@@ -458,12 +459,11 @@ impl CardConverterService {
             extra,
         };
         let response = self.exchange(binding.converter_id, &request).await?;
-        let mut outputs = vec![None; cards.len()];
         for output in response.items {
-            let slot = outputs
-                .get_mut(output.index)
+            let original_index = *raw_indexes
+                .get(output.index)
                 .ok_or_else(|| Error::internal_msg("card converter returned an invalid index"))?;
-            *slot = Some(output.card);
+            outputs[original_index] = Some(output.card);
         }
         let payload = outputs
             .into_iter()

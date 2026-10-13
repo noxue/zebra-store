@@ -672,6 +672,19 @@ async fn converter_exchange(
     (StatusCode::OK, Json(json!({"items":items}))).into_response()
 }
 
+async fn mixed_system_and_raw_exchange(
+    State(mock): State<Arc<ConverterMock>>,
+    Json(request): Json<Value>,
+) -> Json<Value> {
+    let items = request["items"].as_array().unwrap();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["index"], 0);
+    assert_eq!(items[0]["upstream_card"], "RAW-MIXED");
+    assert_eq!(request["extra"]["provider"], "p3");
+    mock.exchanges.fetch_add(1, Ordering::SeqCst);
+    Json(json!({"items":[{"index":0,"card":"SYSTEM-RAW-MIXED"}]}))
+}
+
 /// A failed conversion holds the exact stock cards and retry resumes only conversion.
 #[tokio::test]
 async fn local_card_converter_retry_does_not_consume_stock_twice() {
@@ -837,7 +850,10 @@ async fn preconverted_local_card_skips_bound_converter() {
     let address = listener.local_addr().unwrap();
     let router = Router::new()
         .route("/health", get(converter_health))
-        .route("/integration/v1/exchanges", post(converter_exchange))
+        .route(
+            "/integration/v1/exchanges",
+            post(mixed_system_and_raw_exchange),
+        )
         .with_state(mock.clone());
     tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
 
@@ -922,6 +938,51 @@ async fn preconverted_local_card_skips_bound_converter() {
     assert_eq!(fulfillment.payload, "SYSTEM-READY-CARD");
     assert_eq!(mock.exchanges.load(Ordering::SeqCst), 0);
     assert_eq!(app.secrets_with(product, "used").await, 1);
+
+    // A second order may contain both types: only the raw card goes to the
+    // converter, and the buyer receives both cards in their original order.
+    for (secret, preconverted) in [("SYSTEM-READY-MIXED", true), ("RAW-MIXED", false)] {
+        app.services
+            .catalog
+            .card_secret
+            .create_batch(
+                zs_app::catalog::card_secret::CreateSecretsInput {
+                    product_id: product,
+                    sku_id: sku,
+                    secrets: vec![secret.into()],
+                    note: "p3".into(),
+                    preconverted,
+                    ..Default::default()
+                },
+                zs_domain::catalog::card_secret::BatchSource::Manual,
+            )
+            .await
+            .unwrap();
+    }
+    let order = create_and_pay(&app, product, sku, 2, channel).await;
+    let order_no = order["order_no"].as_str().unwrap();
+    let payment_id = order["payment_id"].as_i64().unwrap();
+    assert_eq!(app.epay_callback(payment_id, "20.00").await, "success");
+    let child = app
+        .children(app.order_by_no(order_no).await.id)
+        .await
+        .remove(0);
+    app.services
+        .order
+        .service
+        .auto_fulfill(child.id)
+        .await
+        .unwrap();
+    assert_eq!(app.order(child.id).await.status, "completed");
+    let fulfillment = zs_infra::db::entity::fulfillments::Entity::find()
+        .filter(zs_infra::db::entity::fulfillments::Column::OrderId.eq(child.id))
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(fulfillment.payload, "SYSTEM-READY-MIXED\nSYSTEM-RAW-MIXED");
+    assert_eq!(mock.exchanges.load(Ordering::SeqCst), 1);
+    assert_eq!(app.secrets_with(product, "used").await, 3);
 }
 
 async fn hybrid_exchange(Json(request): Json<Value>) -> Json<Value> {
