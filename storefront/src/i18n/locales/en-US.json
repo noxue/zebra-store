@@ -834,7 +834,11 @@
         "resetFailed": "Failed to reset rule",
         "loadFailed": "Failed to load product pricing, please try again later",
         "priceInvalidHint": "Price must be at least the base and cost price",
-        "markupExceededHint": "Exceeds the maximum markup"
+        "markupExceededHint": "Exceeds the maximum markup",
+        "contentOverrides": "Storefront content overrides",
+        "overrideContent": "Override product details",
+        "overrideInstructions": "Override delivery instructions",
+        "overrideHint": "Turn off to inherit the main store. Product details support HTML; delivery instructions appear after payment."
       },
       "settlementStatusMap": {
         "normal": "Normal",
@@ -1707,7 +1711,13 @@
     "fulfillmentDownload": "Download",
     "fulfillmentTotalLines": "{count} items in total",
     "fulfillmentDownloading": "Downloading...",
-    "fulfillmentTruncatedHint": "Showing first 100 items only. Please download for full content."
+    "fulfillmentTruncatedHint": "Showing first 100 items only. Please download for full content.",
+    "exportInfo": "Export order information",
+    "exportingInfo": "Exporting…",
+    "exportOrderNo": "Order number",
+    "exportKeys": "License keys",
+    "exportInstructions": "Delivery instructions",
+    "exportFailed": "Export failed. Please try again."
   },
   "guestOrders": {
     "title": "Guest Order Lookup",

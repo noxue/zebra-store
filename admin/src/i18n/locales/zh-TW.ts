@@ -4020,6 +4020,10 @@ const messages = {
     },
     resellerProductSettings: {
       title: '分銷商品配置',
+      contentOverrides: '分站內容覆蓋',
+      overrideContent: '覆蓋商品詳情',
+      overrideInstructions: '覆蓋交付使用說明',
+      overrideHint: '關閉開關時繼承主站；開啟後使用分站內容。商品詳情支援 HTML，交付說明在付款後顯示。',
       subtitle: '查看並管理分銷商的商品可售狀態和售價規則。',
       filters: {
         all: '全部',

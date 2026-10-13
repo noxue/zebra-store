@@ -385,6 +385,7 @@ Settings key `order_risk_control_config`:
   - Filters: keyword, resellerId, userId, productId, listed (listed/hidden), pricingMode (`inherit|markup_percent|fixed_markup|fixed_price`).
   - Columns: id, owner, product, sku, listed, pricingMode, pricingValue, updatedAt, actions (edit, reset → `DELETE product-settings/:rid/:pid?sku_id=`).
   - Editor: loads `GET product-settings/:rid/:pid` (the AdminResellerProductSettingDetail type). Fields: is_listed, pricing_mode, markup_percent, fixed_markup_amount, fixed_price_amount, all per product and per SKU. Preview → `POST …/preview` (returns items with effective_price_amount, valid, error_code). Save → `PUT {settings:[…]}`.
+  - Zebra Store adds product-level `content` and `instructions` localized overrides. Each can be enabled independently; null inherits the main product.
 - **ResellerLedgerEntries**:
   - Filters: keyword, resellerId, userId, orderId, orderNo, type (`order_profit, refund_deduct, manual_adjust, withdraw_lock, withdraw_paid`), status (`pending_confirm, available, locked, withdrawn, canceled`), created range.
   - Columns: id, reseller, orderNo, type, amount, currency, status, availableAt, withdrawRequest, createdAt.

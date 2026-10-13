@@ -435,6 +435,115 @@ async fn rsl07_product_settings_pricing() {
     assert_eq!(data(&detail)["product_setting"]["is_listed"], false);
 }
 
+#[tokio::test]
+async fn reseller_product_content_isolated_and_inherited() {
+    use sea_orm::{ActiveModelTrait, EntityTrait, Set};
+    use zs_infra::db::entity::{order_items, products};
+
+    let app = App::new().await;
+    let (_, first_token, first_id) = app.reseller("content-first@example.test", "0").await;
+    let (_, _, second_id) = app.reseller("content-second@example.test", "0").await;
+    let first_host = app.system_domain(first_id, "content-first").await;
+    let second_host = app.system_domain(second_id, "content-second").await;
+    let (product_id, skus) = app
+        .product("content-product", "10.00", &[("10.00", "0")])
+        .await;
+    let baseline = products::Entity::find_by_id(product_id)
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut model: products::ActiveModel = baseline.into();
+    model.content_json = Set(Some(json!({"zh-CN": "主站详情"})));
+    model.instructions_json = Set(Some(json!({"zh-CN": "主站说明"})));
+    model.update(&app.db).await.unwrap();
+
+    let path = "/api/v1/public/products/content-product";
+    assert_eq!(
+        data(
+            &app.raw("GET", path, None, None, &[("host", &first_host)])
+                .await
+                .1
+        )["content"]["zh-CN"],
+        "主站详情"
+    );
+    let setting_url = format!("/api/v1/reseller/product-settings/{product_id}");
+    let saved = app
+        .call(
+            "PUT",
+            &setting_url,
+            Some(json!({"settings": [{
+                "sku_id": 0, "is_listed": true, "content": {"zh-CN": "分站详情"},
+                "instructions": {"zh-CN": "分站说明"}
+            }]})),
+            Some(&first_token),
+        )
+        .await;
+    assert_eq!(
+        data(&saved)["product_setting"]["instructions"]["zh-CN"],
+        "分站说明"
+    );
+    assert_eq!(
+        data(
+            &app.raw("GET", path, None, None, &[("host", &first_host)])
+                .await
+                .1
+        )["content"]["zh-CN"],
+        "分站详情"
+    );
+    assert_eq!(
+        data(
+            &app.raw("GET", path, None, None, &[("host", &second_host)])
+                .await
+                .1
+        )["content"]["zh-CN"],
+        "主站详情"
+    );
+    assert_eq!(
+        data(&app.call("GET", path, None, None).await)["content"]["zh-CN"],
+        "主站详情"
+    );
+
+    let (_, buyer_token) = app.user("content-buyer@example.test").await;
+    let order = app
+        .raw(
+            "POST",
+            "/api/v1/orders",
+            Some(json!({"items": [{"product_id": product_id, "sku_id": skus[0], "quantity": 1}]})),
+            Some(&buyer_token),
+            &[("host", &first_host)],
+        )
+        .await
+        .1;
+    assert_eq!(order["status_code"], 0, "{order}");
+    let items = order_items::Entity::find().all(&app.db).await.unwrap();
+    assert_eq!(items.len(), 1);
+    assert_eq!(
+        items[0].instructions_json.as_ref().unwrap()["zh-CN"],
+        "分站说明"
+    );
+
+    data(
+        &app.call(
+            "PUT",
+            &setting_url,
+            Some(json!({"settings": [{
+                "sku_id": 0, "is_listed": true, "content": null, "instructions": null
+            }]})),
+            Some(&first_token),
+        )
+        .await,
+    );
+    assert_eq!(
+        data(
+            &app.raw("GET", path, None, None, &[("host", &first_host)])
+                .await
+                .1
+        )["content"]["zh-CN"],
+        "主站详情"
+    );
+}
+
 // RSL-07 / RSL-10: tenant-scoped order views with masked buyers and snapshot pricing.
 #[tokio::test]
 async fn rsl07_rsl10_orders_are_scoped_and_masked() {

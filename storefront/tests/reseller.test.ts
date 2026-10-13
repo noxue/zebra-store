@@ -106,6 +106,8 @@ describe('pricing', () => {
       { sku_id: 2, is_listed: false },
     ])
     expect(payload.settings[0]).toEqual({
+      content: null,
+      instructions: null,
       sku_id: 0,
       is_listed: true,
       pricing_mode: 'fixed_markup',

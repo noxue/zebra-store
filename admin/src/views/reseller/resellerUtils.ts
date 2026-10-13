@@ -136,6 +136,7 @@ export const blankSettingForm = (skuId: number): AdminResellerProductSettingPayl
   fixed_markup_amount: '0.00',
   fixed_price_amount: '0.00',
   sort_order: 0,
+  ...(skuId === 0 ? { content: null, instructions: null } : {}),
 })
 
 export const settingFormFromRule = (rule: AdminResellerProductSettingRule | undefined, skuId: number): AdminResellerProductSettingPayloadItem => ({
@@ -146,6 +147,7 @@ export const settingFormFromRule = (rule: AdminResellerProductSettingRule | unde
   fixed_markup_amount: amountOrZero(rule?.fixed_markup_amount),
   fixed_price_amount: amountOrZero(rule?.fixed_price_amount),
   sort_order: Number(rule?.sort_order || 0),
+  ...(skuId === 0 ? { content: rule?.content ?? null, instructions: rule?.instructions ?? null } : {}),
 })
 
 export interface PreviewEntry {

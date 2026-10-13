@@ -822,7 +822,11 @@ impl ProductService {
                     .filter(|s| s.product_id == p.id)
                     .cloned()
                     .collect();
-                apply_reseller_display(view, &display_prices(&profile, p, &own))
+                apply_reseller_display(
+                    view,
+                    &display_prices(&profile, p, &own),
+                    own.iter().find(|s| s.sku_id == 0),
+                )
             })
             .collect())
     }

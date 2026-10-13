@@ -1003,6 +1003,8 @@ export interface ResellerProductSettingData {
   effective_price_amount?: string
   rule_source?: string
   sort_order: number
+  content?: ResellerLocalizedText | null
+  instructions?: ResellerLocalizedText | null
   updated_at?: string
 }
 
@@ -1052,6 +1054,8 @@ export interface ResellerProductSettingPayloadItem {
   fixed_markup_amount: string
   fixed_price_amount: string
   sort_order: number
+  content?: ResellerLocalizedText | null
+  instructions?: ResellerLocalizedText | null
 }
 
 export interface ResellerProductSettingUpdatePayload {

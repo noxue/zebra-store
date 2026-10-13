@@ -1,4 +1,4 @@
-import { computed, defineComponent, onMounted } from 'vue'
+import { computed, defineComponent, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { LucideIcon } from 'lucide-vue-next'
 import { ExternalLink, Pencil, Search, ShoppingBag, SlidersHorizontal, Tag, ToggleLeft } from 'lucide-vue-next'
@@ -6,8 +6,9 @@ import type { ResellerProductSettingDetailData } from '@/api/types'
 import { useResellerProductSettings } from '@/composables/reseller/useResellerProductSettings'
 import { useLocalized } from '@/composables/useLocalized'
 import { ResellerAlert, ResellerPageHeader } from '@/components/reseller/ConsoleParts'
-import { ResellerRuleEditor } from '@/components/reseller/ResellerFormParts'
-import { Badge, Button, Card, DataTable, Input, Modal, Pagination, PetalLoader, columns } from '@/components/ui'
+import { LocalizedInput, ResellerLocaleTabs, ResellerRuleEditor } from '@/components/reseller/ResellerFormParts'
+import { Badge, Button, Card, DataTable, Input, Modal, Pagination, PetalLoader, Switch, columns } from '@/components/ui'
+import { blankLocalizedText, type ResellerLocale } from '@/utils/reseller/siteConfig'
 import { countActiveSkus, countListedSkus, summarizeProductEffectivePrice } from '@/utils/reseller/productSettings'
 import { formatSkuSpecValues } from '@/utils/sku'
 
@@ -17,6 +18,7 @@ export default defineComponent({
     const { t, locale } = useI18n()
     const { getLocalizedText } = useLocalized()
     const p = useResellerProductSettings()
+    const editLocale = ref<ResellerLocale>('zh-CN')
     const k = (key: string) => t(`personalCenter.reseller.productSettings.${key}`)
     onMounted(() => {
       if (!p.profile.snapshot.value) void p.profile.load()
@@ -174,6 +176,33 @@ export default defineComponent({
                       p.productForm.value = v
                     }}
                   />
+                  <Card padding="sm">
+                    <div class="mb-3 flex items-center justify-between gap-3">
+                      <div class="text-sm font-bold text-fg">{k('contentOverrides')}</div>
+                      <ResellerLocaleTabs v-model={editLocale.value} />
+                    </div>
+                    <div class="space-y-4">
+                      {(['content', 'instructions'] as const).map((field) => (
+                        <div key={field} class="space-y-2">
+                          <Switch
+                            modelValue={p.productForm.value[field] !== null}
+                            onUpdate:modelValue={(enabled: boolean) => (p.productForm.value[field] = enabled ? blankLocalizedText() : null)}
+                            label={k(field === 'content' ? 'overrideContent' : 'overrideInstructions')}
+                          />
+                          {p.productForm.value[field] !== null && (
+                            <LocalizedInput
+                              modelValue={p.productForm.value[field] || blankLocalizedText()}
+                              locale={editLocale.value}
+                              multiline
+                              rows={5}
+                              onUpdate:modelValue={(value) => (p.productForm.value[field] = value)}
+                            />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    <p class="mt-3 text-xs text-muted">{k('overrideHint')}</p>
+                  </Card>
                   {p.editing.value.skus.map((sku) => (
                     <ResellerRuleEditor
                       key={sku.id}

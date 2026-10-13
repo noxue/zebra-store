@@ -4,6 +4,8 @@ import { useI18n } from 'vue-i18n'
 import { guestOrderAPI, type GuestCredentials } from '@/api/order'
 import type { Order } from '@/api/types'
 import { downloadBlob } from '@/utils/format'
+import { hasDeliveredOrder, orderExportText } from '@/utils/exportOrder'
+import { toast } from '@/composables/useToast'
 import { clearGuestOrderAuth, loadGuestOrderAuth, saveGuestOrderAuth } from '@/utils/guestOrderAuth'
 import { resolveGuestOrderDetailViewState } from '@/utils/guestOrderDetailState'
 import { useOrderDisplayHelpers } from './useOrderDisplayHelpers'
@@ -12,13 +14,14 @@ import { useOrderDisplayHelpers } from './useOrderDisplayHelpers'
 export function useGuestOrderDetail() {
   const route = useRoute()
   const router = useRouter()
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const loading = ref(true)
   const order = ref<Order | null>(null)
   const hasManualPayment = ref(false)
   const authError = ref('')
   const auth = ref<GuestCredentials>({ email: '', order_password: '' })
   const fulfillmentDownloading = ref(false)
+  const exportDownloading = ref(false)
   const helpers = useOrderDisplayHelpers(order)
   const orderNo = () => String(route.params.order_no || '').trim()
 
@@ -83,6 +86,23 @@ export function useGuestOrderDetail() {
     }
   }
 
+  const exportOrder = async () => {
+    if (!order.value || exportDownloading.value || !hasDeliveredOrder(order.value)) return
+    exportDownloading.value = true
+    try {
+      const content = await orderExportText(order.value, String(locale.value), {
+        orderNo: t('orderDetail.exportOrderNo'),
+        keys: t('orderDetail.exportKeys'),
+        instructions: t('orderDetail.exportInstructions'),
+      }, (no) => guestOrderAPI.downloadFulfillment(no, { ...auth.value }))
+      downloadBlob(new Blob([content], { type: 'text/plain; charset=utf-8' }), `order-${order.value.order_no}.txt`)
+    } catch {
+      toast.error(t('orderDetail.exportFailed'))
+    } finally {
+      exportDownloading.value = false
+    }
+  }
+
   onMounted(() => {
     if (!orderNo()) {
       void router.push('/guest/orders')
@@ -92,5 +112,5 @@ export function useGuestOrderDetail() {
     void loadOrder()
   })
 
-  return { loading, order, hasManualPayment, auth, authError, viewState, handleAuthSubmit, clearAuth, fulfillmentDownloading, handleDownloadFulfillment, helpers }
+  return { loading, order, hasManualPayment, auth, authError, viewState, handleAuthSubmit, clearAuth, fulfillmentDownloading, handleDownloadFulfillment, exportDownloading, exportOrder, helpers }
 }

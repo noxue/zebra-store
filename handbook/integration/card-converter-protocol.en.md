@@ -94,7 +94,7 @@ Set a dedicated `ZEBRA_STORE_TOKEN`; do not use `ADMIN_TOKEN` for converter requ
 
 Send `X-Integration-Token: <ZEBRA_STORE_TOKEN>` or `Authorization: Bearer <ZEBRA_STORE_TOKEN>`. A successful response contains `items: [{"index":0,"card":"...","type_id":"...","provider":"p1"}]`. AI Top-up validates each card's actual product type against `extra.category` and validates the entire input before importing supplier cards and binding generated system cards in one database transaction. Card indexes must be contiguous from zero; a type mismatch rejects the whole request. Repeating the same request with the same order number returns the original cards; using that order number with a different request returns HTTP 409. Configure the category in `extra` for each product.
 
-AI Top-up specifically requires `extra.category` to be a supported category and `extra.provider` to be `p1` or `p2`. Zebra Store does not reserve these names for other converters; administrators choose keys according to each converter. Missing or invalid values reject the batch.
+AI Top-up specifically requires `extra.category` to be a supported category and `extra.provider` to be `p1`, `p2`, or `p3`. Zebra Store does not reserve these names for other converters; administrators choose keys according to each converter. Missing or invalid values reject the batch.
 
 ## Conditional extra values
 

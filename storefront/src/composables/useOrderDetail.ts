@@ -6,18 +6,20 @@ import type { Order } from '@/api/types'
 import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import { toast } from '@/composables/useToast'
 import { downloadBlob } from '@/utils/format'
+import { hasDeliveredOrder, orderExportText } from '@/utils/exportOrder'
 import { useOrderDisplayHelpers } from './useOrderDisplayHelpers'
 
 /** Logged-in order detail (load / cancel / download fulfillment). */
 export function useOrderDetail() {
   const route = useRoute()
   const router = useRouter()
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const { confirm } = useConfirmDialog()
   const loading = ref(true)
   const order = ref<Order | null>(null)
   const hasManualPayment = ref(false)
   const fulfillmentDownloading = ref(false)
+  const exportDownloading = ref(false)
   const helpers = useOrderDisplayHelpers(order)
   const orderNo = () => String(route.params.order_no || '').trim()
 
@@ -71,6 +73,23 @@ export function useOrderDetail() {
     }
   }
 
+  const exportOrder = async () => {
+    if (!order.value || exportDownloading.value || !hasDeliveredOrder(order.value)) return
+    exportDownloading.value = true
+    try {
+      const content = await orderExportText(order.value, String(locale.value), {
+        orderNo: t('orderDetail.exportOrderNo'),
+        keys: t('orderDetail.exportKeys'),
+        instructions: t('orderDetail.exportInstructions'),
+      }, userOrderAPI.downloadFulfillment)
+      downloadBlob(new Blob([content], { type: 'text/plain; charset=utf-8' }), `order-${order.value.order_no}.txt`)
+    } catch {
+      toast.error(t('orderDetail.exportFailed'))
+    } finally {
+      exportDownloading.value = false
+    }
+  }
+
   onMounted(() => {
     if (!orderNo()) {
       void router.push('/me/orders')
@@ -79,5 +98,5 @@ export function useOrderDetail() {
     void loadOrder()
   })
 
-  return { loading, order, hasManualPayment, loadOrder, cancelOrder, fulfillmentDownloading, handleDownloadFulfillment, helpers }
+  return { loading, order, hasManualPayment, loadOrder, cancelOrder, fulfillmentDownloading, handleDownloadFulfillment, exportDownloading, exportOrder, helpers }
 }

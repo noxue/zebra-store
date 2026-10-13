@@ -1112,6 +1112,8 @@ export interface AdminResellerProductSettingRule {
   effective_price_amount?: string | number
   rule_source?: string
   sort_order: number
+  content?: LocalizedText | null
+  instructions?: LocalizedText | null
   updated_at?: string
 }
 
@@ -1139,6 +1141,8 @@ export interface AdminResellerProductSettingPayloadItem {
   fixed_markup_amount: string
   fixed_price_amount: string
   sort_order: number
+  content?: LocalizedText | null
+  instructions?: LocalizedText | null
 }
 
 export interface AdminResellerProductSettingUpdatePayload {

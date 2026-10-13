@@ -188,6 +188,10 @@ pub struct SettingResp {
     #[serde(skip_serializing_if = "is_empty")]
     pub rule_source: String,
     pub sort_order: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content: Option<serde_json::Map<String, Value>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub instructions: Option<serde_json::Map<String, Value>>,
     pub updated_at: DateTime<Utc>,
 }
 
@@ -209,6 +213,8 @@ fn setting_resp(s: &ProductSetting, view: &SettingView) -> SettingResp {
             .map(|r| r.as_str().to_owned())
             .unwrap_or_default(),
         sort_order: s.sort_order,
+        content: s.content.clone(),
+        instructions: s.instructions.clone(),
         updated_at: s.updated_at,
     }
 }
@@ -296,6 +302,8 @@ pub fn admin_setting(s: &ProductSetting) -> Value {
         "fixed_markup_amount": s.fixed_markup_amount,
         "fixed_price_amount": s.fixed_price_amount,
         "sort_order": s.sort_order,
+        "content": s.content,
+        "instructions": s.instructions,
         "created_at": s.created_at,
         "updated_at": s.updated_at,
     });

@@ -1,7 +1,8 @@
-import { defineComponent, onMounted } from 'vue'
+import { defineComponent, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Search } from 'lucide-vue-next'
-import { Badge, Button, Card, DataTable, Dialog, FilterBar, IdCell, Input, ListPagination, PageHeader, Select, type DataTableColumn } from '@/components/ui'
+import { Badge, Button, Card, DataTable, Dialog, FilterBar, IdCell, Input, ListPagination, PageHeader, Select, Switch, type DataTableColumn } from '@/components/ui'
+import { RichEditor } from '@/components/RichEditor'
 import type { AdminResellerProductSetting } from '@/api/types'
 import { formatDate, getLocalizedText } from '@/utils/format'
 import { getAdminResellerProductSettingOwnerLabel } from '@/utils/resellerProductSettings'
@@ -15,6 +16,7 @@ export default defineComponent({
   setup() {
     const { t } = useI18n()
     const s = useResellerProductSettings()
+    const editLocale = ref<'zh-CN' | 'zh-TW' | 'en-US'>('zh-CN')
     const { filters, list } = s
     onMounted(() => void list.fetchData(1))
 
@@ -134,6 +136,32 @@ export default defineComponent({
                 />
               ),
             }}
+          </Card>
+          <Card title={t('admin.resellerProductSettings.contentOverrides')}>
+            <div class="space-y-4">
+              <div class="flex gap-2">
+                {(['zh-CN', 'zh-TW', 'en-US'] as const).map((lang) => (
+                  <Button key={lang} size="xs" variant={editLocale.value === lang ? 'primary' : 'soft'} onClick={() => (editLocale.value = lang)}>{lang}</Button>
+                ))}
+              </div>
+              {(['content', 'instructions'] as const).map((field) => (
+                <div key={field} class="space-y-2">
+                  <Switch
+                    modelValue={s.productForm.value[field] !== null}
+                    onUpdate:modelValue={(enabled: boolean) => (s.productForm.value[field] = enabled ? { 'zh-CN': '', 'zh-TW': '', 'en-US': '' } : null)}
+                    label={t(field === 'content' ? 'admin.resellerProductSettings.overrideContent' : 'admin.resellerProductSettings.overrideInstructions')}
+                  />
+                  {s.productForm.value[field] !== null && (
+                    <RichEditor
+                      key={`${field}-${editLocale.value}`}
+                      modelValue={s.productForm.value[field]?.[editLocale.value] || ''}
+                      onUpdate:modelValue={(value: string) => (s.productForm.value[field] = { ...s.productForm.value[field], [editLocale.value]: value })}
+                    />
+                  )}
+                </div>
+              ))}
+              <p class="text-xs text-muted">{t('admin.resellerProductSettings.overrideHint')}</p>
+            </div>
           </Card>
           <Card title={t('admin.resellerProductSettings.columns.sku')}>
             {d.skus.length ? (

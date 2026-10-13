@@ -273,6 +273,10 @@ pub struct ProductSetting {
     pub fixed_markup_amount: Amount,
     pub fixed_price_amount: Amount,
     pub sort_order: i32,
+    /// None inherits the main site's product content.
+    pub content: Option<serde_json::Map<String, serde_json::Value>>,
+    /// None inherits the main site's delivery instructions.
+    pub instructions: Option<serde_json::Map<String, serde_json::Value>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub profile: Option<Profile>,
@@ -293,6 +297,8 @@ impl ProductSetting {
             fixed_markup_amount: Amount::ZERO,
             fixed_price_amount: Amount::ZERO,
             sort_order: 0,
+            content: None,
+            instructions: None,
             created_at: DateTime::<Utc>::UNIX_EPOCH,
             updated_at: DateTime::<Utc>::UNIX_EPOCH,
             profile: None,

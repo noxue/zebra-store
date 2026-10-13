@@ -9,6 +9,22 @@ permissions:
   contents: write
 
 jobs:
+  verify:
+    name: Verify Rust workspace
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend -> target
+      - name: Format, lint, and test
+        working-directory: backend
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy --workspace --all-targets -- -D warnings
+          cargo test --workspace
+
   web:
     name: Build embedded web assets
     runs-on: ubuntu-latest
@@ -38,7 +54,7 @@ jobs:
 
   build:
     name: Build ${{ matrix.target }}
-    needs: web
+    needs: [web, verify]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

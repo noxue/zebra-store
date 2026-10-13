@@ -93,7 +93,7 @@ AI Top-up 提供本协议的示例实现：`POST /integration/v1/exchanges`，�
 
 请求头：`X-Integration-Token: <ZEBRA_STORE_TOKEN>` 或 `Authorization: Bearer <ZEBRA_STORE_TOKEN>`。成功响应包含 `items: [{"index":0,"card":"...","type_id":"...","provider":"p1"}]`。AI Top-up 校验卡密实际套餐与 `extra.category`，验证全部输入后在一个数据库事务中导入上游卡密并绑定生成系统卡密；卡密序号必须从 0 连续排列，类型不符时整体失败。对同一订单号重复提交相同请求返回原卡密，复用订单号但请求不同返回 HTTP 409。AI Top-up 的套餐类型在自身服务内固定校验；Store 按商品配置 `extra.category`。
 
-AI Top-up 要求 `extra.category` 为其支持的套餐类型，`extra.provider` 为 `p1` 或 `p2`。Store 不内置这些业务值；管理员按商品配置。缺失或无效时整批拒绝。
+AI Top-up 要求 `extra.category` 为其支持的套餐类型，`extra.provider` 为 `p1`、`p2` 或 `p3`。Store 不内置这些业务值；管理员按商品配置。缺失或无效时整批拒绝。
 
 ## 条件生成 extra
 

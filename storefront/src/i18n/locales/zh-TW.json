@@ -834,7 +834,11 @@
         "resetFailed": "重置規則失敗",
         "loadFailed": "商品售價配置載入失敗，請稍後重試",
         "priceInvalidHint": "售價需不低於基準價與成本價",
-        "markupExceededHint": "超出最高加價比例"
+        "markupExceededHint": "超出最高加價比例",
+        "contentOverrides": "分站內容覆蓋",
+        "overrideContent": "覆蓋商品詳情",
+        "overrideInstructions": "覆蓋交付使用說明",
+        "overrideHint": "關閉開關時繼承主站；開啟後使用分站內容。商品詳情支援 HTML，交付說明在付款後顯示。"
       },
       "settlementStatusMap": {
         "normal": "正常",
@@ -1707,7 +1711,13 @@
     "fulfillmentDownload": "下載交付內容",
     "fulfillmentTotalLines": "共 {count} 條交付內容",
     "fulfillmentDownloading": "下載中...",
-    "fulfillmentTruncatedHint": "當前僅顯示前 100 條預覽，請下載獲取完整交付內容"
+    "fulfillmentTruncatedHint": "當前僅顯示前 100 條預覽，請下載獲取完整交付內容",
+    "exportInfo": "匯出訂單資訊",
+    "exportingInfo": "正在匯出…",
+    "exportOrderNo": "訂單編號",
+    "exportKeys": "卡密",
+    "exportInstructions": "交付使用說明",
+    "exportFailed": "匯出失敗，請重試"
   },
   "guestOrders": {
     "title": "遊客訂單查詢",

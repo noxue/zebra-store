@@ -4021,6 +4021,10 @@ const messages = {
     },
     resellerProductSettings: {
       title: 'Reseller products',
+      contentOverrides: 'Storefront content overrides',
+      overrideContent: 'Override product details',
+      overrideInstructions: 'Override delivery instructions',
+      overrideHint: 'Turn off to inherit the main store. Product details support HTML; delivery instructions appear after payment.',
       subtitle: 'Review and manage reseller product visibility and pricing rules.',
       filters: {
         all: 'All',

@@ -23,6 +23,8 @@ export interface ResellerProductSettingFormItem {
   fixed_markup_amount?: string
   fixed_price_amount?: string
   sort_order?: number
+  content?: ResellerProductSettingPayloadItem['content']
+  instructions?: ResellerProductSettingPayloadItem['instructions']
 }
 
 type DetailLike = Pick<ResellerProductSettingDetailData, 'product_setting'> & { skus?: ResellerProductSettingDetailData['skus'] }
@@ -64,6 +66,8 @@ export const normalizeResellerProductSettingForm = (raw: ResellerProductSettingF
   fixed_markup_amount: moneyOrZero(raw.fixed_markup_amount),
   fixed_price_amount: moneyOrZero(raw.fixed_price_amount),
   sort_order: Number(raw.sort_order || 0),
+  content: raw.content ?? null,
+  instructions: raw.instructions ?? null,
 })
 
 export const formFromSetting = (setting: ResellerProductSettingData | undefined, skuId: number): ResellerProductSettingPayloadItem =>
@@ -75,6 +79,8 @@ export const formFromSetting = (setting: ResellerProductSettingData | undefined,
     fixed_markup_amount: setting?.fixed_markup_amount,
     fixed_price_amount: setting?.fixed_price_amount,
     sort_order: setting?.sort_order,
+    content: setting?.content,
+    instructions: setting?.instructions,
   })
 
 /** Only the value field of the selected pricing mode is sent; others are zeroed. */
@@ -89,6 +95,7 @@ export const buildResellerProductSettingPayload = (items: ResellerProductSetting
       fixed_markup_amount: n.pricing_mode === RESELLER_PRICING_MODE_FIXED_MARKUP ? moneyOrZero(n.fixed_markup_amount) : '0.00',
       fixed_price_amount: n.pricing_mode === RESELLER_PRICING_MODE_FIXED_PRICE ? moneyOrZero(n.fixed_price_amount) : '0.00',
       sort_order: n.sort_order,
+      ...(n.sku_id === 0 ? { content: n.content, instructions: n.instructions } : {}),
     }
   }),
 })

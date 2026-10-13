@@ -171,6 +171,8 @@ pub struct SettingInput {
     pub fixed_markup_amount: Decimal,
     pub fixed_price_amount: Decimal,
     pub sort_order: i32,
+    pub content: Option<serde_json::Map<String, Value>>,
+    pub instructions: Option<serde_json::Map<String, Value>>,
 }
 
 fn parse_mode(raw: &str) -> Result<PricingMode> {
@@ -192,6 +194,8 @@ pub fn draft_setting(input: &SettingInput) -> Result<ProductSetting> {
     s.fixed_markup_amount = Amount::new(input.fixed_markup_amount);
     s.fixed_price_amount = Amount::new(input.fixed_price_amount);
     s.sort_order = input.sort_order;
+    s.content = input.content.clone();
+    s.instructions = input.instructions.clone();
     Ok(s)
 }
 
@@ -918,6 +922,8 @@ mod tests {
             fixed_markup_amount: d(v),
             fixed_price_amount: d(v),
             sort_order: 0,
+            content: None,
+            instructions: None,
         };
         assert!(normalize_setting(&p, &prod, &input(0, "markup_percent", "20")).is_ok());
         assert_eq!(

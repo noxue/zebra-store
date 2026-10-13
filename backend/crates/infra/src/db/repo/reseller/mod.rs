@@ -139,6 +139,8 @@ pub(crate) fn setting_model(m: psettings::Model) -> ProductSetting {
         fixed_markup_amount: Amount::new(m.fixed_markup_amount),
         fixed_price_amount: Amount::new(m.fixed_price_amount),
         sort_order: m.sort_order,
+        content: m.content_json.and_then(|v| v.as_object().cloned()),
+        instructions: m.instructions_json.and_then(|v| v.as_object().cloned()),
         created_at: m.created_at,
         updated_at: m.updated_at,
         profile: None,

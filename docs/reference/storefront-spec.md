@@ -184,6 +184,7 @@ Page states:
 - **Items:** unit and total price, per-item discounts, SKU text, fulfillment type, tags, manual form submission rows (`manual_form_submission` + `manual_form_schema_snapshot`).
 - **Fulfillment:** `order.fulfillment{type,status,payload,payload_line_count}` with copy and download buttons and a "truncated" hint; per-item `instructions` HTML blocks.
 - **Child orders:** `order.children[]`, each with its own items and fulfillment.
+- **Current Zebra Store behavior:** even one purchased product has one child order; when children are present the parent item list is omitted to avoid duplicate display. After delivery, the shared order body offers TXT export of the order number, full delivery payload and plain-text instructions. A truncated payload is fetched through the existing authenticated download endpoint.
 - **Refunds:** `refund_records[{amount,currency,remark,created_at}]`.
 
 ### GuestOrders (`views/GuestOrders.vue`, `useGuestOrders`)
@@ -280,6 +281,7 @@ A separate layout with ResellerConsoleTopbar. Pages:
 - **Site:** ResellerSiteConfigPanel. Fields: site_name, logo, favicon (upload), announcement (localized, rich text via tiptap), support (telegram/whatsapp/email/url), SEO, footer_links, nav_config.
 - **Products:** ResellerProductSettingsPanel and ResellerProductRuleEditor.
   - Per-SKU `pricing_mode`: inherit, markup_percent, fixed_markup, fixed_price; plus is_listed and sort_order; preview, save, reset.
+  - The product-level rule has independent optional `content` and `instructions` localized overrides. Null inherits the main product; the delivery instructions are snapshotted into new reseller orders.
 - **Orders:** filters (status, order_no, date range); orders list, stats, detail with profit snapshot.
 - **Finance:** balances, settlement status.
 - **Ledger:** filters by type, status, order_id.

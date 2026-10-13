@@ -29,6 +29,10 @@ pub struct Model {
     pub fixed_price_amount: Decimal,
     #[sea_orm(indexed, default_value = 0)]
     pub sort_order: i32,
+    #[sea_orm(column_type = "Json", nullable)]
+    pub content_json: Option<Json>,
+    #[sea_orm(column_type = "Json", nullable)]
+    pub instructions_json: Option<Json>,
     #[sea_orm(indexed)]
     pub created_at: DateTimeUtc,
     #[sea_orm(indexed)]

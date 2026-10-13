@@ -290,6 +290,8 @@ impl ProductSettingRepo for SeaResellerStore {
                 fixed_markup_amount: Set(row.fixed_markup_amount.decimal()),
                 fixed_price_amount: Set(row.fixed_price_amount.decimal()),
                 sort_order: Set(row.sort_order),
+                content_json: Set(row.content.clone().map(Value::Object)),
+                instructions_json: Set(row.instructions.clone().map(Value::Object)),
                 updated_at: Set(now),
                 deleted_at: Set(None),
                 ..Default::default()

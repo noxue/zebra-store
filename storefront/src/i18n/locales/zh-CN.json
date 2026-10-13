@@ -787,7 +787,11 @@
         "resetFailed": "重置规则失败",
         "loadFailed": "商品售价配置加载失败，请稍后重试",
         "priceInvalidHint": "售价需不低于基准价与成本价",
-        "markupExceededHint": "超出最高加价比例"
+        "markupExceededHint": "超出最高加价比例",
+        "contentOverrides": "分站内容覆盖",
+        "overrideContent": "覆盖商品详情",
+        "overrideInstructions": "覆盖交付使用说明",
+        "overrideHint": "关闭开关时继承主站；开启后使用分站内容。商品详情支持 HTML，交付说明在付款后显示。"
       },
       "settlementStatusMap": {
         "normal": "正常",
@@ -1660,7 +1664,13 @@
     "fulfillmentDownload": "下载交付内容",
     "fulfillmentTotalLines": "共 {count} 条交付内容",
     "fulfillmentDownloading": "下载中...",
-    "fulfillmentTruncatedHint": "当前仅显示前 100 条预览，请下载获取完整交付内容"
+    "fulfillmentTruncatedHint": "当前仅显示前 100 条预览，请下载获取完整交付内容",
+    "exportInfo": "导出订单信息",
+    "exportingInfo": "正在导出…",
+    "exportOrderNo": "订单编号",
+    "exportKeys": "卡密",
+    "exportInstructions": "交付使用说明",
+    "exportFailed": "导出失败，请重试"
   },
   "guestOrders": {
     "title": "游客订单查询",

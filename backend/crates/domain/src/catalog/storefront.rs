@@ -23,6 +23,7 @@ use super::wholesale::{WholesaleTier, public_tiers};
 use crate::Id;
 use crate::marketing::member_level::{MemberLevel, MemberLevelPrice, resolve_member_price};
 use crate::marketing::promotion::{Promotion, apply_promotion};
+use crate::reseller::ProductSetting;
 use crate::reseller::pricing::{DisplayPrices, PricedProduct, PricedSku};
 
 /// Fills product/SKU auto stock from grouped card-secret counts (DLV-08).
@@ -576,9 +577,15 @@ pub fn priced_product(product: &Product) -> PricedProduct {
 pub fn apply_reseller_display(
     mut view: PublicProduct,
     display: &DisplayPrices,
+    setting: Option<&ProductSetting>,
 ) -> Option<PublicProduct> {
     if !display.visible {
         return None;
+    }
+    if let Some(setting) = setting
+        && let Some(content) = &setting.content
+    {
+        view.content = content.clone();
     }
     let had_skus = !view.skus.is_empty();
     view.skus.retain(|s| {
@@ -645,7 +652,7 @@ mod tests {
         };
         display.sku_prices.insert(1, amt("11.00"));
         display.hidden_sku_ids.insert(2);
-        let shown = apply_reseller_display(view.clone(), &display).unwrap();
+        let shown = apply_reseller_display(view.clone(), &display, None).unwrap();
         assert_eq!(shown.price_amount, amt("11.00"));
         assert_eq!(shown.skus.len(), 1);
         assert_eq!(shown.skus[0].id, 1);
@@ -655,8 +662,41 @@ mod tests {
         let mut all_hidden = display.clone();
         all_hidden.sku_prices.clear();
         all_hidden.hidden_sku_ids.insert(1);
-        assert!(apply_reseller_display(view.clone(), &all_hidden).is_none());
-        assert!(apply_reseller_display(view, &DisplayPrices::default()).is_none());
+        assert!(apply_reseller_display(view.clone(), &all_hidden, None).is_none());
+        assert!(apply_reseller_display(view, &DisplayPrices::default(), None).is_none());
+    }
+
+    #[test]
+    fn reseller_content_inherits_or_overrides_main_product() {
+        let mut main = decorate_public_product(product(vec![]), &Decoration::default());
+        main.content = serde_json::from_value(serde_json::json!({"zh-CN": "主站详情"})).unwrap();
+        let display = DisplayPrices {
+            visible: true,
+            display_price: amt("10.00"),
+            ..DisplayPrices::default()
+        };
+        assert_eq!(
+            apply_reseller_display(main.clone(), &display, None)
+                .unwrap()
+                .content["zh-CN"],
+            "主站详情"
+        );
+        let mut setting = ProductSetting::draft(0, true, crate::reseller::PricingMode::Inherit);
+        setting.content =
+            Some(serde_json::from_value(serde_json::json!({"zh-CN": "分站详情"})).unwrap());
+        assert_eq!(
+            apply_reseller_display(main.clone(), &display, Some(&setting))
+                .unwrap()
+                .content["zh-CN"],
+            "分站详情"
+        );
+        setting.content = Some(serde_json::Map::new());
+        assert!(
+            apply_reseller_display(main, &display, Some(&setting))
+                .unwrap()
+                .content
+                .is_empty()
+        );
     }
 
     // DLV-08 (1)

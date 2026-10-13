@@ -128,6 +128,8 @@ struct SettingRequest {
     fixed_markup_amount: Option<Num>,
     fixed_price_amount: Option<Num>,
     sort_order: i32,
+    content: Option<serde_json::Map<String, serde_json::Value>>,
+    instructions: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -149,6 +151,8 @@ impl SettingsRequest {
                     fixed_markup_amount: num(s.fixed_markup_amount.as_ref())?.decimal(),
                     fixed_price_amount: num(s.fixed_price_amount.as_ref())?.decimal(),
                     sort_order: s.sort_order,
+                    content: s.content.clone(),
+                    instructions: s.instructions.clone(),
                 })
             })
             .collect()

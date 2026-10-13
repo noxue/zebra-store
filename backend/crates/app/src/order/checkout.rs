@@ -112,6 +112,7 @@ struct Built {
     currency: String,
     member_level_id: Option<Id>,
     reseller: Option<OrderPricingContext>,
+    reseller_instructions: HashMap<Id, JsonMap>,
 }
 
 /// Merges duplicate `(product, sku)` lines (`mergeCreateOrderItems`).
@@ -347,13 +348,13 @@ impl OrderService {
         })?;
         result.member_level_id = if reseller { None } else { member_level_id };
 
-        let reseller_ctx = if reseller {
-            Some(
-                self.reseller_pricing(req, &metas, &currency, &mut result)
-                    .await?,
-            )
+        let (reseller_ctx, reseller_instructions) = if reseller {
+            let (context, instructions) = self
+                .reseller_pricing(req, &metas, &currency, &mut result)
+                .await?;
+            (Some(context), instructions)
         } else {
-            None
+            (None, HashMap::new())
         };
         Ok(Built {
             result,
@@ -361,6 +362,7 @@ impl OrderService {
             currency,
             member_level_id: if reseller { None } else { member_level_id },
             reseller: reseller_ctx,
+            reseller_instructions,
         })
     }
 
@@ -372,7 +374,7 @@ impl OrderService {
         metas: &[LineMeta],
         currency: &str,
         result: &mut PricingResult,
-    ) -> Result<OrderPricingContext> {
+    ) -> Result<(OrderPricingContext, HashMap<Id, JsonMap>)> {
         let reseller_id = req
             .tenant
             .reseller_id
@@ -386,6 +388,11 @@ impl OrderService {
             .settings_for_pricing(reseller_id, &product_ids, &sku_ids)
             .await?;
         let index = SettingIndex::new(&settings);
+        let instructions = settings
+            .iter()
+            .filter(|s| s.sku_id == 0)
+            .filter_map(|s| s.instructions.clone().map(|value| (s.product_id, value)))
+            .collect();
         let mut ctx = OrderPricingContext::new(
             reseller_id,
             &req.tenant.snapshot_domain(),
@@ -416,7 +423,7 @@ impl OrderService {
         };
         ctx.apply_self_dealing_risk(profile.user_id, related);
         apply_reseller_prices(result, &ctx.items)?;
-        Ok(ctx)
+        Ok((ctx, instructions))
     }
 
     /// `POST /orders/preview` and `/guest/orders/preview`: risk precheck without consuming
@@ -680,7 +687,11 @@ impl OrderService {
                 fulfillment_type: meta.fulfillment.as_str().to_owned(),
                 manual_form_schema: meta.schema.clone(),
                 manual_form_submission: meta.submission.clone(),
-                instructions: meta.product.instructions.clone(),
+                instructions: built
+                    .reseller_instructions
+                    .get(&meta.product.id)
+                    .cloned()
+                    .unwrap_or_else(|| meta.product.instructions.clone()),
                 created_at: now,
                 updated_at: now,
             });

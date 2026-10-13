@@ -6,6 +6,7 @@ import { OrderStatusBadge } from '@/components/common/OrderStatusBadge'
 import { Badge, Button, Card, CardHeader, DataTable, SmartImage, columns } from '@/components/ui'
 import type { OrderDisplayHelpers } from '@/composables/useOrderDisplayHelpers'
 import type { RefundRecord } from '@/api/types'
+import { hasDeliveredOrder } from '@/utils/exportOrder'
 import { InfoTile } from './AmountRow'
 
 const itemsProps = {
@@ -199,8 +200,9 @@ export const OrderBody = defineComponent({
     order: { type: Object as PropType<Order>, required: true },
     helpers: { type: Object as PropType<OrderDisplayHelpers>, required: true },
     downloading: Boolean,
+    exportDownloading: Boolean,
   },
-  emits: { download: (_no: string) => true },
+  emits: { download: (_no: string) => true, export: () => true },
   setup(props, { slots, emit }) {
     const { t } = useI18n()
     return () => {
@@ -228,6 +230,12 @@ export const OrderBody = defineComponent({
                 <div class="zs-num text-2xl font-bold zs-gradient-text">{h.money(o.total_amount, cur)}</div>
                 <div class="flex flex-wrap items-center gap-2">
                   <OrderStatusBadge status={o.status} />
+                  {hasDeliveredOrder(o) && (
+                    <Button size="sm" variant="secondary" loading={props.exportDownloading} onClick={() => emit('export')}>
+                      <Download class="size-4" />
+                      {props.exportDownloading ? t('orderDetail.exportingInfo') : t('orderDetail.exportInfo')}
+                    </Button>
+                  )}
                   {slots.actions?.()}
                 </div>
               </div>
@@ -284,10 +292,12 @@ export const OrderBody = defineComponent({
             </Card>
           )}
 
-          <Card>
-            <CardHeader title={t('orderDetail.itemsTitle')}>{{ icon: () => <ShoppingBag class="size-5 text-primary" /> }}</CardHeader>
-            <OrderItemsList items={o.items || []} currency={cur} helpers={h} />
-          </Card>
+          {(!o.children || o.children.length === 0) && (
+            <Card>
+              <CardHeader title={t('orderDetail.itemsTitle')}>{{ icon: () => <ShoppingBag class="size-5 text-primary" /> }}</CardHeader>
+              <OrderItemsList items={o.items || []} currency={cur} helpers={h} />
+            </Card>
+          )}
 
           <Card>
             <CardHeader title={t('orderDetail.amountTitle')}>{{ icon: () => <Wallet class="size-5 text-primary" /> }}</CardHeader>

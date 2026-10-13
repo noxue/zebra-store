@@ -31,7 +31,7 @@ export default defineComponent({
             </EmptyState>
           </Card>
         ) : (
-          <OrderBody order={d.order.value} helpers={d.helpers} downloading={d.fulfillmentDownloading.value} onDownload={(no: string) => void d.handleDownloadFulfillment(no)}>
+          <OrderBody order={d.order.value} helpers={d.helpers} downloading={d.fulfillmentDownloading.value} exportDownloading={d.exportDownloading.value} onDownload={(no: string) => void d.handleDownloadFulfillment(no)} onExport={() => void d.exportOrder()}>
             {{
               actions: () =>
                 d.order.value?.status === 'pending_payment' ? (
