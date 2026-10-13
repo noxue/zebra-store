@@ -2022,6 +2022,8 @@ const messages = {
       notePlaceholder: '例如：渠道 A',
       deduplicateLabel: '自动去重',
       deduplicateHint: '开启后，相同卡密只会导入一次；关闭后会按库存行保留重复卡密。',
+      preconvertedLabel: '已是系统卡密',
+      preconvertedHint: '仅导入已在充值系统生成的卡密时开启。售出后直接交付，不再调用卡密转换器；上游原始卡密请保持关闭。',
       submitBatch: '提交录入',
       submitting: '提交中...',
       importTitle: 'CSV 导入',

@@ -826,6 +826,104 @@ async fn local_card_converter_retry_does_not_consume_stock_twice() {
     assert_eq!(mock.exchanges.load(Ordering::SeqCst), 3);
 }
 
+/// DLV-03: a preconverted system card is delivered as-is even when the SKU has a converter.
+#[tokio::test]
+async fn preconverted_local_card_skips_bound_converter() {
+    use sea_orm::{ActiveModelTrait, Set};
+    use zs_domain::integration::card_converter::Binding;
+
+    let mock = Arc::new(ConverterMock::default());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let router = Router::new()
+        .route("/health", get(converter_health))
+        .route("/integration/v1/exchanges", post(converter_exchange))
+        .with_state(mock.clone());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+
+    let app = OrderApp::with_local_converter().await;
+    let (product, sku) = app.product("ready-system-card", json!({})).await;
+    app.services
+        .catalog
+        .card_secret
+        .create_batch(
+            zs_app::catalog::card_secret::CreateSecretsInput {
+                product_id: product,
+                sku_id: sku,
+                secrets: vec!["SYSTEM-READY-CARD".into()],
+                note: "p3".into(),
+                preconverted: true,
+                ..Default::default()
+            },
+            zs_domain::catalog::card_secret::BatchSource::Manual,
+        )
+        .await
+        .unwrap();
+    let now = chrono::Utc::now();
+    let converter = zs_infra::db::entity::extra::card_converters::ActiveModel {
+        name: Set("test converter".into()),
+        base_url: Set(format!("http://{address}")),
+        token_enc: Set(app
+            .ctx
+            .cipher
+            .encrypt("test-converter-token-with-sufficient-length")
+            .unwrap()),
+        enabled: Set(true),
+        health: Set("unknown".into()),
+        consecutive_failures: Set(0),
+        last_checked_at: Set(None),
+        last_error: Set(String::new()),
+        created_at: Set(now),
+        updated_at: Set(now),
+        ..Default::default()
+    }
+    .insert(&app.db)
+    .await
+    .unwrap();
+    app.services
+        .integration
+        .card_converters
+        .save_binding(Binding {
+            id: 0,
+            product_id: product,
+            sku_id: sku,
+            converter_id: converter.id,
+            type_id: "account".into(),
+            extra_template: json!({"provider":"p3"}),
+            issues: Vec::new(),
+            created_at: now,
+            updated_at: now,
+        })
+        .await
+        .unwrap();
+
+    let channel = app.epay_channel().await;
+    let order = create_and_pay(&app, product, sku, 1, channel).await;
+    let order_no = order["order_no"].as_str().unwrap();
+    let payment_id = order["payment_id"].as_i64().unwrap();
+    assert_eq!(app.epay_callback(payment_id, "10.00").await, "success");
+    let child = app
+        .children(app.order_by_no(order_no).await.id)
+        .await
+        .remove(0);
+    app.services
+        .order
+        .service
+        .auto_fulfill(child.id)
+        .await
+        .unwrap();
+    assert_eq!(app.order(child.id).await.status, "completed");
+    let fulfillment = zs_infra::db::entity::fulfillments::Entity::find()
+        .filter(zs_infra::db::entity::fulfillments::Column::OrderId.eq(child.id))
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(fulfillment.payload, "SYSTEM-READY-CARD");
+    assert_eq!(mock.exchanges.load(Ordering::SeqCst), 0);
+    assert_eq!(app.secrets_with(product, "used").await, 1);
+}
+
 async fn hybrid_exchange(Json(request): Json<Value>) -> Json<Value> {
     assert_eq!(request["extra"]["provider"], "p1");
     assert_eq!(request["extra"]["category"], "new_activation_go");

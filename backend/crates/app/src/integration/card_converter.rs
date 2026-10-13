@@ -408,16 +408,27 @@ impl CardConverterService {
             && local_cards
                 .iter()
                 .zip(&cards)
-                .all(|((secret, _), card)| secret == card);
+                .all(|((secret, _, _), card)| secret == card);
         if !local_cards.is_empty() && !local_cards_match {
             return Err(Error::internal_msg(
                 "local card provenance does not match delivery",
             ));
         }
+        if local_cards_match {
+            let preconverted = local_cards.iter().filter(|(_, _, ready)| *ready).count();
+            if preconverted == cards.len() {
+                return Ok(delivery.clone());
+            }
+            if preconverted > 0 {
+                return Err(Error::internal_msg(
+                    "mixed preconverted and raw cards require separate orders",
+                ));
+            }
+        }
         let card_notes = if local_cards_match {
             local_cards
                 .into_iter()
-                .map(|(_, note)| note)
+                .map(|(_, note, _)| note)
                 .collect::<Vec<_>>()
         } else {
             Vec::new()

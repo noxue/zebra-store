@@ -367,6 +367,7 @@ export const adminAPI = {
     secrets: string[]
     batch_no?: string
     note?: string
+    preconverted?: boolean
     deduplicate?: boolean
   }) => api.post<JsonObject>('/admin/card-secrets/batch', data),
   importCardSecretCSV: (formData: FormData) => api.post<JsonObject>('/admin/card-secrets/import', formData),
