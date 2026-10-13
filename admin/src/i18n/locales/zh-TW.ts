@@ -1047,6 +1047,8 @@ const messages = {
       manualTransferRef: '外部退款流水號',
       manualTransferRefRequired: '請填寫外部退款流水號',
       manualRefundConfirmTransfer: '確認已原路退款',
+      manualRefundCancel: '未退款，取消並解鎖',
+      manualRefundCanceled: '人工退款已取消，卡密已解鎖。',
       paymentFeeRefunded: '支付渠道已退回手續費',
       paymentFeeRefundedHint: '勾選後按本次退款佔線上支付金額的比例沖回手續費成本；請以渠道帳單為準。',
       manualSubmissionTitle: '使用者提交資訊',

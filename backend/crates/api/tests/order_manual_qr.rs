@@ -98,7 +98,7 @@ async fn manual_refund_requires_transfer_confirmation_and_is_idempotent() {
     assert_ne!(automatic["status_code"], 0, "{automatic}");
 
     let uri = format!("/api/v1/admin/orders/{order_id}/manual-refund/prepare");
-    let prepared = app
+    let mut prepared = app
         .admin_call(
             "POST",
             &uri,
@@ -121,6 +121,43 @@ async fn manual_refund_requires_transfer_confirmation_and_is_idempotent() {
     assert_eq!(
         duplicate["data"]["attempt"]["id"],
         prepared["data"]["attempt"]["id"]
+    );
+    // No external transfer occurred: cancel the lock, then a fresh attempt is allowed.
+    let cancel_uri = format!("/api/v1/admin/orders/{order_id}/manual-refund/cancel");
+    let cancel_body = json!({"attempt_id": prepared["data"]["attempt"]["id"]});
+    let canceled = app
+        .admin_call("POST", &cancel_uri, Some(cancel_body.clone()))
+        .await;
+    assert_eq!(canceled["status_code"], 0, "{canceled}");
+    assert_eq!(canceled["data"]["attempt"]["status"], "manual_canceled");
+    let canceled_again = app.admin_call("POST", &cancel_uri, Some(cancel_body)).await;
+    assert_eq!(canceled_again["status_code"], 0, "{canceled_again}");
+    let cannot_confirm_canceled = app
+        .admin_call(
+            "POST",
+            &format!("/api/v1/admin/orders/{order_id}/manual-refund/confirm"),
+            Some(json!({
+                "attempt_id": canceled["data"]["attempt"]["id"],
+                "transfer_ref": "NO-TRANSFER"
+            })),
+        )
+        .await;
+    assert_ne!(cannot_confirm_canceled["status_code"], 0);
+    assert_eq!(
+        format!("{:.2}", app.order(order_id).await.refunded_amount),
+        "0.00"
+    );
+    prepared = app
+        .admin_call(
+            "POST",
+            &uri,
+            Some(json!({"amount":"10.00","remark":"support"})),
+        )
+        .await;
+    assert_eq!(prepared["status_code"], 0, "{prepared}");
+    assert_ne!(
+        prepared["data"]["attempt"]["id"],
+        canceled["data"]["attempt"]["id"]
     );
     let blocked = app
         .admin_call(
@@ -149,6 +186,14 @@ async fn manual_refund_requires_transfer_confirmation_and_is_idempotent() {
     assert_eq!(confirmed["status_code"], 0, "{confirmed}");
     let replay = app.admin_call("POST", &confirm_uri, Some(body)).await;
     assert_eq!(replay["status_code"], 0, "{replay}");
+    let too_late = app
+        .admin_call(
+            "POST",
+            &cancel_uri,
+            Some(json!({"attempt_id": prepared["data"]["attempt"]["id"]})),
+        )
+        .await;
+    assert_ne!(too_late["status_code"], 0, "{too_late}");
     assert_eq!(
         replay["data"]["refund_record"]["id"],
         confirmed["data"]["refund_record"]["id"]

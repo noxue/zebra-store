@@ -14,6 +14,8 @@ pub mod status {
     pub const MANUAL_PREPARING: &str = "manual_preparing";
     pub const MANUAL_LOCKING: &str = "manual_locking";
     pub const MANUAL_AWAITING: &str = "manual_awaiting";
+    pub const MANUAL_CANCELING: &str = "manual_canceling";
+    pub const MANUAL_CANCELED: &str = "manual_canceled";
     pub const FAILED: &str = "failed";
     pub const SUCCEEDED: &str = "succeeded";
 }
