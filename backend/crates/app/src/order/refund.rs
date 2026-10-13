@@ -166,6 +166,24 @@ impl OrderService {
         Ok(())
     }
 
+    async fn ensure_no_online_payment(&self, order: &Order) -> Result<()> {
+        // Payment is attached to the parent. Child payment split fields are the
+        // checkout snapshot and are not updated by a wallet-only payment.
+        let paid_order = if let Some(parent_id) = order.parent_id {
+            self.deps
+                .repo
+                .get(parent_id)
+                .await?
+                .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?
+        } else {
+            order.clone()
+        };
+        if paid_order.online_paid_amount.is_positive() {
+            return Err(Error::bad_request("error.gateway_refund_pending"));
+        }
+        Ok(())
+    }
+
     /// Buyer-facing availability for a full refund to the successful payment method.
     pub async fn buyer_refund_mode(&self, order: &Order) -> Result<&'static str> {
         if order.paid_at.is_none() || order.total_amount <= order.refunded_amount {
@@ -748,9 +766,7 @@ impl OrderService {
             .get(order_id)
             .await?
             .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
-        if order.online_paid_amount.is_positive() {
-            return Err(Error::bad_request("error.gateway_refund_pending"));
-        }
+        self.ensure_no_online_payment(&order).await?;
         self.apply_refund(order_id, amount, remark, true, false, None)
             .await
     }
@@ -770,9 +786,7 @@ impl OrderService {
             .get(order_id)
             .await?
             .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
-        if order.online_paid_amount.is_positive() {
-            return Err(Error::bad_request("error.gateway_refund_pending"));
-        }
+        self.ensure_no_online_payment(&order).await?;
         self.apply_refund(order_id, amount, remark, false, fee_refunded, None)
             .await
     }
