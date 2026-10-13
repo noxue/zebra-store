@@ -594,6 +594,59 @@ async fn huifu_pending_original_refund_is_queried_and_applied_once() {
         )
         .await;
     assert_eq!(detail["data"]["refund_mode"], "automatic");
+    // A final provider failure must stop buyer retries until staff reviews it.
+    let failed = gateway_refund_attempts::ActiveModel {
+        order_id: Set(order_id),
+        payment_id: Set(payment_id),
+        channel_id: Set(channel),
+        request_date: Set("20261014".into()),
+        refund_no: Set("FAILED-BUYER-REFUND".into()),
+        provider_ref: Set("20261014:FAILED-BUYER-REFUND".into()),
+        amount: Set(order_common::dec("0.01")),
+        status: Set("failed".into()),
+        remark: Set("buyer_requested_refund".into()),
+        payment_fee_refunded: Set(false),
+        card_confirmed: Set(false),
+        payload: Set(None),
+        error: Set("provider rejected".into()),
+        refund_record_id: Set(None),
+        created_at: Set(paid_at),
+        updated_at: Set(paid_at),
+        ..Default::default()
+    }
+    .insert(&app.db)
+    .await
+    .unwrap();
+    let failed_detail = app
+        .call(
+            "GET",
+            &format!(
+                "/api/v1/guest/orders/{}",
+                created["data"]["order_no"].as_str().unwrap()
+            ),
+            None,
+            &guest(),
+        )
+        .await;
+    assert_eq!(failed_detail["data"]["refund_mode"], "contact_support");
+    assert_eq!(failed_detail["data"]["refund_state"], "needs_review");
+    let buyer_retry = app
+        .call(
+            "POST",
+            &format!(
+                "/api/v1/guest/orders/{}/refund",
+                created["data"]["order_no"].as_str().unwrap()
+            ),
+            None,
+            &guest(),
+        )
+        .await;
+    assert_ne!(buyer_retry["status_code"], 0);
+    assert_eq!(refund_calls.load(Ordering::SeqCst), 0);
+    gateway_refund_attempts::Entity::delete_by_id(failed.id)
+        .exec(&app.db)
+        .await
+        .unwrap();
     let denied = app
         .call(
             "POST",

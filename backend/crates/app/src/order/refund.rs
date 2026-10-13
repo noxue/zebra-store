@@ -195,6 +195,15 @@ impl OrderService {
         if order.paid_at.is_none() || order.total_amount <= order.refunded_amount {
             return Ok("none");
         }
+        // A terminal provider failure needs staff review before another gateway
+        // submission. The admin flow can retry after the merchant fixes the cause.
+        if self
+            .latest_refund_attempt(order.id)
+            .await?
+            .is_some_and(|attempt| attempt.status == gateway_refund_status::FAILED)
+        {
+            return Ok("contact_support");
+        }
         if order.refunded_amount != zs_shared::money::Amount::ZERO
             || order.wallet_paid_amount != zs_shared::money::Amount::ZERO
             || order.online_paid_amount != order.total_amount
