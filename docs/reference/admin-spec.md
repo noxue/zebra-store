@@ -214,7 +214,7 @@ Conventions shared by list pages:
   - Sections: amounts, discounts (coupon/promotion/member/wholesale), items, child orders with their items and fulfillment, fulfillment (download via `orders/:id/fulfillment/download` blob), procurement (`getProcurementOrders{local order}`), payments table (id, channel, status, feeRate, amount, createdAt).
   - Refund card with two tabs:
     - **wallet:** amount, remark → `orders/:id/refund-to-wallet`;
-    - **manual:** amount, reason, paymentFeeRefunded → `orders/:id/manual-refund/prepare` first; after support verifies an original-route transfer, submit `{attempt_id,transfer_ref}` to `orders/:id/manual-refund/confirm`. The pending attempt keeps cards locked and creates no completed refund record;
+    - **manual:** amount, reason, paymentFeeRefunded → `orders/:id/manual-refund/prepare` first; after support verifies an original-route transfer, submit `{attempt_id,transfer_ref}` to `orders/:id/manual-refund/confirm`. If no transfer occurred, `orders/:id/manual-refund/cancel` releases the lock. The pending attempt keeps cards locked and creates no completed refund record;
     - **original:** amount, remark → `orders/:id/original-refund`, sharing the buyer refund state machine and gateway capability checks.
     - Order detail includes `refund_attempt` (latest attempt) so a prepared manual refund remains confirmable after page reload; `manual_awaiting` displays an external refund reference field. Reusing a completed reference on another attempt is rejected.
 - **Fulfillment modal:** a list of delivery key/value entries plus a note → `POST fulfillments` (payload: order_id, payload/delivery_data).

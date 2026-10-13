@@ -80,6 +80,8 @@ impl OrderService {
                 Some(gateway_refund_status::MANUAL_PREPARING) => "checking",
                 Some(gateway_refund_status::MANUAL_LOCKING) => "checking",
                 Some(gateway_refund_status::MANUAL_AWAITING) => "awaiting_support",
+                Some(gateway_refund_status::MANUAL_CANCELING) => "checking",
+                Some(gateway_refund_status::MANUAL_CANCELED) => "none",
                 Some(gateway_refund_status::SUCCEEDED)
                     if attempt.as_ref().is_some_and(|a| a.card_confirmed) =>
                 {
@@ -107,6 +109,10 @@ impl OrderService {
                 )
                 .await
                 .map(|_| ())
+            } else if attempt.status == gateway_refund_status::MANUAL_CANCELING {
+                self.cancel_manual_refund(attempt.order_id, attempt.id)
+                    .await
+                    .map(|_| ())
             } else if attempt.status == gateway_refund_status::SUCCEEDED {
                 let order = self
                     .deps
@@ -393,6 +399,7 @@ impl OrderService {
                 gateway_refund_status::MANUAL_PREPARING
                     | gateway_refund_status::MANUAL_LOCKING
                     | gateway_refund_status::MANUAL_AWAITING
+                    | gateway_refund_status::MANUAL_CANCELING
             )
         }) {
             return Err(Error::bad_request("error.gateway_refund_pending"));
@@ -976,6 +983,72 @@ impl OrderService {
             .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
         self.confirm_and_mark(&order, &attempt).await?;
         Ok(done)
+    }
+
+    /// Releases a prepared manual refund only when no transfer has been confirmed.
+    pub async fn cancel_manual_refund(
+        &self,
+        order_id: Id,
+        attempt_id: Id,
+    ) -> Result<GatewayRefundAttempt> {
+        let attempt = self
+            .deps
+            .store
+            .gateway_refund_attempt(attempt_id)
+            .await?
+            .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
+        if attempt.order_id != order_id || !attempt.refund_no.starts_with("MR") {
+            return Err(Error::bad_request("error.gateway_refund_pending"));
+        }
+        if attempt.status == gateway_refund_status::MANUAL_CANCELED {
+            return Ok(attempt);
+        }
+        if !matches!(
+            attempt.status.as_str(),
+            gateway_refund_status::MANUAL_AWAITING | gateway_refund_status::MANUAL_CANCELING
+        ) {
+            return Err(Error::bad_request("error.gateway_refund_pending"));
+        }
+        if !self
+            .deps
+            .store
+            .claim_manual_refund_cancellation(attempt.id, self.deps.clock.now())
+            .await?
+        {
+            let current = self
+                .deps
+                .store
+                .gateway_refund_attempt(attempt_id)
+                .await?
+                .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
+            return if matches!(
+                current.status.as_str(),
+                gateway_refund_status::MANUAL_CANCELING | gateway_refund_status::MANUAL_CANCELED
+            ) {
+                Ok(current)
+            } else {
+                Err(Error::bad_request("error.gateway_refund_pending"))
+            };
+        }
+        let order = self
+            .deps
+            .repo
+            .get(order_id)
+            .await?
+            .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
+        self.cancel_card_refund(&order, &attempt.refund_no).await?;
+        self.deps
+            .store
+            .update_gateway_refund_attempt(
+                attempt.id,
+                &GatewayRefundAttemptUpdate {
+                    status: gateway_refund_status::MANUAL_CANCELED.to_owned(),
+                    payload: Map::new(),
+                    error: "manual refund canceled before transfer".to_owned(),
+                    now: self.deps.clock.now(),
+                },
+            )
+            .await
     }
 
     /// `PATCH /admin/order-refunds/:id/payment-fee` (RFD-01): returns the full admin row.

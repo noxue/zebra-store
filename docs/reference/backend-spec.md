@@ -525,6 +525,7 @@ All four paths can be replaced by admin-set custom paths (settings key `callback
 | POST | `/orders/:id/manual-refund` | Legacy wallet-only administrative record (`amount`, `remark`, `payment_fee_refunded`); online-paid orders must use the two-step flow |
 | POST | `/orders/:id/manual-refund/prepare` | Unsupported automatic channel: validate payment and amount, reserve a durable manual attempt, lock converter cards; returns `attempt` in `manual_awaiting` with no completed refund record |
 | POST | `/orders/:id/manual-refund/confirm` | After support returns funds to the original method, submit `{attempt_id,transfer_ref}`; idempotently record one refund, invalidate converter cards and release safe upstream binding; failed card confirmation is retried |
+| POST | `/orders/:id/manual-refund/cancel` | Before any transfer, submit `{attempt_id}` to cancel a prepared manual refund; atomically block confirmation, release converter card locks, finish as `manual_canceled` and retry interrupted cancellation |
 | POST | `/orders/:id/original-refund` | Admin original-route refund; submits only when the gateway supports the amount, and uses the durable refund attempt and card barrier |
 | GET | `/order-refunds`, `/order-refunds/:id` | Refund records |
 | PATCH | `/order-refunds/:id/payment-fee` | Set fee-refunded flag |

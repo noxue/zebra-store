@@ -881,6 +881,11 @@
       },
       {
         "subject": "",
+        "object": "/admin/orders/:id/manual-refund/cancel",
+        "action": "POST"
+      },
+      {
+        "subject": "",
         "object": "/admin/orders/:id/original-refund",
         "action": "POST"
       },

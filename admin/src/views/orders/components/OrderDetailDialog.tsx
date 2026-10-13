@@ -395,6 +395,9 @@ export default defineComponent({
               <Button type="submit" variant="primary" loading={d.manual.submitting} disabled={d.manual.submitting}>
                 {t('admin.orders.manualRefundConfirmTransfer')}
               </Button>
+              <Button type="button" variant="secondary" disabled={d.manual.submitting} onClick={() => void d.cancelManual()}>
+                {t('admin.orders.manualRefundCancel')}
+              </Button>
             </form>
           ) : (
             <form

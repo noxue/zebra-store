@@ -1048,6 +1048,8 @@ const messages = {
       manualTransferRef: 'External refund reference',
       manualTransferRefRequired: 'Enter the external refund reference',
       manualRefundConfirmTransfer: 'Confirm funds returned',
+      manualRefundCancel: 'Cancel before transfer',
+      manualRefundCanceled: 'Manual refund canceled; cards unlocked.',
       paymentFeeRefunded: 'The payment channel returned its processing fee',
       paymentFeeRefundedHint: 'When selected, the fee cost is reversed in proportion to this refund. Verify it against the channel statement.',
       manualSubmissionTitle: 'User submitted data',

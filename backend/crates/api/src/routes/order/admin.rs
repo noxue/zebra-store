@@ -32,6 +32,7 @@ pub(super) fn routes() -> Routes {
         .post("/orders/{id}/manual-refund", manual_refund)
         .post("/orders/{id}/manual-refund/prepare", prepare_manual_refund)
         .post("/orders/{id}/manual-refund/confirm", confirm_manual_refund)
+        .post("/orders/{id}/manual-refund/cancel", cancel_manual_refund)
         .post("/orders/{id}/original-refund", original_refund)
         .get("/orders/{id}/fulfillment/download", download_fulfillment)
         .get("/order-refunds", list_refunds)
@@ -237,6 +238,29 @@ async fn confirm_manual_refund(
         .confirm_manual_refund(order_id(&id)?, req.attempt_id, &req.transfer_ref)
         .await?;
     ok(json!({"order": done.order, "refund_record": done.record}))
+}
+
+#[derive(Debug, Deserialize)]
+struct ManualCancelBody {
+    attempt_id: Id,
+}
+
+impl BindRules for ManualCancelBody {
+    const FIELDS: &'static [BindField] = &[req("attempt_id", "Attempt ID")];
+}
+
+async fn cancel_manual_refund(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+    Bind(req): Bind<ManualCancelBody>,
+) -> ApiResult<Data<Value>> {
+    let attempt = s
+        .svc
+        .order
+        .service
+        .cancel_manual_refund(order_id(&id)?, req.attempt_id)
+        .await?;
+    ok(json!({"attempt": attempt}))
 }
 
 async fn original_refund(

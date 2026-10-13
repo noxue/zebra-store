@@ -52,6 +52,7 @@ async fn ensure_no_refund_in_progress<C: ConnectionTrait>(
             gateway_refund_status::MANUAL_PREPARING,
             gateway_refund_status::MANUAL_LOCKING,
             gateway_refund_status::MANUAL_AWAITING,
+            gateway_refund_status::MANUAL_CANCELING,
         ]))
         .one(conn)
         .await
