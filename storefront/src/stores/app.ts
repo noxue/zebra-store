@@ -25,6 +25,7 @@ const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i
 export const useAppStore = defineStore('app', () => {
   const locale = ref<string>(detectLocale())
   const config = ref<SiteConfig | null>(null)
+  const configAttempted = ref(false)
   const loading = ref(false)
   const navigating = ref(false)
   let configRequest: Promise<void> | null = null
@@ -35,6 +36,7 @@ export const useAppStore = defineStore('app', () => {
 
   const siteName = computed(() => String(config.value?.brand?.site_name || '').trim() || 'Zebra Store')
   const siteLogo = computed(() => getImageUrl(config.value?.brand?.site_logo || ''))
+  const siteLogoDark = computed(() => getImageUrl(config.value?.brand?.site_logo_dark || ''))
   const siteIconHref = computed(() => {
     const icon = String(config.value?.brand?.site_icon || '').trim()
     return icon ? getImageUrl(icon) : '/favicon.svg'
@@ -80,10 +82,13 @@ export const useAppStore = defineStore('app', () => {
     }
     const mode = cfg?.theme?.default_mode
     applyDefaultThemeMode(mode === 'system' && legacyPalette && template.value === 'vault' ? 'dark' : mode)
+    if (cfg) root.classList.remove('zs-config-pending')
   }
 
   const fetchConfig = async (force: boolean) => {
-    if (!force) loading.value = true
+    const initialLoad = !config.value
+    if (initialLoad) configAttempted.value = false
+    if (!force || initialLoad) loading.value = true
     try {
       const started = Date.now()
       const res = await configAPI.get()
@@ -97,7 +102,8 @@ export const useAppStore = defineStore('app', () => {
     } catch (error) {
       if (import.meta.env.DEV) console.warn('Failed to load config', error)
     } finally {
-      if (!force) loading.value = false
+      configAttempted.value = true
+      if (!force || initialLoad) loading.value = false
     }
   }
 
@@ -112,6 +118,10 @@ export const useAppStore = defineStore('app', () => {
   if (typeof document !== 'undefined') {
     watchEffect(() => {
       document.documentElement.lang = locale.value
+      if (!config.value) {
+        document.title = ''
+        return
+      }
       const seoTitle = localizedText(config.value?.seo?.title, locale.value)
       const base = seoTitle || siteName.value
       document.title = pageTitle.value ? `${pageTitle.value} - ${siteName.value}` : base
@@ -143,12 +153,14 @@ export const useAppStore = defineStore('app', () => {
   return {
     locale,
     config,
+    configAttempted,
     loading,
     serverTimeOffset,
     navigating,
     pageTitle,
     siteName,
     siteLogo,
+    siteLogoDark,
     siteIconHref,
     currency,
     isResellerTenant,

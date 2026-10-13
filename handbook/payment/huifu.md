@@ -73,7 +73,7 @@ Zebra Store 支持汇付 **支付宝聚合正扫**（直接返回支付宝二维
 }
 ```
 
-正式站点 `ai.xiaodianpu.cc` 的通知地址填写为 `https://ai.xiaodianpu.cc/api/v1/payments/callback`。正扫模式不填写 `project_id`、`project_title` 或 `return_url`；`product_id` 不能当作托管项目 ID。保存后使用前台真实小额订单验证二维码与收款状态。
+正式站点的通知地址应填写为 `https://你的域名/api/v1/payments/callback`。正扫模式不填写 `project_id`、`project_title` 或 `return_url`；`product_id` 不能当作托管项目 ID。保存后使用前台真实小额订单验证二维码与收款状态。
 
 后台重新打开渠道时，私钥显示为掩码。支付渠道配置保存在数据库中，数据库文件和备份都包含商户密钥，请将数据目录限制为容器用户可访问，并将数据库及备份文件权限设为 `600`；不要把生产私钥写进配置示例、日志或截图。
 

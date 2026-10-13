@@ -84,6 +84,7 @@ fn normalize_brand(raw: Option<&Value>) -> Value {
         "site_url": get("site_url").trim_end_matches('/'),
         "site_icon": get("site_icon"),
         "site_logo": get("site_logo"),
+        "site_logo_dark": get("site_logo_dark"),
         "site_description": localized_field(b.and_then(|o| o.get("site_description"))),
     })
 }
@@ -642,7 +643,7 @@ mod tests {
             .map(|i| json!({"name": format!("s{i}"), "code": "console.log(1)", "position": "x", "enabled": "true"}))
             .collect();
         let out = normalize_site(&json!({
-            "brand": {"site_name": " Zebra ", "site_url": "https://a.com///", "site_logo": "/uploads/l.png"},
+            "brand": {"site_name": " Zebra ", "site_url": "https://a.com///", "site_logo": "/uploads/l.png", "site_logo_dark": "/uploads/d.png"},
             "scripts": scripts,
             "footer_links": [{"name": "", "url": "x"}, {"name": "A", "url": " /a "}],
             "currency": "usd",
@@ -654,6 +655,7 @@ mod tests {
         assert_eq!(out["brand"]["site_url"], "https://a.com");
         // CNT-11: logo is kept independent of the favicon
         assert_eq!(out["brand"]["site_logo"], "/uploads/l.png");
+        assert_eq!(out["brand"]["site_logo_dark"], "/uploads/d.png");
         assert_eq!(out["brand"]["site_icon"], "");
         assert_eq!(out["scripts"].as_array().unwrap().len(), SCRIPTS_MAX);
         assert_eq!(out["scripts"][0]["position"], "head");

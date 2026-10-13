@@ -56,6 +56,7 @@ export function useSiteSettings() {
       // site_icon 是浏览器 favicon；site_logo 是前台页面 Logo，二者必须独立保存和清除。
       site_icon: '',
       site_logo: '',
+      site_logo_dark: '',
       site_description: createLocalizedField(),
     },
     currency: 'CNY',
@@ -83,6 +84,7 @@ export function useSiteSettings() {
     form.brand.site_url = asString(brand.site_url)
     form.brand.site_icon = asString(brand.site_icon)
     form.brand.site_logo = asString(brand.site_logo)
+    form.brand.site_logo_dark = asString(brand.site_logo_dark)
     form.brand.site_description = normalizeLocalizedField(brand.site_description)
     form.currency = normalizeCurrency(data.currency)
     const contact = asRecord(data.contact)

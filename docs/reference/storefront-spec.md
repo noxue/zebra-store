@@ -304,6 +304,7 @@ Three booleans under `site_config.theme` control independent page sections. `sho
   - Computed: `siteIconHref`, `isResellerTenant` (`config.tenant.mode==='reseller'`), `canAccessResellerConsole`.
   - Actions: `setLocale` (writes localStorage `locale` and calls `setI18nLocale`), `loadConfig(force)` (GET `/public/config`; computes the server time offset from `server_time`; injects `config.scripts`), `getServerTime`.
   - A global `useHead` sets `html lang`, the title (`seo.title[locale]`, falling back to `brand.site_name`), favicon (`brand.site_icon` or `/dj.svg`), and meta keywords/description.
+  - Before `/public/config` resolves, the static HTML and Vue root show the same neutral skeleton. The app keeps the document title empty and delays Navbar, page content, template and theme colours until config is applied; a failed request shows a retry action.
 - **`userAuth.ts`:**
   - State: `token` (localStorage `user_token`), `user` (localStorage `user_profile`), `loading`, `challengeToken`, `challengeExpiresAt`.
   - Actions: login, verify2FA, register, sendVerifyCode, telegramLogin, telegramOidcLogin, telegramMiniAppLogin, googleLogin, googleRedirectLogin, forgotPassword, syncUserProfile, logout.
@@ -322,7 +323,7 @@ Three booleans under `site_config.theme` control independent page sections. `sho
 | Setting | Config field | Where used |
 |---|---|---|
 | Site name | `brand.site_name` | Navbar wordmark (fallback "Dujiao-Next"), title |
-| Logo | `brand.site_logo` | Via `getImageUrl`, which prefixes relative `/uploads/...` with `VITE_API_BASE_URL` |
+| Logo | `brand.site_logo`, `brand.site_logo_dark` | Light mode uses `site_logo`; dark mode uses `site_logo_dark` when set, otherwise `site_logo`. Relative upload paths use `getImageUrl`. |
 | Favicon | `brand.site_icon` | Global head |
 | Other brand fields | `brand.site_description{locale}`, `brand.site_url` | Footer; canonical URLs |
 | **Currency** | `config.currency` (3-letter code, default CNY) | `useLocalized().formatPrice` prints `"12.34 CNY"`; amounts are handled as decimal strings via `src/utils/money.ts` (integer cents) |

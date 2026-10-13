@@ -1,15 +1,18 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { nextTick, ref } from 'vue'
-import { shallowMount } from '@vue/test-utils'
+import { mount, shallowMount } from '@vue/test-utils'
+import App from '@/App'
 import { configAPI } from '@/api/catalog'
 import type { SiteConfig } from '@/api/types'
 import { HomeHero } from '@/components/home/HomeHero'
 import { SiteFooter } from '@/components/layout/SiteFooter'
+import { SiteLogo } from '@/components/layout/SiteLogo'
 import i18n from '@/i18n'
 import { useAppStore } from '@/stores/app'
 import Home from '@/views/Home'
 import { hasLegacyClassicPalette, storefrontTemplate } from '@/utils/storefrontTemplate'
+import { useTheme } from '@/utils/theme'
 
 vi.mock('@/composables/useHome', () => ({
   useHome: () => ({
@@ -24,6 +27,42 @@ beforeEach(() => {
   document.documentElement.removeAttribute('data-storefront-template')
   document.documentElement.style.cssText = ''
   vi.restoreAllMocks()
+})
+
+it('uses the dark Logo on theme switch and falls back to the light Logo', async () => {
+  const app = useAppStore()
+  const { theme } = useTheme()
+  const originalTheme = theme.value
+  try {
+    app.config = { brand: { site_name: 'Shop', site_logo: '/light.png', site_logo_dark: '/dark.png' } }
+    const wrapper = mount(SiteLogo, { global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } } })
+    theme.value = 'light'
+    await nextTick()
+    expect(wrapper.get('img').attributes('src')).toBe('/light.png')
+    theme.value = 'dark'
+    await nextTick()
+    expect(wrapper.get('img').attributes('src')).toBe('/dark.png')
+    app.config.brand!.site_logo_dark = ''
+    await nextTick()
+    expect(wrapper.get('img').attributes('src')).toBe('/light.png')
+    wrapper.unmount()
+  } finally {
+    theme.value = originalTheme
+  }
+})
+
+it('shows a neutral boot skeleton and no default title until site config arrives', async () => {
+  const app = useAppStore()
+  const wrapper = shallowMount(App, { global: { plugins: [i18n] } })
+  expect(wrapper.find('[data-testid="site-boot"]').exists()).toBe(true)
+  expect(wrapper.text()).not.toContain('Zebra Store')
+  expect(document.title).toBe('')
+  wrapper.unmount()
+  vi.spyOn(configAPI, 'get').mockResolvedValue({ data: { brand: { site_name: 'AI小店铺' } }, status_code: 0, msg: 'ok' } as Awaited<ReturnType<typeof configAPI.get>>)
+  await app.loadConfig()
+  await nextTick()
+  expect(document.title).toBe('AI小店铺')
+  expect(document.documentElement.classList.contains('zs-config-pending')).toBe(false)
 })
 
 it('SET-04 applies the saved vault template instead of the legacy Sakura colours', async () => {

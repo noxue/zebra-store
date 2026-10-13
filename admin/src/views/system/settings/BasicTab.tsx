@@ -146,6 +146,15 @@ export default defineComponent({
                   tip={t('admin.settings.brand.siteLogoTip')}
                 />
               </FormField>
+              <FormField label={t('admin.settings.brand.siteLogoDark')}>
+                <BrandImageField
+                  v-model={f.brand.site_logo_dark}
+                  testId="site-logo-dark"
+                  placeholder="DARK"
+                  selectText={t('admin.settings.brand.siteLogoDarkSelect')}
+                  tip={t('admin.settings.brand.siteLogoDarkTip')}
+                />
+              </FormField>
               <div class="md:col-span-2">
                 <FormField hint={t('admin.settings.brand.siteDescriptionTip')}>
                   {{

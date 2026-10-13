@@ -1789,6 +1789,7 @@ export interface PublicConfig {
     site_url?: string
     site_icon?: string
     site_logo?: string
+    site_logo_dark?: string
     site_description?: LocalizedText
   }
   captcha?: {

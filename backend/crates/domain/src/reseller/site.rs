@@ -406,6 +406,10 @@ pub fn overlay_public_config(
     };
     brand.insert("site_url".into(), Value::String(site_url));
     if let Some(cfg) = site {
+        if !cfg.logo.is_empty() {
+            // A reseller's own logo must not inherit the main site's dark variant.
+            brand.remove("site_logo_dark");
+        }
         for (key, value) in [
             ("site_name", &cfg.site_name),
             ("site_logo", &cfg.logo),
@@ -558,11 +562,20 @@ mod tests {
 
     fn base() -> Value {
         json!({
-            "brand": {"site_name": "Main", "site_logo": "/m.png"},
+            "brand": {"site_name": "Main", "site_logo": "/m.png", "site_logo_dark": "/m-dark.png"},
             "contact": {"telegram": "https://t.me/main", "whatsapp": "https://wa.me/1"},
             "announcement": {"type": "info", "version": "main0000", "content": {"zh-CN": "main"}},
             "nav_config": {"builtin": {"blog": true}},
         })
+    }
+
+    #[test]
+    fn custom_reseller_logo_does_not_inherit_main_dark_logo() {
+        let mut reseller = site(json!({"enabled": false}));
+        reseller.logo = "/r.png".into();
+        let out = overlay_public_config(base(), "r.test", "r.test", Some(&reseller));
+        assert_eq!(out["brand"]["site_logo"], "/r.png");
+        assert!(out["brand"].get("site_logo_dark").is_none());
     }
 
     // RSL-08: disabled reseller announcement removes the main-site one.

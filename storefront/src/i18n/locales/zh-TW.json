@@ -1766,6 +1766,7 @@
     "mascotEmpty": "這裡空空的呢…",
     "poweredBy": "由 Zebra Store 驅動",
     "loadingText": "載入中，請稍候～",
+    "configLoadFailed": "網站載入失敗，請重試",
     "retry": "重試",
     "copy": "複製",
     "copied": "已複製",

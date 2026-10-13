@@ -118,6 +118,7 @@ export interface SiteConfig {
   brand?: {
     site_name?: string
     site_logo?: string
+    site_logo_dark?: string
     site_icon?: string
     site_description?: LocalizedText
     site_url?: string
