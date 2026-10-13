@@ -34,4 +34,13 @@ describe('DLV-02 order TXT export', () => {
     const current = { ...order(null), children: [child] }
     expect(await orderExportText(current, 'zh-CN', labels, vi.fn())).toBe('订单编号: DJ100\n\n卡密:\nCHILD-KEY\n\n交付使用说明:\n')
   })
+
+  it('keeps the redemption URL and numbered delivery steps in the downloaded text', async () => {
+    const guide = '<p>兑换网站：https://gpt.xiaodianpu.cc</p><p>1. 网页打不开时尝试全局代理。</p><p>2. 清理缓存并重新登录。</p><p>3. Token 过期时重新获取 Session。</p><p>4. 不要提交中文 Session。</p><p>5. 到期后仍显示 Plus 时先取消自动续费。</p>'
+    const child = { ...order({ status: 'delivered', payload: 'GPT-GO-EXAMPLE-CARD' }, [{ title: {}, quantity: 1, unit_price: '1.00', total_price: '1.00', instructions: { 'zh-CN': guide } }]), order_no: 'DJ100-01' }
+    const current = { ...order(null), children: [child] }
+    expect(await orderExportText(current, 'zh-CN', labels, vi.fn())).toBe(
+      '订单编号: DJ100\n\n卡密:\nGPT-GO-EXAMPLE-CARD\n\n交付使用说明:\n兑换网站：https://gpt.xiaodianpu.cc\n1. 网页打不开时尝试全局代理。\n2. 清理缓存并重新登录。\n3. Token 过期时重新获取 Session。\n4. 不要提交中文 Session。\n5. 到期后仍显示 Plus 时先取消自动续费。\n',
+    )
+  })
 })
