@@ -191,12 +191,14 @@ async fn site_config_roundtrip_and_field_errors() {
                 "logo": "/uploads/reseller/a.png",
                 "footer_links": [{"name": {"zh-CN": "帮助"}, "url": "https://help.test"}],
                 "nav_config": {"builtin": {"blog": false}},
+                "scripts": [{"name": "客服", "enabled": true, "position": "body_end", "code": "window.widget=1", "scope": "main"}],
             })),
             Some(&token),
         )
         .await;
     let c = data(&saved);
     assert_eq!(c["footer_links"][0]["url"], "https://help.test");
+    assert_eq!(c["scripts"][0]["scope"], "reseller");
     assert_eq!(
         c["nav_config"]["builtin"],
         json!({"blog": false, "notice": true, "about": true})

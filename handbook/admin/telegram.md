@@ -12,8 +12,6 @@
 
 左侧菜单 **Telegram Bot** 分组。
 
-![Telegram Bot 概览](/screenshots/admin/telegram-bot.png)
-
 ## 页面说明
 
 | 页面 | 用途 |

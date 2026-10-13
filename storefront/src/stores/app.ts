@@ -98,7 +98,7 @@ export const useAppStore = defineStore('app', () => {
         serverTimeOffset.value = res.data.server_time + (now - started) / 2 - now
       }
       applyThemeOverrides(config.value)
-      applyCustomScripts(config.value?.scripts)
+      applyCustomScripts(config.value?.scripts, config.value?.tenant?.mode)
     } catch (error) {
       if (import.meta.env.DEV) console.warn('Failed to load config', error)
     } finally {

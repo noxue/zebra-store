@@ -63,6 +63,7 @@ impl SiteConfigRepo for SeaResellerStore {
             footer_links_json: Set(Some(d.footer_links.clone())),
             nav_config_json: Set(Some(d.nav_config.clone())),
             theme_json: Set(Some(d.theme.clone())),
+            scripts_json: Set(Some(d.scripts.clone())),
             updated_at: Set(now),
             deleted_at: Set(None),
             ..Default::default()

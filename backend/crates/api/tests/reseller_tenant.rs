@@ -8,6 +8,74 @@ use reseller_common::{App, BASE, config, data, err};
 use serde_json::json;
 use zs_domain::content::public::Tenant;
 
+#[tokio::test]
+async fn reseller_script_scope_isolated_even_without_site_config() {
+    let app = App::new().await;
+    let (_, token, pid) = app.reseller("scripts@example.test", "0").await;
+    let host = app.system_domain(pid, "scripts").await;
+    data(
+        &app.admin_call(
+            "PUT",
+            "/api/v1/admin/settings",
+            Some(json!({
+                "key": "site_config", "value": {"scripts": [
+                    {"name": "global", "enabled": true, "code": "global()", "scope": "global"},
+                    {"name": "main", "enabled": true, "code": "main()", "scope": "main"},
+                    {"name": "legacy", "enabled": true, "code": "legacy()"},
+                ]}
+            })),
+        )
+        .await,
+    );
+    let main_response = app.call("GET", "/api/v1/public/config", None, None).await;
+    let main = data(&main_response);
+    assert_eq!(main["scripts"].as_array().unwrap().len(), 3);
+    let (_, body) = app
+        .raw(
+            "GET",
+            "/api/v1/public/config",
+            None,
+            None,
+            &[("host", host.as_str())],
+        )
+        .await;
+    let reseller = data(&body);
+    assert_eq!(reseller["scripts"].as_array().unwrap().len(), 1);
+    assert_eq!(reseller["scripts"][0]["name"], "global");
+
+    data(&app.call("PUT", "/api/v1/reseller/site-config", Some(json!({
+        "site_name": "Scripts", "scripts": [{"name": "own", "enabled": true, "code": "own()", "scope": "main"}]
+    })), Some(&token)).await);
+    let (_, body) = app
+        .raw(
+            "GET",
+            "/api/v1/public/config",
+            None,
+            None,
+            &[("host", host.as_str())],
+        )
+        .await;
+    let reseller = data(&body);
+    assert_eq!(reseller["scripts"].as_array().unwrap().len(), 2);
+    assert_eq!(reseller["scripts"][1]["name"], "own");
+    assert_eq!(reseller["scripts"][1]["scope"], "reseller");
+
+    let (_, _, other_id) = app.reseller("other-scripts@example.test", "0").await;
+    let other_host = app.system_domain(other_id, "other-scripts").await;
+    let (_, body) = app
+        .raw(
+            "GET",
+            "/api/v1/public/config",
+            None,
+            None,
+            &[("host", other_host.as_str())],
+        )
+        .await;
+    let other = data(&body);
+    assert_eq!(other["scripts"].as_array().unwrap().len(), 1);
+    assert_eq!(other["scripts"][0]["name"], "global");
+}
+
 // RSL-06: host normalisation + unknown / unverified hosts are 404 "site unavailable".
 #[tokio::test]
 async fn rsl06_resolves_hosts_and_rejects_unknown_sites() {

@@ -175,6 +175,7 @@ export interface ResellerSiteConfigForm {
   site_name: string
   logo: string
   favicon: string
+  scripts: Array<{ name: string; enabled: boolean; position: 'head' | 'body_end'; code: string }>
   announcement: {
     enabled: boolean
     type: string
@@ -201,6 +202,7 @@ export const createBlankSiteConfigForm = (): ResellerSiteConfigForm => ({
   site_name: '',
   logo: '',
   favicon: '',
+  scripts: [],
   announcement: {
     enabled: false,
     type: 'info',
@@ -227,6 +229,10 @@ export const siteConfigToForm = (row: AdminResellerSiteConfig): ResellerSiteConf
     site_name: row.site_name || '',
     logo: row.logo || '',
     favicon: row.favicon || '',
+    scripts: Array.isArray(row.scripts) ? row.scripts.map((script) => ({
+      name: String(script.name || ''), enabled: script.enabled === true,
+      position: script.position === 'body_end' ? 'body_end' : 'head', code: String(script.code || ''),
+    })) : [],
     announcement: {
       enabled: announcement.enabled === true,
       type: String(announcement.type || 'info'),
@@ -260,6 +266,7 @@ export const buildSiteConfigPayload = (form: ResellerSiteConfigForm): AdminResel
   site_name: form.site_name.trim(),
   logo: form.logo.trim(),
   favicon: form.favicon.trim(),
+  scripts: form.scripts.filter((script) => script.code.trim()).slice(0, 20).map((script) => ({ ...script, name: script.name.trim(), code: script.code.trim() })),
   announcement: {
     enabled: form.announcement.enabled,
     type: form.announcement.type.trim() || 'info',

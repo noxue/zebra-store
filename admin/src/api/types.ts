@@ -1028,6 +1028,7 @@ export interface AdminResellerSiteConfigPayload {
   site_name?: string
   logo?: string
   favicon?: string
+  scripts?: Array<{ name: string; enabled: boolean; position: 'head' | 'body_end'; code: string }>
   announcement?: {
     enabled?: boolean
     type?: string
@@ -1060,7 +1061,7 @@ export interface AdminResellerSiteConfigPayload {
   }
 }
 
-export interface AdminResellerSiteConfig extends Required<Pick<AdminResellerSiteConfigPayload, 'announcement' | 'support' | 'seo' | 'nav_config'>> {
+export interface AdminResellerSiteConfig extends Required<Pick<AdminResellerSiteConfigPayload, 'announcement' | 'support' | 'seo' | 'nav_config' | 'scripts'>> {
   id: number
   reseller_id: number
   site_name: string

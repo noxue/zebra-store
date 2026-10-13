@@ -703,6 +703,7 @@
         "saveFailed": "站點配置儲存失敗，請檢查輸入後重試",
         "inactive": "分銷商身份啟用後才能編輯站點配置。",
         "emptyLinks": "暫無頁腳連結",
+        "scriptsHint": "腳本僅在你的分站隔離區域執行，無法讀取主頁面、登入權杖或 Cookie；未設定時不會繼承主站專屬腳本。部分需要直接修改頁面的客服外掛可能無法在隔離區域使用。",
         "sections": {
           "brand": "品牌基礎",
           "support": "客服聯絡方式",
@@ -725,7 +726,9 @@
           "content": "內容",
           "contentDescription": "公告與 SEO",
           "navigation": "導航",
-          "navigationDescription": "頁腳與導覽"
+          "navigationDescription": "頁腳與導覽",
+          "scripts": "腳本",
+          "scriptsDescription": "獨立客服代碼"
         },
         "nav": {
           "blog": "部落格",
@@ -779,6 +782,7 @@
         },
         "actions": {
           "addLink": "新增連結",
+          "addScript": "新增腳本",
           "remove": "移除"
         },
         "fields": {
@@ -799,7 +803,13 @@
           "ogImage": "分享圖地址",
           "footerLinks": "頁腳連結",
           "linkName": "連結名稱",
-          "navVisibility": "導航顯示"
+          "navVisibility": "導航顯示",
+          "scriptName": "腳本名稱",
+          "scriptPosition": "載入位置",
+          "scriptHead": "頁首",
+          "scriptBodyEnd": "頁尾",
+          "scriptEnabled": "啟用腳本",
+          "scriptCode": "客服代碼或 JS 片段"
         }
       },
       "productSettings": {

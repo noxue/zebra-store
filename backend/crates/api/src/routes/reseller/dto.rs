@@ -106,6 +106,7 @@ pub fn site_config(c: &SiteConfig) -> Value {
         "seo": c.seo,
         "footer_links": footer_items(&c.footer_links),
         "nav_config": c.nav_config,
+        "scripts": c.scripts,
         "updated_at": c.updated_at,
     })
 }
@@ -149,6 +150,7 @@ pub fn admin_site_config(
             "seo": c.seo,
             "footer_links": footer_items(&c.footer_links),
             "nav_config": c.nav_config,
+            "scripts": c.scripts,
             "created_at": c.created_at,
             "updated_at": c.updated_at,
         }),
@@ -163,6 +165,7 @@ pub fn admin_site_config(
             "seo": null,
             "footer_links": [],
             "nav_config": null,
+            "scripts": [],
             "created_at": ZERO_TIME,
             "updated_at": ZERO_TIME,
         }),

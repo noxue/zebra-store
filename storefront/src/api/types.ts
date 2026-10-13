@@ -73,6 +73,7 @@ export interface CustomScript {
   enabled?: boolean
   position?: 'head' | 'body_end' | string
   code?: string
+  scope?: 'global' | 'main' | 'reseller'
 }
 
 export interface ThemeEffects {
@@ -949,6 +950,7 @@ export interface ResellerSiteConfigPayload {
   site_name: string
   logo?: string
   favicon?: string
+  scripts?: Array<{ name: string; enabled: boolean; position: 'head' | 'body_end'; code: string }>
   announcement?: {
     enabled: boolean
     type: string

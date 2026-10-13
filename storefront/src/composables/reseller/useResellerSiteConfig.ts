@@ -11,13 +11,14 @@ import {
   createBlankSiteConfigForm,
   isResellerSiteSeoConfigured,
   MAX_SITE_LINKS,
+  MAX_SITE_SCRIPTS,
   siteConfigFormToPayload,
   siteConfigToForm,
   type ResellerLocale,
 } from '@/utils/reseller/siteConfig'
 import { useResellerProfileContext } from './useResellerProfile'
 
-export type SiteSection = 'brand' | 'support' | 'content' | 'navigation'
+export type SiteSection = 'brand' | 'support' | 'content' | 'navigation' | 'scripts'
 
 export const useResellerSiteConfig = () => {
   const { t } = useI18n()
@@ -92,6 +93,8 @@ export const useResellerSiteConfig = () => {
     if (form.nav_config.custom_items.length < MAX_SITE_LINKS) form.nav_config.custom_items.push({ name: blankLocalizedText(), url: '' })
   }
   const removeCustomNav = (i: number) => form.nav_config.custom_items.splice(i, 1)
+  const addScript = () => { if (form.scripts.length < MAX_SITE_SCRIPTS) form.scripts.push({ name: '', enabled: true, position: 'body_end', code: '' }) }
+  const removeScript = (i: number) => form.scripts.splice(i, 1)
 
   return {
     profile,
@@ -113,6 +116,8 @@ export const useResellerSiteConfig = () => {
     removeFooterLink,
     addCustomNav,
     removeCustomNav,
+    addScript,
+    removeScript,
   }
 }
 

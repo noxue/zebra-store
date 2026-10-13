@@ -159,6 +159,7 @@ describe('site config form', () => {
       site_name: ' Shop ',
       logo: '',
       favicon: '',
+      scripts: [{ name: ' Chat ', enabled: true, position: 'body_end', code: ' chat() ' }],
       announcement: { enabled: true, type: '', title: { 'zh-CN': 'Hi' } },
       support: { email: ' a@b.c ' },
       seo: {},
@@ -186,6 +187,7 @@ describe('site config form', () => {
     expect(payload.announcement?.type).toBe('info')
     expect(payload.support?.email).toBe('a@b.c')
     expect(payload.footer_links).toHaveLength(1)
+    expect(payload.scripts).toEqual([{ name: 'Chat', enabled: true, position: 'body_end', code: 'chat()' }])
     expect(payload.nav_config).toEqual({
       builtin: { blog: false, notice: true, about: true },
       custom_items: [],

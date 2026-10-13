@@ -851,6 +851,8 @@ All four paths can be replaced by admin-set custom paths (settings key `callback
 - **Service:** `modules/settings/application/*`. Each key has a normalizer; saving some keys clears the cached public config or callback routes (`default_registry.go`).
 - **Schemas:** `modules/settings/schema/*`.
 
+脚本范围扩展：主站 `site_config.scripts[]` 新增 `scope: global|main`，旧记录未标范围时按 `main` 处理。分站 `reseller_site_configs.scripts_json` 独立保存脚本。分站公开配置只包含显式设为全局的脚本和自己的脚本；未配置时也不包含仅主站脚本。分站脚本在无 `allow-same-origin` 的 sandbox iframe 中运行。
+
 | Key | Contents |
 |---|---|
 | `site_config` | `brand{site_name, site_url, site_icon, site_logo, site_logo_dark, site_description(ml)}`, `contact{telegram, whatsapp}`, `seo{title, keywords, description}` (ml), `legal{terms, privacy}` (ml), `about{hero, introduction, services{title, items}, contact{title, text}}`, `scripts[{name, enabled, position: head/body_end, code}]` (max 20), `footer_links[{name, url}]` (max 20), `currency` (3 letters, default CNY), `template_mode` (card/list), `storefront_template` (classic/vault/aurora/atelier/noir), `theme` (colours, images, effects, `show_home_hero`, `show_footer_quick_links`, `show_repository_link`), `languages` |

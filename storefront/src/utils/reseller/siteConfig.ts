@@ -34,6 +34,7 @@ export interface ResellerSiteConfigForm {
   site_name: string
   logo: string
   favicon: string
+  scripts: Array<{ name: string; enabled: boolean; position: 'head' | 'body_end'; code: string }>
   announcement: { enabled: boolean; type: string; title: ResellerLocalizedText; content: ResellerLocalizedText }
   support: { telegram: string; whatsapp: string; email: string; support_url: string }
   seo: { title: ResellerLocalizedText; keywords: ResellerLocalizedText; description: ResellerLocalizedText; default_og_image: string }
@@ -45,6 +46,7 @@ export const createBlankSiteConfigForm = (): ResellerSiteConfigForm => ({
   site_name: '',
   logo: '',
   favicon: '',
+  scripts: [],
   announcement: { enabled: false, type: 'info', title: blankLocalizedText(), content: blankLocalizedText() },
   support: { telegram: '', whatsapp: '', email: '', support_url: '' },
   seo: { title: blankLocalizedText(), keywords: blankLocalizedText(), description: blankLocalizedText(), default_og_image: '' },
@@ -58,6 +60,10 @@ export const siteConfigToForm = (config?: ResellerSiteConfigData | null): Resell
   next.site_name = config.site_name || ''
   next.logo = config.logo || ''
   next.favicon = config.favicon || ''
+  next.scripts = Array.isArray(config.scripts) ? config.scripts.map((script) => ({
+    name: String(script.name || ''), enabled: script.enabled === true,
+    position: script.position === 'body_end' ? 'body_end' : 'head', code: String(script.code || ''),
+  })) : []
   next.announcement = {
     enabled: config.announcement?.enabled === true,
     type: config.announcement?.type || 'info',
@@ -88,6 +94,7 @@ export const siteConfigFormToPayload = (form: ResellerSiteConfigForm): ResellerS
   site_name: form.site_name.trim(),
   logo: form.logo.trim(),
   favicon: form.favicon.trim(),
+  scripts: form.scripts.filter((script) => script.code.trim()).slice(0, MAX_SITE_SCRIPTS).map((script) => ({ ...script, name: script.name.trim(), code: script.code.trim() })),
   announcement: { ...form.announcement },
   support: { ...form.support },
   seo: { ...form.seo },
@@ -100,3 +107,4 @@ export const siteConfigFormToPayload = (form: ResellerSiteConfigForm): ResellerS
 
 /** Max footer / custom nav links (same as original UI). */
 export const MAX_SITE_LINKS = 10
+export const MAX_SITE_SCRIPTS = 20

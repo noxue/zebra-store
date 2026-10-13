@@ -8,6 +8,7 @@ use serde_json::{Map, Value, json};
 
 use super::keys;
 use super::model::SiteConfig;
+use crate::settings::schema::site::normalize_scripts;
 use crate::{Error, Result};
 
 /// Locales of localized fields, in the original order (`constants.SupportedLocales`).
@@ -78,6 +79,7 @@ pub struct SiteConfigInput {
     pub seo: SeoInput,
     pub footer_links: Vec<LinkInput>,
     pub nav_config: NavConfigInput,
+    pub scripts: Value,
 }
 
 /// Normalized site configuration ready to be stored.
@@ -92,6 +94,7 @@ pub struct SiteConfigDraft {
     pub footer_links: Value,
     pub nav_config: Value,
     pub theme: Value,
+    pub scripts: Value,
 }
 
 /// Trims and truncates to `max` characters (`trimLimit`).
@@ -277,6 +280,7 @@ pub fn normalize_site_config(input: &SiteConfigInput) -> Result<SiteConfigDraft>
         footer_links,
         nav_config,
         theme: json!({}),
+        scripts: normalize_scripts(Some(&input.scripts), true),
     })
 }
 
@@ -421,6 +425,24 @@ pub fn overlay_public_config(
         }
     }
     out.insert("brand".into(), Value::Object(brand));
+    let mut scripts = out
+        .remove("scripts")
+        .and_then(|value| value.as_array().cloned())
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|script| script.get("scope").and_then(Value::as_str) == Some("global"))
+        .collect::<Vec<_>>();
+    if let Some(cfg) = site {
+        scripts.extend(
+            cfg.scripts
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|script| script.get("scope").and_then(Value::as_str) == Some("reseller"))
+                .cloned(),
+        );
+    }
+    out.insert("scripts".into(), Value::Array(scripts));
     let Some(cfg) = site else {
         return Value::Object(out);
     };
@@ -554,6 +576,7 @@ mod tests {
             footer_links: json!({"items": [{"url": "https://a.test"}]}),
             nav_config: json!({"builtin": {"blog": false}}),
             theme: json!({}),
+            scripts: json!([]),
             created_at: at(0),
             updated_at: at(0),
             profile: None,
@@ -632,6 +655,25 @@ mod tests {
         assert_eq!(out["brand"]["site_name"], "Main");
         assert_eq!(out["brand"]["site_url"], "https://p.test");
         assert_eq!(out["announcement"]["version"], "main0000");
+    }
+
+    #[test]
+    fn reseller_scripts_include_global_and_own_only() {
+        let mut base = base();
+        base["scripts"] = json!([
+            {"name": "global", "scope": "global", "code": "a()"},
+            {"name": "main", "scope": "main", "code": "b()"},
+            {"name": "legacy", "code": "legacy()"},
+        ]);
+        let without_config = overlay_public_config(base.clone(), "r.test", "r.test", None);
+        assert_eq!(without_config["scripts"].as_array().unwrap().len(), 1);
+        assert_eq!(without_config["scripts"][0]["name"], "global");
+
+        let mut reseller = site(json!({}));
+        reseller.scripts = json!([{"name": "own", "scope": "reseller", "code": "c()"}]);
+        let with_config = overlay_public_config(base, "r.test", "r.test", Some(&reseller));
+        assert_eq!(with_config["scripts"].as_array().unwrap().len(), 2);
+        assert_eq!(with_config["scripts"][1]["name"], "own");
     }
 
     #[test]

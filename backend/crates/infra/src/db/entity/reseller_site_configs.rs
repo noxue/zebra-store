@@ -27,6 +27,8 @@ pub struct Model {
     pub nav_config_json: Option<Json>,
     #[sea_orm(column_type = "Json", nullable)]
     pub theme_json: Option<Json>,
+    #[sea_orm(column_type = "Json", nullable)]
+    pub scripts_json: Option<Json>,
     #[sea_orm(indexed)]
     pub created_at: DateTimeUtc,
     #[sea_orm(indexed)]

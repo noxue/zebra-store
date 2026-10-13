@@ -55,7 +55,6 @@ dot2.com 实验环境和全新本地实例，整理在 `handbook/public/screensh
 | `admin/authz-audit.png` | 权限审计日志 | 后台/authz-audit-logs | 至少有一次角色授权操作 | admin | 1440×900 | admin/rbac.md |
 | `admin/security.png` | 管理员安全设置 | 后台/security | 默认状态 | admin | 1440×900 | admin/security.md |
 | `admin/notifications.png` | 通知中心 | 后台/settings/notifications | 默认状态 | admin | 1440×1200 整页 | admin/notifications.md |
-| `admin/telegram-bot.png` | Telegram Bot 概览 | 后台/telegram-bot | 默认状态 | admin | 1440×900 | admin/telegram.md |
 | `admin/categories.png` | 商品分类 | 后台/categories | 有父子分类 | admin | 1440×900 | admin/products.md |
 | `admin/products.png` | 商品列表 | 后台/products | 默认列表 | admin | 1440×900 | admin/products.md |
 | `admin/product-edit.png` | 商品编辑弹窗 | 后台/products?product_id={lab-e2e-card 的 id} | 打开编辑弹窗，滚动到 SKU 区域 | admin | 1440×1000 | admin/products.md |

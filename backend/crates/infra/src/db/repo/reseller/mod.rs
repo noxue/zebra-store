@@ -121,6 +121,7 @@ pub(crate) fn site_model(m: sites_t::Model, profile: Option<Profile>) -> SiteCon
         footer_links: json_or(m.footer_links_json, json!({})),
         nav_config: json_or(m.nav_config_json, json!({})),
         theme: json_or(m.theme_json, json!({})),
+        scripts: json_or(m.scripts_json, json!([])),
         created_at: m.created_at,
         updated_at: m.updated_at,
         profile,

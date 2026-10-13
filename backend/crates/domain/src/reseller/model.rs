@@ -244,6 +244,7 @@ pub struct SiteConfig {
     pub footer_links: Value,
     pub nav_config: Value,
     pub theme: Value,
+    pub scripts: Value,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub profile: Option<Profile>,

@@ -266,6 +266,12 @@ export default defineComponent({
                         </FormField>
                       </div>
                       <Switch v-model={script.enabled} label={t('admin.settings.scripts.enabled')} />
+                      <FormField label={t('admin.settings.scripts.scope')}>
+                        <Select v-model={script.scope} options={[
+                          { label: t('admin.settings.scripts.scopeMain'), value: 'main' },
+                          { label: t('admin.settings.scripts.scopeGlobal'), value: 'global' },
+                        ]} />
+                      </FormField>
                       <FormField label={t('admin.settings.scripts.code')}>
                         <Textarea v-model={script.code} rows={7} mono placeholder={t('admin.settings.scripts.codePlaceholder')} />
                       </FormField>

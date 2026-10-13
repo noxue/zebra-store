@@ -49,7 +49,10 @@ pub fn normalize_site(value: &Value) -> Value {
         localized_block(input.get("legal"), &["terms", "privacy"]),
     );
     out.insert("about".into(), normalize_about(input.get("about")));
-    out.insert("scripts".into(), normalize_scripts(input.get("scripts")));
+    out.insert(
+        "scripts".into(),
+        normalize_scripts(input.get("scripts"), false),
+    );
     out.insert(
         "footer_links".into(),
         normalize_footer_links(input.get("footer_links")),
@@ -127,7 +130,7 @@ fn localized_list(raw: Option<&Value>, max: usize) -> Value {
     Value::Array(list)
 }
 
-fn normalize_scripts(raw: Option<&Value>) -> Value {
+pub fn normalize_scripts(raw: Option<&Value>, reseller: bool) -> Value {
     let items = raw.and_then(Value::as_array).cloned().unwrap_or_default();
     let mut out = Vec::new();
     for item in items.iter().filter_map(Value::as_object) {
@@ -144,6 +147,7 @@ fn normalize_scripts(raw: Option<&Value>) -> Value {
             "enabled": parse_bool(item.get("enabled")),
             "position": position,
             "code": code,
+            "scope": if reseller { "reseller" } else if text(item.get("scope")) == "global" { "global" } else { "main" },
         }));
         if out.len() >= SCRIPTS_MAX {
             break;
@@ -660,6 +664,7 @@ mod tests {
         assert_eq!(out["scripts"].as_array().unwrap().len(), SCRIPTS_MAX);
         assert_eq!(out["scripts"][0]["position"], "head");
         assert_eq!(out["scripts"][0]["enabled"], true);
+        assert_eq!(out["scripts"][0]["scope"], "main");
         assert_eq!(out["footer_links"], json!([{"name": "A", "url": "/a"}]));
         assert_eq!(out["currency"], "USD");
         assert_eq!(out["template_mode"], "card");
@@ -668,6 +673,16 @@ mod tests {
         assert_eq!(out["seo"]["title"]["en-US"], "");
         assert!(out.get("languages").is_none());
         assert_eq!(out["theme"]["primary_color"], THEME_PRIMARY_DEFAULT);
+    }
+
+    #[test]
+    fn script_scope_is_limited_to_global_or_main() {
+        let out = normalize_site(&json!({"scripts": [
+            {"name": "main", "code": "a()", "scope": "main"},
+            {"name": "forged", "code": "b()", "scope": "reseller"},
+        ]}));
+        assert_eq!(out["scripts"][0]["scope"], "main");
+        assert_eq!(out["scripts"][1]["scope"], "main");
     }
 
     #[test]

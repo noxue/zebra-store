@@ -49,10 +49,7 @@ fn defaults() -> Map<String, Value> {
         "storefront_template".into(),
         json!(STOREFRONT_TEMPLATE_DEFAULT),
     );
-    m.insert(
-        "contact".into(),
-        json!({"telegram": "https://telegram.me/dujiaoka", "whatsapp": "https://wa.me/1234567890"}),
-    );
+    m.insert("contact".into(), json!({"telegram": "", "whatsapp": ""}));
     m.insert("scripts".into(), json!([]));
     m
 }

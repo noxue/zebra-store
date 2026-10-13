@@ -339,7 +339,7 @@ Other config keys in use:
 - `telegram_auth{enabled,bot_username,mode,mini_app_url}`, `google_auth{enabled,client_id}`
 - `registration_enabled`, `email_verification_enabled`, `email_domain_allowlist_enabled`, `allowed_email_domains`
 - `wallet_only_payment`, `wallet_recharge_channel_ids`, `affiliate.withdraw_channels`
-- `seo{title,keywords,description,default_og_image}`, `scripts[{name,enabled,position:'head'|'body_end',code}]`
+- `seo{title,keywords,description,default_og_image}`, `scripts[{name,enabled,position:'head'|'body_end',scope:'global'|'main'|'reseller',code}]`; reseller scripts run only in a sandboxed frame.
 - `tenant.mode`, `server_time`, `app_version`
 
 ## 6. i18n (`src/i18n/index.ts`, `src/i18n/locales/*.json`)

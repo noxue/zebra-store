@@ -703,6 +703,7 @@
         "saveFailed": "Failed to save site config, please check your input and try again",
         "inactive": "Site config can be edited after reseller access is active.",
         "emptyLinks": "No footer links",
+        "scriptsHint": "Scripts run only inside an isolated frame on your reseller site. They cannot read the parent page, login tokens, or cookies. Main-only scripts are never inherited. Widgets that must modify the parent page may not work in isolation.",
         "sections": {
           "brand": "Branding",
           "support": "Support Contacts",
@@ -725,7 +726,9 @@
           "content": "Content",
           "contentDescription": "Announcement and SEO",
           "navigation": "Navigation",
-          "navigationDescription": "Footer and navigation"
+          "navigationDescription": "Footer and navigation",
+          "scripts": "Scripts",
+          "scriptsDescription": "Your support code"
         },
         "nav": {
           "blog": "Blog",
@@ -779,6 +782,7 @@
         },
         "actions": {
           "addLink": "Add Link",
+          "addScript": "Add Script",
           "remove": "Remove"
         },
         "fields": {
@@ -799,7 +803,13 @@
           "ogImage": "Share Image URL",
           "footerLinks": "Footer Links",
           "linkName": "Link Name",
-          "navVisibility": "Navigation Visibility"
+          "navVisibility": "Navigation Visibility",
+          "scriptName": "Script name",
+          "scriptPosition": "Load position",
+          "scriptHead": "Page head",
+          "scriptBodyEnd": "Page bottom",
+          "scriptEnabled": "Enable script",
+          "scriptCode": "Support code or JS snippet"
         }
       },
       "productSettings": {

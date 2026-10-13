@@ -409,6 +409,7 @@ impl SiteConfigRepo for MemStore {
             footer_links: draft.footer_links.clone(),
             nav_config: draft.nav_config.clone(),
             theme: draft.theme.clone(),
+            scripts: draft.scripts.clone(),
             created_at: now,
             updated_at: now,
             profile: None,

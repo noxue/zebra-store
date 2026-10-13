@@ -42,8 +42,8 @@ describe('settingsUtils: basic tab', () => {
 
   it('normalizes site scripts and footer links', () => {
     expect(normalizeSiteScripts([{ name: 'ga', enabled: 'yes', position: 'body_end', code: 'x' }, { enabled: 0 }, 'junk'])).toEqual([
-      { name: 'ga', enabled: true, position: 'body_end', code: 'x' },
-      { name: '', enabled: false, position: 'head', code: '' },
+      { name: 'ga', enabled: true, position: 'body_end', scope: 'main', code: 'x' },
+      { name: '', enabled: false, position: 'head', scope: 'main', code: '' },
     ])
     expect(normalizeFooterLinks([{ name: 'ICP', url: '/icp' }, { name: '  ', url: 'x' }])).toEqual([{ name: 'ICP', url: '/icp' }])
   })

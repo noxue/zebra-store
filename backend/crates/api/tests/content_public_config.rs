@@ -59,7 +59,7 @@ async fn public_config_shape() {
     assert_eq!(d["languages"], json!(["zh-CN", "zh-TW", "en-US"]));
     assert_eq!(d["currency"], "CNY");
     assert_eq!(d["storefront_template"], "classic");
-    assert_eq!(d["contact"]["telegram"], "https://telegram.me/dujiaoka");
+    assert_eq!(d["contact"]["telegram"], "");
     assert_eq!(d["scripts"], json!([]));
     assert_eq!(
         d["captcha"],

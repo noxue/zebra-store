@@ -3,8 +3,6 @@ import { adminAPI } from '@/api/admin'
 import type { AdminTelegramBotRuntimeStatus } from '@/api/types'
 import { formatDate } from '@/utils/format'
 
-export const LICENSE_PURCHASE_URL = 'https://dujiao-next.com/services/telegram-bot'
-
 export const formatRuntimeDate = (value: unknown): string => {
   if (typeof value !== 'string' || !value) return '-'
   return formatDate(value) || '-'

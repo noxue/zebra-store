@@ -52,7 +52,7 @@ Zebra Store 支持通过汇付进行支付宝、微信 H5 和 PC 收款，包括
 | <a href="handbook/public/screenshots/admin/dashboard.png"><img src="handbook/public/screenshots/admin/dashboard.png" width="440" alt="仪表盘"></a><br>仪表盘 | <a href="handbook/public/screenshots/admin/products.png"><img src="handbook/public/screenshots/admin/products.png" width="440" alt="商品管理"></a><br>商品管理 |
 
 <details>
-<summary>查看全部管理后台页面截图（47 张）</summary>
+<summary>查看全部管理后台页面截图（46 张）</summary>
 
 |  |  |
 |---|---|
@@ -76,7 +76,7 @@ Zebra Store 支持通过汇付进行支付宝、微信 H5 和 PC 收款，包括
 | <a href="handbook/public/screenshots/admin/risk-control.png"><img src="handbook/public/screenshots/admin/risk-control.png" width="440" alt="风险控制"></a><br>风险控制 | <a href="handbook/public/screenshots/admin/security.png"><img src="handbook/public/screenshots/admin/security.png" width="440" alt="安全设置"></a><br>安全设置 |
 | <a href="handbook/public/screenshots/admin/settings-basic.png"><img src="handbook/public/screenshots/admin/settings-basic.png" width="440" alt="基础设置"></a><br>基础设置 | <a href="handbook/public/screenshots/admin/settings-theme.png"><img src="handbook/public/screenshots/admin/settings-theme.png" width="440" alt="主题设置"></a><br>主题设置 |
 | <a href="handbook/public/screenshots/admin/site-connection-edit.png"><img src="handbook/public/screenshots/admin/site-connection-edit.png" width="440" alt="编辑站点连接"></a><br>编辑站点连接 | <a href="handbook/public/screenshots/admin/site-connections.png"><img src="handbook/public/screenshots/admin/site-connections.png" width="440" alt="站点连接"></a><br>站点连接 |
-| <a href="handbook/public/screenshots/admin/telegram-bot.png"><img src="handbook/public/screenshots/admin/telegram-bot.png" width="440" alt="Telegram 机器人"></a><br>Telegram 机器人 | <a href="handbook/public/screenshots/admin/user-detail.png"><img src="handbook/public/screenshots/admin/user-detail.png" width="440" alt="用户详情"></a><br>用户详情 |
+| <a href="handbook/public/screenshots/admin/user-detail.png"><img src="handbook/public/screenshots/admin/user-detail.png" width="440" alt="用户详情"></a><br>用户详情 |  |
 | <a href="handbook/public/screenshots/admin/user-login-logs.png"><img src="handbook/public/screenshots/admin/user-login-logs.png" width="440" alt="登录日志"></a><br>登录日志 | <a href="handbook/public/screenshots/admin/users.png"><img src="handbook/public/screenshots/admin/users.png" width="440" alt="用户管理"></a><br>用户管理 |
 | <a href="handbook/public/screenshots/admin/wallet-config.png"><img src="handbook/public/screenshots/admin/wallet-config.png" width="440" alt="钱包设置"></a><br>钱包设置 | <a href="handbook/public/screenshots/admin/wallet-recharges.png"><img src="handbook/public/screenshots/admin/wallet-recharges.png" width="440" alt="钱包充值"></a><br>钱包充值 |
 | <a href="handbook/public/screenshots/admin/wholesale.png"><img src="handbook/public/screenshots/admin/wholesale.png" width="440" alt="批发设置"></a><br>批发设置 |  |

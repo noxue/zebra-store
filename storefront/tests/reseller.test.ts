@@ -192,6 +192,7 @@ describe('site config form', () => {
       id: 1,
       updated_at: '',
       site_name: ' Shop ',
+      scripts: [{ name: ' Chat ', enabled: true, position: 'body_end', code: ' chat() ' }],
       footer_links: [{ name: { 'zh-CN': '链接', 'zh-TW': '', 'en-US': '' }, url: 'https://a' }],
       nav_config: { builtin: { blog: false }, custom_items: [] },
     })
@@ -201,6 +202,7 @@ describe('site config form', () => {
     const payload = siteConfigFormToPayload(form)
     expect(payload.site_name).toBe('Shop')
     expect(payload.footer_links).toHaveLength(1)
+    expect(payload.scripts).toEqual([{ name: 'Chat', enabled: true, position: 'body_end', code: 'chat()' }])
   })
 })
 
