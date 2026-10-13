@@ -27,7 +27,9 @@ use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 use zs_domain::queue::kinds;
-use zs_infra::db::entity::{order_items, orders, payments, procurement_orders, products};
+use zs_infra::db::entity::{
+    gateway_refund_attempts, order_items, orders, payments, procurement_orders, products,
+};
 use zs_infra::payment::http::{HttpResponse, MockTransport};
 
 const EMAIL: &str = "Buyer@Example.com";
@@ -121,6 +123,27 @@ async fn guest_checkout_callback_auto_delivery_and_download() {
     let parent = app.order_by_no(&order_no).await;
     assert_eq!(parent.status, "paid");
     assert_eq!(app.payment(payment_id).await.status, "success");
+    let detail = app
+        .call(
+            "GET",
+            &format!("/api/v1/guest/orders/{order_no}"),
+            None,
+            &guest(),
+        )
+        .await;
+    assert_eq!(detail["data"]["refund_mode"], "contact_support");
+    let unsupported = app
+        .call(
+            "POST",
+            &format!("/api/v1/guest/orders/{order_no}/refund"),
+            None,
+            &guest(),
+        )
+        .await;
+    assert_ne!(
+        unsupported["status_code"], 0,
+        "unsupported channel must not submit a refund"
+    );
     let children = app.children(parent.id).await;
     assert_eq!(children.len(), 1);
     assert_eq!(children[0].status, "paid");
@@ -526,7 +549,7 @@ async fn huifu_pending_original_refund_is_queried_and_applied_once() {
             "POST",
             "/api/v1/guest/orders/create-and-pay",
             Some(json!({
-                "email": "huifu-refund@example.com",
+                "email": EMAIL,
                 "order_password": PASSWORD,
                 "items": [{"product_id": product, "sku_id": sku, "quantity": 1}],
                 "channel_id": channel,
@@ -556,36 +579,112 @@ async fn huifu_pending_original_refund_is_queried_and_applied_once() {
     let mut order = order.into_active_model();
     order.status = Set("paid".into());
     order.paid_at = Set(Some(paid_at));
+    order.online_paid_amount = Set(order_common::dec("0.01"));
     order.update(&app.db).await.unwrap();
 
-    let request = json!({"amount": "0.01", "remark": "refund retry"});
+    let detail = app
+        .call(
+            "GET",
+            &format!(
+                "/api/v1/guest/orders/{}",
+                created["data"]["order_no"].as_str().unwrap()
+            ),
+            None,
+            &guest(),
+        )
+        .await;
+    assert_eq!(detail["data"]["refund_mode"], "automatic");
+    let denied = app
+        .call(
+            "POST",
+            &format!(
+                "/api/v1/guest/orders/{}/refund",
+                created["data"]["order_no"].as_str().unwrap()
+            ),
+            None,
+            &Auth::Guest(EMAIL.into(), "wrong-password".into()),
+        )
+        .await;
+    assert_ne!(denied["status_code"], 0);
+    let request = json!({"amount": "0.01", "remark": "buyer_requested_refund"});
     let first = app
+        .call(
+            "POST",
+            &format!(
+                "/api/v1/guest/orders/{}/refund",
+                created["data"]["order_no"].as_str().unwrap()
+            ),
+            None,
+            &guest(),
+        )
+        .await;
+    assert_eq!(first["status_code"], 0, "{first}");
+    assert_eq!(first["data"]["status"], "pending");
+    let guest_path = format!(
+        "/api/v1/guest/orders/{}/refund",
+        created["data"]["order_no"].as_str().unwrap()
+    );
+    let admin_path = format!("/api/v1/admin/orders/{order_id}/original-refund");
+    let buyer_auth = guest();
+    let (buyer_retry, admin_retry) = tokio::join!(
+        app.call("POST", &guest_path, None, &buyer_auth),
+        app.admin_call("POST", &admin_path, Some(request.clone()))
+    );
+    assert_eq!(buyer_retry["status_code"], 0, "{buyer_retry}");
+    assert_eq!(admin_retry["status_code"], 0, "{admin_retry}");
+    assert_eq!(refund_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(query_calls.load(Ordering::SeqCst), 0);
+    let attempt_id = gateway_refund_attempts::Entity::find()
+        .filter(gateway_refund_attempts::Column::OrderId.eq(order_id))
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap()
+        .id;
+    gateway_refund_attempts::Entity::update_many()
+        .col_expr(
+            gateway_refund_attempts::Column::CreatedAt,
+            sea_orm::sea_query::Expr::value(chrono::Utc::now() - chrono::Duration::seconds(31)),
+        )
+        .col_expr(
+            gateway_refund_attempts::Column::UpdatedAt,
+            sea_orm::sea_query::Expr::value(chrono::Utc::now() - chrono::Duration::seconds(31)),
+        )
+        .filter(gateway_refund_attempts::Column::Id.eq(attempt_id))
+        .exec(&app.db)
+        .await
+        .unwrap();
+    app.services
+        .order
+        .service
+        .reconcile_gateway_refunds()
+        .await
+        .unwrap();
+
+    let second = app
         .admin_call(
             "POST",
             &format!("/api/v1/admin/orders/{order_id}/original-refund"),
             Some(request.clone()),
         )
         .await;
-    assert_eq!(first["status_code"], 0, "{first}");
-    assert_eq!(first["data"]["attempt"]["status"], "pending");
-    assert_eq!(first["data"]["order"], Value::Null);
-
-    let second = app
-        .admin_call(
-            "POST",
-            &format!("/api/v1/admin/orders/{order_id}/original-refund"),
-            Some(request),
-        )
-        .await;
     assert_eq!(second["status_code"], 0, "{second}");
     assert_eq!(second["data"]["attempt"]["status"], "succeeded");
     assert_eq!(second["data"]["order"]["refunded_amount"], "0.01");
+    assert!(
+        gateway_refund_attempts::Entity::find_by_id(attempt_id)
+            .one(&app.db)
+            .await
+            .unwrap()
+            .unwrap()
+            .card_confirmed
+    );
 
     let replay = app
         .admin_call(
             "POST",
             &format!("/api/v1/admin/orders/{order_id}/original-refund"),
-            Some(json!({"amount": "0.01", "remark": "refund retry"})),
+            Some(request),
         )
         .await;
     assert_eq!(

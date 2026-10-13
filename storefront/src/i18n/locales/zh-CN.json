@@ -1611,6 +1611,21 @@
   },
   "orderDetail": {
     "title": "订单详情",
+    "refundNotice": "如果买错或不再需要，可以申请退款；退款成功后，款项将原路返回。已使用的卡密需人工核查。",
+    "requestRefund": "申请原路退款",
+    "contactRefundSupport": "联系客服申请人工退款",
+    "refundConfirm": "确认申请全额原路退款？系统会先核查卡密是否未使用。",
+    "refundSucceeded": "退款已由支付渠道确认",
+    "refundPending": "退款处理中，请稍后查看订单状态",
+    "refundFailed": "暂时无法自动退款，请联系客服核查",
+    "refundState": {
+      "checking": "正在核查卡密和退款资格",
+      "processing": "支付渠道正在处理退款，请稍后查看",
+      "awaiting_support": "客服正在处理原路退款，卡密已锁定",
+      "syncing": "支付渠道已确认退款，卡密状态正在同步",
+      "succeeded": "退款已成功，款项原路返回",
+      "needs_review": "退款需要客服人工核查"
+    },
     "subtitle": "查看订单状态与交付信息",
     "notFound": "订单不存在或已被删除",
     "payNow": "去支付",

@@ -27,6 +27,8 @@ pub struct Model {
     pub remark: String,
     #[sea_orm(default_value = false)]
     pub payment_fee_refunded: bool,
+    #[sea_orm(default_value = false)]
+    pub card_confirmed: bool,
     #[sea_orm(column_type = "Json", nullable)]
     pub payload: Option<Json>,
     #[sea_orm(column_type = "Text")]

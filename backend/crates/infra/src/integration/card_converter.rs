@@ -4,7 +4,10 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use serde::Deserialize;
-use zs_domain::integration::card_converter::{ConverterHttp, ExchangeRequest, ExchangeResponse};
+use zs_domain::integration::card_converter::{
+    ConverterHttp, ConverterRefundRef, ConverterRefundRequest, ConverterRefundStatus,
+    ExchangeRequest, ExchangeResponse,
+};
 use zs_domain::{Error, Result};
 
 use super::http::{AddressPolicy, build_no_redirect_client, check_url, read_limited};
@@ -95,6 +98,59 @@ fn health_ok() -> bool {
 
 #[async_trait]
 impl ConverterHttp for HttpCardConverter {
+    async fn prepare_refund(
+        &self,
+        base: &str,
+        token: &str,
+        request: &ConverterRefundRequest,
+    ) -> Result<ConverterRefundStatus> {
+        if request.order_no.trim().is_empty()
+            || request.refund_no.trim().is_empty()
+            || request.cards.is_empty()
+            || request.cards.len() > 100
+            || request
+                .cards
+                .iter()
+                .any(|card| card.trim().is_empty() || card.len() > 4096)
+        {
+            return Err(Error::bad_request("error.card_converter_request_invalid"));
+        }
+        self.request_json(
+            reqwest::Method::POST,
+            self.endpoint(base, "/integration/v1/refunds/prepare")?,
+            token,
+            Some(serde_json::to_vec(request)?),
+        )
+        .await
+    }
+
+    async fn confirm_refund(
+        &self,
+        base: &str,
+        token: &str,
+        reference: &ConverterRefundRef,
+    ) -> Result<ConverterRefundStatus> {
+        self.refund_action(base, token, "confirm", reference).await
+    }
+
+    async fn cancel_refund(
+        &self,
+        base: &str,
+        token: &str,
+        reference: &ConverterRefundRef,
+    ) -> Result<ConverterRefundStatus> {
+        self.refund_action(base, token, "cancel", reference).await
+    }
+
+    async fn refund_status(
+        &self,
+        base: &str,
+        token: &str,
+        reference: &ConverterRefundRef,
+    ) -> Result<ConverterRefundStatus> {
+        self.refund_action(base, token, "status", reference).await
+    }
+
     async fn health(&self, base: &str, token: &str) -> Result<()> {
         let url = self.endpoint(base, "/health")?;
         let response = self
@@ -176,6 +232,27 @@ impl ConverterHttp for HttpCardConverter {
             }
         }
         Ok(response)
+    }
+}
+
+impl HttpCardConverter {
+    async fn refund_action(
+        &self,
+        base: &str,
+        token: &str,
+        action: &str,
+        reference: &ConverterRefundRef,
+    ) -> Result<ConverterRefundStatus> {
+        if reference.order_no.trim().is_empty() || reference.refund_no.trim().is_empty() {
+            return Err(Error::bad_request("error.card_converter_request_invalid"));
+        }
+        self.request_json(
+            reqwest::Method::POST,
+            self.endpoint(base, &format!("/integration/v1/refunds/{action}"))?,
+            token,
+            Some(serde_json::to_vec(reference)?),
+        )
+        .await
     }
 }
 

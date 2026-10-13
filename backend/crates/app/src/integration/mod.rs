@@ -82,6 +82,30 @@ impl OrderEvents {
 
 #[async_trait]
 impl IntegrationOrderEvents for OrderEvents {
+    async fn prepare_refund(
+        &self,
+        order: &zs_domain::order::model::Order,
+        refund_no: &str,
+    ) -> Result<bool> {
+        self.card_converters.prepare_refund(order, refund_no).await
+    }
+
+    async fn confirm_refund(
+        &self,
+        order: &zs_domain::order::model::Order,
+        refund_no: &str,
+    ) -> Result<()> {
+        self.card_converters.confirm_refund(order, refund_no).await
+    }
+
+    async fn cancel_refund(
+        &self,
+        order: &zs_domain::order::model::Order,
+        refund_no: &str,
+    ) -> Result<()> {
+        self.card_converters.cancel_refund(order, refund_no).await
+    }
+
     async fn requires_converter(&self, order: &zs_domain::order::model::Order) -> Result<bool> {
         self.card_converters.has_binding(order).await
     }

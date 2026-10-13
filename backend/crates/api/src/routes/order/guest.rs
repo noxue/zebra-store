@@ -32,6 +32,7 @@ pub(super) fn routes() -> Routes {
         .post("/orders/preview", preview)
         .get("/orders", list)
         .get("/orders/{order_no}", detail)
+        .post("/orders/{order_no}/refund", request_refund)
         .get(
             "/orders/{order_no}/fulfillment/download",
             download_fulfillment,
@@ -241,6 +242,19 @@ async fn detail(
     let svc = &s.svc.order.service;
     let order = svc.get_order(&viewer, &tenant.0, &order_no).await?;
     ok(detail_json(svc, &order, true).await?)
+}
+
+async fn request_refund(
+    _: GuestWrite,
+    State(s): State<AppState>,
+    GuestViewer(viewer): GuestViewer,
+    tenant: TenantCtx,
+    Path(order_no): Path<String>,
+) -> ApiResult<Data<Value>> {
+    let svc = &s.svc.order.service;
+    let order = svc.get_order(&viewer, &tenant.0, &order_no).await?;
+    let result = svc.buyer_original_refund(&order).await?;
+    ok(json!({"status": result.attempt.status, "refund_no": result.attempt.refund_no}))
 }
 
 async fn download_fulfillment(

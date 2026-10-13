@@ -3,9 +3,165 @@
 mod order_common;
 
 use order_common::{Auth, OrderApp};
+use sea_orm::EntityTrait;
 use sea_orm::prelude::Decimal;
 use sea_orm::{ActiveModelTrait, ActiveValue::NotSet, IntoActiveModel, Set};
 use serde_json::json;
+use zs_infra::db::entity::{orders, payments};
+
+/// A manual channel must lock the order before support transfers funds, and recording
+/// the external transfer twice may create only one local refund.
+#[tokio::test]
+async fn manual_refund_requires_transfer_confirmation_and_is_idempotent() {
+    let app = OrderApp::new().await;
+    let (product, sku) = app
+        .product("manual-refund", json!({"price_amount": "10.00"}))
+        .await;
+    app.secrets(product, sku, 1).await;
+    let (_, token) = app.user("refund-manual@example.com", 0).await;
+    let auth = Auth::Bearer(token);
+    let channel = app
+        .admin_call(
+            "POST",
+            "/api/v1/admin/payment-channels",
+            Some(json!({
+                "name":"Manual", "provider_type":"manual_qr", "channel_type":"alipay",
+                "interaction_mode":"qr", "payment_types":["order"],
+                "config_json":{"qr_image_url":"/uploads/manual.png"}
+            })),
+        )
+        .await;
+    assert_eq!(channel["status_code"], 0, "{channel}");
+    let created = app
+        .call(
+            "POST",
+            "/api/v1/orders",
+            Some(json!({
+                "items":[{"product_id":product,"sku_id":sku,"quantity":1}]
+            })),
+            &auth,
+        )
+        .await;
+    assert_eq!(created["status_code"], 0, "{created}");
+    let payment = app
+        .call(
+            "POST",
+            "/api/v1/payments",
+            Some(json!({
+                "order_no": created["data"]["order_no"], "channel_id": channel["data"]["id"]
+            })),
+            &auth,
+        )
+        .await;
+    assert_eq!(payment["status_code"], 0, "{payment}");
+    let payment_id = payment["data"]["payment_id"].as_i64().unwrap();
+    let payment_row = payments::Entity::find_by_id(payment_id)
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let order_id = payment_row.order_id;
+    let mut payment_row = payment_row.into_active_model();
+    payment_row.status = Set("success".into());
+    payment_row.paid_at = Set(Some(chrono::Utc::now()));
+    payment_row.update(&app.db).await.unwrap();
+    let order_row = orders::Entity::find_by_id(order_id)
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut order_row = order_row.into_active_model();
+    order_row.status = Set("paid".into());
+    order_row.paid_at = Set(Some(chrono::Utc::now()));
+    order_row.online_paid_amount = Set("10.00".parse().unwrap());
+    order_row.update(&app.db).await.unwrap();
+
+    let detail = app
+        .call(
+            "GET",
+            &format!(
+                "/api/v1/orders/{}",
+                created["data"]["order_no"].as_str().unwrap()
+            ),
+            None,
+            &auth,
+        )
+        .await;
+    assert_eq!(detail["data"]["refund_mode"], "contact_support");
+    let automatic = app
+        .admin_call(
+            "POST",
+            &format!("/api/v1/admin/orders/{order_id}/original-refund"),
+            Some(json!({"amount":"10.00"})),
+        )
+        .await;
+    assert_ne!(automatic["status_code"], 0, "{automatic}");
+
+    let uri = format!("/api/v1/admin/orders/{order_id}/manual-refund/prepare");
+    let prepared = app
+        .admin_call(
+            "POST",
+            &uri,
+            Some(json!({"amount":"10.00","remark":"support"})),
+        )
+        .await;
+    assert_eq!(prepared["status_code"], 0, "{prepared}");
+    assert_eq!(prepared["data"]["attempt"]["status"], "manual_awaiting");
+    assert_eq!(
+        format!("{:.2}", app.order(order_id).await.refunded_amount),
+        "0.00"
+    );
+    let duplicate = app
+        .admin_call(
+            "POST",
+            &uri,
+            Some(json!({"amount":"10.00","remark":"support"})),
+        )
+        .await;
+    assert_eq!(
+        duplicate["data"]["attempt"]["id"],
+        prepared["data"]["attempt"]["id"]
+    );
+    let blocked = app
+        .admin_call(
+            "POST",
+            &format!("/api/v1/admin/orders/{order_id}/manual-refund"),
+            Some(json!({"amount":"10.00"})),
+        )
+        .await;
+    assert_ne!(blocked["status_code"], 0, "{blocked}");
+    let confirm_uri = format!("/api/v1/admin/orders/{order_id}/manual-refund/confirm");
+    let invalid = app
+        .admin_call(
+            "POST",
+            &confirm_uri,
+            Some(json!({
+                "attempt_id": prepared["data"]["attempt"]["id"], "transfer_ref":""
+            })),
+        )
+        .await;
+    assert_ne!(invalid["status_code"], 0);
+    let body =
+        json!({"attempt_id": prepared["data"]["attempt"]["id"], "transfer_ref":"BANK-REF-1"});
+    let confirmed = app
+        .admin_call("POST", &confirm_uri, Some(body.clone()))
+        .await;
+    assert_eq!(confirmed["status_code"], 0, "{confirmed}");
+    let replay = app.admin_call("POST", &confirm_uri, Some(body)).await;
+    assert_eq!(replay["status_code"], 0, "{replay}");
+    assert_eq!(
+        replay["data"]["refund_record"]["id"],
+        confirmed["data"]["refund_record"]["id"]
+    );
+    assert_eq!(
+        format!("{:.2}", app.order(order_id).await.refunded_amount),
+        "10.00"
+    );
+    let records = app
+        .admin_call("GET", "/api/v1/admin/order-refunds", None)
+        .await;
+    assert_eq!(records["data"].as_array().unwrap().len(), 1);
+}
 
 /// PAY-03: one manual channel exposes two named methods beside another gateway,
 /// and each selected method reaches its own collection image.

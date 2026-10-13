@@ -41,6 +41,7 @@ export default defineComponent({
             <EmptyState variant="error" title={t('guestOrderDetail.notFound')} />
           </Card>
         ) : (
+          <>
           <OrderBody order={d.order.value} helpers={d.helpers} downloading={d.fulfillmentDownloading.value} exportDownloading={d.exportDownloading.value} onDownload={(no: string) => void d.handleDownloadFulfillment(no)} onExport={() => void d.exportOrder()}>
             {{
               actions: () =>
@@ -61,6 +62,22 @@ export default defineComponent({
                 ) : null,
             }}
           </OrderBody>
+          {((d.order.value.refund_mode && d.order.value.refund_mode !== 'none') || (d.order.value.refund_state && d.order.value.refund_state !== 'none')) && (
+            <Card class="mt-5">
+              <p class="mb-3 text-sm text-muted">{t('orderDetail.refundNotice')}</p>
+              {d.order.value.refund_state && !['none', 'needs_review'].includes(d.order.value.refund_state) ? (
+                <p class="text-sm text-fg">{t('orderDetail.refundState.' + d.order.value.refund_state)}</p>
+              ) : d.order.value.refund_mode === 'automatic' && d.order.value.refund_state !== 'needs_review' ? (
+                <Button size="sm" loading={d.refundSubmitting.value} onClick={() => void d.requestRefund()}>{t('orderDetail.requestRefund')}</Button>
+              ) : (
+                <div class="space-y-2">
+                  {d.order.value.refund_state === 'needs_review' && <p class="text-sm text-warning-text">{t('orderDetail.refundState.needs_review')}</p>}
+                  <Button size="sm" variant="secondary" to="/about">{t('orderDetail.contactRefundSupport')}</Button>
+                </div>
+              )}
+            </Card>
+          )}
+          </>
         )}
       </div>
     )

@@ -15,7 +15,7 @@ zs-app = { path = "crates/app" }
 zs-infra = { path = "crates/infra" }
 zs-migration = { path = "crates/migration" }
 zs-api = { path = "crates/api" }
-huifu-pay = "0.2"
+huifu-pay = { git = "https://github.com/noxue/huifu-pay.git", rev = "cdc4a08" }
 
 tokio = { version = "1.53", features = ["full"] }
 axum = { version = "0.8", features = ["multipart", "macros"] }

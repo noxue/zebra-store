@@ -871,6 +871,16 @@
       },
       {
         "subject": "",
+        "object": "/admin/orders/:id/manual-refund/prepare",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/orders/:id/manual-refund/confirm",
+        "action": "POST"
+      },
+      {
+        "subject": "",
         "object": "/admin/orders/:id/original-refund",
         "action": "POST"
       },

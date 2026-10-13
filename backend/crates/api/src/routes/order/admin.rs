@@ -30,6 +30,8 @@ pub(super) fn routes() -> Routes {
         .patch("/orders/{id}", update_status)
         .post("/orders/{id}/refund-to-wallet", refund_to_wallet)
         .post("/orders/{id}/manual-refund", manual_refund)
+        .post("/orders/{id}/manual-refund/prepare", prepare_manual_refund)
+        .post("/orders/{id}/manual-refund/confirm", confirm_manual_refund)
         .post("/orders/{id}/original-refund", original_refund)
         .get("/orders/{id}/fulfillment/download", download_fulfillment)
         .get("/order-refunds", list_refunds)
@@ -80,13 +82,30 @@ async fn list(State(s): State<AppState>, Query(q): Params) -> ApiResult<Paged<Ad
 }
 
 async fn detail(State(s): State<AppState>, Path(id): Path<String>) -> ApiResult<Data<Value>> {
-    let detail = s
-        .svc
-        .order
-        .service
-        .admin_order_detail(order_id(&id)?)
-        .await?;
-    ok(serde_json::to_value(detail).map_err(Error::from)?)
+    let svc = &s.svc.order.service;
+    let detail = svc.admin_order_detail(order_id(&id)?).await?;
+    let mode = svc
+        .buyer_refund_mode(&detail.order)
+        .await
+        .unwrap_or("contact_support");
+    let detail_order_id = detail.order.id;
+    let mut value = serde_json::to_value(detail).map_err(Error::from)?;
+    if let Some(object) = value.as_object_mut() {
+        object.insert("refund_mode".into(), mode.into());
+        object.insert(
+            "refund_state".into(),
+            svc.public_refund_state(detail_order_id)
+                .await
+                .unwrap_or("none")
+                .into(),
+        );
+        object.insert(
+            "refund_attempt".into(),
+            serde_json::to_value(svc.latest_refund_attempt(detail_order_id).await?)
+                .map_err(Error::from)?,
+        );
+    }
+    ok(value)
 }
 
 #[derive(Debug, Deserialize)]
@@ -170,6 +189,52 @@ async fn manual_refund(
             &req.remark,
             req.payment_fee_refunded,
         )
+        .await?;
+    ok(json!({"order": done.order, "refund_record": done.record}))
+}
+
+async fn prepare_manual_refund(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+    Bind(req): Bind<RefundBody>,
+) -> ApiResult<Data<Value>> {
+    let attempt = s
+        .svc
+        .order
+        .service
+        .prepare_manual_refund(
+            order_id(&id)?,
+            &amount_text(&req.amount)?,
+            &req.remark,
+            req.payment_fee_refunded,
+        )
+        .await?;
+    ok(json!({"attempt": attempt}))
+}
+
+#[derive(Debug, Deserialize)]
+struct ManualConfirmBody {
+    attempt_id: Id,
+    transfer_ref: String,
+}
+
+impl BindRules for ManualConfirmBody {
+    const FIELDS: &'static [BindField] = &[
+        req("attempt_id", "Attempt ID"),
+        req("transfer_ref", "Transfer reference"),
+    ];
+}
+
+async fn confirm_manual_refund(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+    Bind(req): Bind<ManualConfirmBody>,
+) -> ApiResult<Data<Value>> {
+    let done = s
+        .svc
+        .order
+        .service
+        .confirm_manual_refund(order_id(&id)?, req.attempt_id, &req.transfer_ref)
         .await?;
     ok(json!({"order": done.order, "refund_record": done.record}))
 }

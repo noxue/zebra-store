@@ -268,6 +268,7 @@ Wiring is in `internal/app/httpserver/router.go`, `routes_storefront.go`, `route
 | POST | `/guest/orders/preview` | Price preview |
 | GET | `/guest/orders` | List guest orders |
 | GET | `/guest/orders/:order_no` | Order detail |
+| POST | `/guest/orders/:order_no/refund` | Guest-authenticated full original-route refund; only for supported gateway and eligible unused delivery |
 | GET | `/guest/orders/:order_no/fulfillment/download` | Download delivered content |
 | GET | `/guest/payments/latest` | Latest payment (read limit) |
 | POST | `/guest/orders` | Create order (write limit, captcha scene `guest_create_order`) |
@@ -327,6 +328,7 @@ Wiring is in `internal/app/httpserver/router.go`, `routes_storefront.go`, `route
 | POST | `/orders/create-and-pay` | Create and pay (`channel_id`, `use_balance`) |
 | POST | `/order/payment-channels` | Allowed channels (`amount`, `order_no`, `items`) |
 | GET | `/orders`, `/orders/stats`, `/orders/:order_no` | List, stats, detail |
+| POST | `/orders/:order_no/refund` | Owner-authenticated full original-route refund; same durable flow as admin |
 | GET | `/orders/:order_no/fulfillment/download` | Download delivered content |
 | POST | `/orders/:order_no/cancel` | Cancel |
 | POST | `/payments` | Start payment (`order_no`, `channel_id`, `use_balance`) |
@@ -520,7 +522,10 @@ All four paths can be replaced by admin-set custom paths (settings key `callback
 | GET | `/orders/:id` | Detail |
 | PATCH | `/orders/:id` | Change status (`{status}`) |
 | POST | `/orders/:id/refund-to-wallet` | Refund to wallet (`amount`, `remark`) |
-| POST | `/orders/:id/manual-refund` | Record a manual refund (`amount`, `remark`, `payment_fee_refunded`) |
+| POST | `/orders/:id/manual-refund` | Legacy wallet-only administrative record (`amount`, `remark`, `payment_fee_refunded`); online-paid orders must use the two-step flow |
+| POST | `/orders/:id/manual-refund/prepare` | Unsupported automatic channel: validate payment and amount, reserve a durable manual attempt, lock converter cards; returns `attempt` in `manual_awaiting` with no completed refund record |
+| POST | `/orders/:id/manual-refund/confirm` | After support returns funds to the original method, submit `{attempt_id,transfer_ref}`; idempotently record one refund, invalidate converter cards and release safe upstream binding; failed card confirmation is retried |
+| POST | `/orders/:id/original-refund` | Admin original-route refund; submits only when the gateway supports the amount, and uses the durable refund attempt and card barrier |
 | GET | `/order-refunds`, `/order-refunds/:id` | Refund records |
 | PATCH | `/order-refunds/:id/payment-fee` | Set fee-refunded flag |
 | GET | `/orders/:id/fulfillment/download` | Download delivered content |

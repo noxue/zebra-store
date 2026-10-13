@@ -177,6 +177,9 @@ export interface AdminFulfillment {
 export interface AdminOrder {
   id: number
   order_no: string
+  refund_mode?: 'none' | 'automatic' | 'contact_support'
+  refund_state?: 'none' | 'checking' | 'processing' | 'awaiting_support' | 'syncing' | 'succeeded' | 'needs_review'
+  refund_attempt?: { id: number; status: string; amount: Money; remark: string; payment_fee_refunded: boolean } | null
   parent_id?: number
   user_id?: number
   guest_email?: string
@@ -1575,6 +1578,10 @@ export interface AdminManualRefundPayload {
   amount: string
   remark?: string
   payment_fee_refunded?: boolean
+}
+
+export interface AdminOriginalRefundResponse {
+  attempt: { status: 'preparing' | 'pending' | 'succeeded' | 'failed'; id: number }
 }
 
 export interface AdminUpdateRefundPaymentFeePayload {

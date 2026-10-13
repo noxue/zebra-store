@@ -6,7 +6,7 @@ import { errorMessage } from '@/api/client'
 import { downloadBlob } from '@/utils/download'
 import { canManualRefund, canRefundToWallet, checkRefundAmount, refundableAmountValue } from './orderUtils'
 
-export type RefundTab = 'wallet' | 'manual'
+export type RefundTab = 'original' | 'wallet' | 'manual'
 
 /** State + actions of the order detail dialog (fetch, refunds, fulfillment download). */
 export function useOrderDetail(opts: { maxRefundDays: () => number; onChanged: () => void }) {
@@ -20,14 +20,17 @@ export function useOrderDetail(opts: { maxRefundDays: () => number; onChanged: (
 
   const refundTab = ref<RefundTab>('wallet')
   const wallet = reactive({ amount: '', remark: '', submitting: false, error: '', success: '' })
-  const manual = reactive({ amount: '', reason: '', paymentFeeRefunded: true, submitting: false, error: '', success: '' })
+  const original = reactive({ amount: '', remark: '', submitting: false, error: '', success: '' })
+  const manual = reactive({ amount: '', reason: '', transferRef: '', paymentFeeRefunded: true, submitting: false, error: '', success: '' })
   const downloading = ref(false)
 
-  const defaultRefundTab = (o: AdminOrder | null): RefundTab => (o?.user_id ? 'wallet' : 'manual')
+  const defaultRefundTab = (o: AdminOrder | null): RefundTab =>
+    o?.refund_mode === 'automatic' ? 'original' : o?.user_id && Number(o?.online_paid_amount ?? 0) === 0 ? 'wallet' : 'manual'
 
   const resetForms = () => {
     Object.assign(wallet, { amount: '', remark: '', error: '', success: '' })
-    Object.assign(manual, { amount: '', reason: '', paymentFeeRefunded: true, error: '', success: '' })
+    Object.assign(original, { amount: '', remark: '', error: '', success: '' })
+    Object.assign(manual, { amount: '', reason: '', transferRef: '', paymentFeeRefunded: true, error: '', success: '' })
   }
 
   const fetchDetail = async (orderId: number, keepTab = false) => {
@@ -40,7 +43,7 @@ export function useOrderDetail(opts: { maxRefundDays: () => number; onChanged: (
       const res = await adminAPI.getOrder(orderId)
       if (current !== seq) return
       order.value = res.data
-      if (!keepTab || !res.data?.user_id) refundTab.value = defaultRefundTab(res.data)
+      if (!keepTab) refundTab.value = defaultRefundTab(res.data)
       try {
         const proc = await adminAPI.getProcurementOrders({ order_no: res.data?.order_no, page_size: 1 })
         if (current === seq && Array.isArray(proc.data) && proc.data.length > 0) procurement.value = proc.data[0] ?? null
@@ -122,13 +125,13 @@ export function useOrderDetail(opts: { maxRefundDays: () => number; onChanged: (
     }
     manual.submitting = true
     try {
-      await adminAPI.manualRefundOrder(o.id, {
+      await adminAPI.prepareManualRefundOrder(o.id, {
         amount: manual.amount.trim(),
         remark: manual.reason.trim() || undefined,
         payment_fee_refunded: manual.paymentFeeRefunded,
       })
       await fetchDetail(o.id, true)
-      manual.success = t('admin.orders.manualRefundSuccess')
+      manual.success = t('admin.orders.manualRefundPrepared')
       manual.amount = ''
       manual.reason = ''
       manual.paymentFeeRefunded = true
@@ -137,6 +140,66 @@ export function useOrderDetail(opts: { maxRefundDays: () => number; onChanged: (
       manual.error = errorMessage(err, t('admin.orders.refundFailed'))
     } finally {
       manual.submitting = false
+    }
+  }
+
+  const confirmManual = async () => {
+    const o = order.value
+    const attempt = o?.refund_attempt
+    if (!o || !attempt || attempt.status !== 'manual_awaiting') return
+    manual.error = ''
+    manual.success = ''
+    if (!manual.transferRef.trim()) {
+      manual.error = t('admin.orders.manualTransferRefRequired')
+      return
+    }
+    manual.submitting = true
+    try {
+      await adminAPI.confirmManualRefundOrder(o.id, {
+        attempt_id: attempt.id,
+        transfer_ref: manual.transferRef.trim(),
+      })
+      await fetchDetail(o.id, true)
+      manual.success = t('admin.orders.manualRefundSuccess')
+      manual.transferRef = ''
+      opts.onChanged()
+    } catch (err) {
+      manual.error = errorMessage(err, t('admin.orders.refundFailed'))
+    } finally {
+      manual.submitting = false
+    }
+  }
+
+  const submitOriginal = async () => {
+    const o = order.value
+    if (!o) return
+    original.error = ''
+    original.success = ''
+    if (!canManualRefund(o, opts.maxRefundDays())) {
+      original.error = t('admin.orders.refundNoRemaining')
+      return
+    }
+    const invalid = amountError(original.amount)
+    if (invalid) {
+      original.error = invalid
+      return
+    }
+    original.submitting = true
+    try {
+      const response = await adminAPI.originalRefundOrder(o.id, {
+        amount: original.amount.trim(),
+        remark: original.remark.trim() || undefined,
+        payment_fee_refunded: false,
+      })
+      await fetchDetail(o.id, true)
+      original.success = response.data?.attempt?.status === 'succeeded'
+        ? t('admin.orders.originalRefundSuccess')
+        : t('admin.orders.originalRefundPending')
+      opts.onChanged()
+    } catch (err) {
+      original.error = errorMessage(err, t('admin.orders.refundFailed'))
+    } finally {
+      original.submitting = false
     }
   }
 
@@ -161,6 +224,7 @@ export function useOrderDetail(opts: { maxRefundDays: () => number; onChanged: (
     procurement,
     refundTab,
     wallet,
+    original,
     manual,
     downloading,
     open,
@@ -168,6 +232,8 @@ export function useOrderDetail(opts: { maxRefundDays: () => number; onChanged: (
     fetchDetail,
     submitWallet,
     submitManual,
+    confirmManual,
+    submitOriginal,
     downloadFulfillment,
   }
 }
