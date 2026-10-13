@@ -445,7 +445,10 @@ pub(crate) async fn refund_in<C: ConnectionTrait>(
         }
         None
     };
-    if gateway_attempt.is_none() && order.online_paid_amount.is_positive() {
+    // A child keeps the checkout split snapshot. The successful payment and
+    // wallet/online split belong to its parent.
+    let paid_order = parent.as_ref().unwrap_or(&order);
+    if gateway_attempt.is_none() && paid_order.online_paid_amount.is_positive() {
         return Err(Error::bad_request("error.gateway_refund_pending"));
     }
     if req.to_wallet && order.user_id == 0 {
