@@ -366,9 +366,11 @@ async fn site_configs_admin() {
     );
 
     let saved = app
-        .admin_call("PUT", &url, Some(json!({"site_name": "Admin Set"})))
+        .admin_call("PUT", &url, Some(json!({"site_name": "Admin Set", "storefront_template": "vault", "template_mode": "list", "theme": {"accent_color": "#abc"}})))
         .await;
     assert_eq!(data(&saved)["site_name"], "Admin Set");
+    assert_eq!(data(&saved)["storefront_template"], "vault");
+    assert_eq!(data(&saved)["theme"]["accent_color"], "#abc");
     assert_eq!(data(&saved)["reseller_id"], pid);
     err(
         &app.admin_call("PUT", &url, Some(json!({"logo": "javascript:1"})))

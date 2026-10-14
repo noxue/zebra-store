@@ -1030,6 +1030,9 @@ export interface AdminResellerLocalizedText {
 
 export interface AdminResellerSiteConfigPayload {
   site_name?: string
+  storefront_template?: string
+  template_mode?: string
+  theme?: Partial<Record<'primary_color' | 'secondary_color' | 'accent_color' | 'background_color' | 'surface_color' | 'text_color', string>>
   logo?: string
   favicon?: string
   scripts?: Array<{ name: string; enabled: boolean; position: 'head' | 'body_end'; code: string }>
@@ -1067,6 +1070,9 @@ export interface AdminResellerSiteConfigPayload {
 
 export interface AdminResellerSiteConfig extends Required<Pick<AdminResellerSiteConfigPayload, 'announcement' | 'support' | 'seo' | 'nav_config' | 'scripts'>> {
   id: number
+  storefront_template?: string
+  template_mode?: string
+  theme?: AdminResellerSiteConfigPayload['theme']
   reseller_id: number
   site_name: string
   logo: string

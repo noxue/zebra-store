@@ -728,7 +728,9 @@
           "navigation": "Navigation",
           "navigationDescription": "Footer and navigation",
           "scripts": "Scripts",
-          "scriptsDescription": "Your support code"
+          "scriptsDescription": "Your support code",
+          "appearance": "Appearance",
+          "appearanceDescription": "Template and colors"
         },
         "nav": {
           "blog": "Blog",
@@ -810,6 +812,21 @@
           "scriptBodyEnd": "Page bottom",
           "scriptEnabled": "Enable script",
           "scriptCode": "Support code or JS snippet"
+        },
+        "appearance": {
+          "inherit": "Use main site",
+          "inheritHint": "Blank fields inherit the main site. Selecting a template uses its palette; entered colors override it.",
+          "template": "Storefront template",
+          "layout": "Product layout",
+          "card": "Cards",
+          "list": "List",
+          "colorPlaceholder": "Blank uses default color",
+          "primary_color": "Primary",
+          "secondary_color": "Secondary",
+          "accent_color": "Accent",
+          "background_color": "Background",
+          "surface_color": "Surface",
+          "text_color": "Text"
         }
       },
       "productSettings": {
@@ -1498,7 +1515,8 @@
         "support": "Support",
         "seo": "SEO",
         "announcement": "Announcement"
-      }
+      },
+      "appearanceEntry": "Templates & colors"
     },
     "products": {
       "title": "Product Pricing",

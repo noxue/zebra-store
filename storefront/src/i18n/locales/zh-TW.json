@@ -728,7 +728,9 @@
           "navigation": "導航",
           "navigationDescription": "頁腳與導覽",
           "scripts": "腳本",
-          "scriptsDescription": "獨立客服代碼"
+          "scriptsDescription": "獨立客服代碼",
+          "appearance": "外觀",
+          "appearanceDescription": "範本與配色"
         },
         "nav": {
           "blog": "部落格",
@@ -810,6 +812,21 @@
           "scriptBodyEnd": "頁尾",
           "scriptEnabled": "啟用腳本",
           "scriptCode": "客服代碼或 JS 片段"
+        },
+        "appearance": {
+          "inherit": "跟隨主站",
+          "inheritHint": "留空的項目繼承主站設定；選擇範本後使用該範本的預設配色，填寫顏色可單獨覆蓋。",
+          "template": "商店範本",
+          "layout": "商品佈局",
+          "card": "卡片",
+          "list": "列表",
+          "colorPlaceholder": "留空則使用預設顏色",
+          "primary_color": "主色",
+          "secondary_color": "輔助色",
+          "accent_color": "強調色",
+          "background_color": "背景色",
+          "surface_color": "卡片色",
+          "text_color": "文字色"
         }
       },
       "productSettings": {
@@ -1498,7 +1515,8 @@
         "support": "客服",
         "seo": "SEO",
         "announcement": "公告"
-      }
+      },
+      "appearanceEntry": "模板與配色"
     },
     "products": {
       "title": "商品定價",

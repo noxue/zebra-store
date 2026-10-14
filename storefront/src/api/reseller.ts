@@ -19,6 +19,7 @@ import type {
   ResellerProductSettingPreviewData,
   ResellerProductSettingUpdatePayload,
   ResellerSiteConfigPayload,
+  ResellerSiteConfigData,
   ResellerSiteConfigSnapshotData,
   ResellerUploadResult,
   ResellerWithdrawApplyPayload,
@@ -39,7 +40,7 @@ export const resellerAPI = {
   domainSetup: () => userApi.get<ResellerDomainSetupData>('/reseller/domain-setup'),
   submitDomain: (data: ResellerCustomDomainPayload) => userApi.post<ResellerDomainData>('/reseller/domains', data),
   siteConfig: () => userApi.get<ResellerSiteConfigSnapshotData>('/reseller/site-config'),
-  updateSiteConfig: (data: ResellerSiteConfigPayload) => userApi.put<ResellerSiteConfigSnapshotData>('/reseller/site-config', data),
+  updateSiteConfig: (data: ResellerSiteConfigPayload) => userApi.put<ResellerSiteConfigData>('/reseller/site-config', data),
   uploadImage: (file: File) => {
     const form = new FormData()
     form.append('file', file)

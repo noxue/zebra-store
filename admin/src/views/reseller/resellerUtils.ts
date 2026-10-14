@@ -175,6 +175,9 @@ export const NAV_BUILTIN_KEYS = ['blog', 'notice', 'about'] as const
 
 export interface ResellerSiteConfigForm {
   site_name: string
+  storefront_template: string
+  template_mode: string
+  theme: Record<'primary_color' | 'secondary_color' | 'accent_color' | 'background_color' | 'surface_color' | 'text_color', string>
   logo: string
   favicon: string
   scripts: Array<{ name: string; enabled: boolean; position: 'head' | 'body_end'; code: string }>
@@ -202,6 +205,9 @@ export interface ResellerSiteConfigForm {
 
 export const createBlankSiteConfigForm = (): ResellerSiteConfigForm => ({
   site_name: '',
+  storefront_template: '',
+  template_mode: '',
+  theme: { primary_color: '', secondary_color: '', accent_color: '', background_color: '', surface_color: '', text_color: '' },
   logo: '',
   favicon: '',
   scripts: [],
@@ -229,6 +235,12 @@ export const siteConfigToForm = (row: AdminResellerSiteConfig): ResellerSiteConf
   const builtin = row.nav_config?.builtin || {}
   return {
     site_name: row.site_name || '',
+    storefront_template: row.storefront_template || '',
+    template_mode: row.template_mode || '',
+    theme: {
+      primary_color: row.theme?.primary_color || '', secondary_color: row.theme?.secondary_color || '', accent_color: row.theme?.accent_color || '',
+      background_color: row.theme?.background_color || '', surface_color: row.theme?.surface_color || '', text_color: row.theme?.text_color || '',
+    },
     logo: row.logo || '',
     favicon: row.favicon || '',
     scripts: Array.isArray(row.scripts) ? row.scripts.map((script) => ({
@@ -266,6 +278,9 @@ export const siteConfigToForm = (row: AdminResellerSiteConfig): ResellerSiteConf
 
 export const buildSiteConfigPayload = (form: ResellerSiteConfigForm): AdminResellerSiteConfigPayload => ({
   site_name: form.site_name.trim(),
+  storefront_template: form.storefront_template,
+  template_mode: form.template_mode,
+  theme: Object.fromEntries(Object.entries(form.theme).map(([key, color]) => [key, color.trim()])),
   logo: form.logo.trim(),
   favicon: form.favicon.trim(),
   scripts: form.scripts.filter((script) => script.code.trim()).slice(0, 20).map((script) => ({ ...script, name: script.name.trim(), code: script.code.trim() })),

@@ -35,7 +35,7 @@ const ANNOUNCEMENT_TYPES = [
   { value: 'warning', icon: CircleAlert, iconClass: 'text-warning-text' },
 ] as const
 
-const TABS: SiteConfigTab[] = ['brand', 'announcement', 'support', 'seo', 'footer', 'nav', 'scripts']
+const TABS: SiteConfigTab[] = ['brand', 'appearance', 'announcement', 'support', 'seo', 'footer', 'nav', 'scripts']
 
 export default defineComponent({
   name: 'ResellerSiteConfigsView',
@@ -120,6 +120,25 @@ export default defineComponent({
     const renderTab = () => {
       const loc = s.activeLocale.value
       switch (s.activeTab.value) {
+        case 'appearance':
+          return (
+            <div class="space-y-4">
+              <p class="text-sm text-muted">{t('admin.resellerSiteConfigs.appearance.inheritHint')}</p>
+              <div class="grid gap-4 sm:grid-cols-2">
+                <FormField label={t('admin.resellerSiteConfigs.appearance.template')}>
+                  <Select v-model={form.storefront_template} options={[{ value: '', label: t('admin.resellerSiteConfigs.appearance.inherit') }, ...['classic', 'vault', 'aurora', 'atelier', 'noir'].map((value) => ({ value, label: value[0].toUpperCase() + value.slice(1) }))]} />
+                </FormField>
+                <FormField label={t('admin.resellerSiteConfigs.appearance.layout')}>
+                  <Select v-model={form.template_mode} options={[{ value: '', label: t('admin.resellerSiteConfigs.appearance.inherit') }, { value: 'card', label: t('admin.resellerSiteConfigs.appearance.card') }, { value: 'list', label: t('admin.resellerSiteConfigs.appearance.list') }]} />
+                </FormField>
+                {(['primary_color', 'secondary_color', 'accent_color', 'background_color', 'surface_color', 'text_color'] as const).map((key) => (
+                  <FormField key={key} label={t(`admin.resellerSiteConfigs.appearance.${key}`)}>
+                    <Input v-model={form.theme[key]} placeholder="#aabbcc" maxlength={7} />
+                  </FormField>
+                ))}
+              </div>
+            </div>
+          )
         case 'brand':
           return (
             <div class="space-y-4">

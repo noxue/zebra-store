@@ -189,6 +189,9 @@ async fn site_config_roundtrip_and_field_errors() {
             Some(json!({
                 "site_name": "Shop",
                 "logo": "/uploads/reseller/a.png",
+                "storefront_template": "aurora",
+                "template_mode": "list",
+                "theme": {"primary_color": "#123abc", "background_color": "#eefbf7"},
                 "footer_links": [{"name": {"zh-CN": "帮助"}, "url": "https://help.test"}],
                 "nav_config": {"builtin": {"blog": false}},
                 "scripts": [{"name": "客服", "enabled": true, "position": "body_end", "code": "window.widget=1", "scope": "main"}],
@@ -199,6 +202,9 @@ async fn site_config_roundtrip_and_field_errors() {
     let c = data(&saved);
     assert_eq!(c["footer_links"][0]["url"], "https://help.test");
     assert_eq!(c["scripts"][0]["scope"], "reseller");
+    assert_eq!(c["storefront_template"], "aurora");
+    assert_eq!(c["template_mode"], "list");
+    assert_eq!(c["theme"]["primary_color"], "#123abc");
     assert_eq!(
         c["nav_config"]["builtin"],
         json!({"blog": false, "notice": true, "about": true})
@@ -211,8 +217,20 @@ async fn site_config_roundtrip_and_field_errors() {
         .call("GET", "/api/v1/reseller/site-config", None, Some(&token))
         .await;
     assert_eq!(data(&snap)["config"]["site_name"], "Shop");
+    assert_eq!(
+        data(&snap)["config"]["theme"]["background_color"],
+        "#eefbf7"
+    );
 
     for (body, msg) in [
+        (
+            json!({"storefront_template": "unknown"}),
+            "站点配置不合法，请检查后重试",
+        ),
+        (
+            json!({"theme": {"primary_color": "url(evil)"}}),
+            "站点配置不合法，请检查后重试",
+        ),
         (
             json!({"logo": "ftp://x"}),
             "图片地址无效，请重新上传或填写以 https:// 开头的完整链接",

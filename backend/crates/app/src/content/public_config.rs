@@ -84,7 +84,12 @@ impl PublicConfigService {
             .unwrap_or_else(PoisonError::into_inner)
             .clone();
         let reseller = tenant.reseller_id.filter(|_| overlay.is_some());
-        let cache_key = reseller.map_or_else(|| "main".to_owned(), |id| format!("reseller:{id}"));
+        // The overlay embeds the requested host in tenant and brand.site_url.
+        // Keep distinct domains of one reseller from reusing each other's URL.
+        let cache_key = reseller.map_or_else(
+            || "main".to_owned(),
+            |id| format!("reseller:{id}:{}", tenant.host),
+        );
         let mut data = match self.cache.get(&cache_key) {
             Some(v) => v,
             None => {

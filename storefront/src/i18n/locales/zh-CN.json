@@ -681,7 +681,9 @@
           "navigation": "导航",
           "navigationDescription": "页脚与导航",
           "scripts": "脚本",
-          "scriptsDescription": "独立客服代码"
+          "scriptsDescription": "独立客服代码",
+          "appearance": "外观",
+          "appearanceDescription": "模板与配色"
         },
         "nav": {
           "blog": "博客",
@@ -763,6 +765,21 @@
           "scriptBodyEnd": "页面底部",
           "scriptEnabled": "启用脚本",
           "scriptCode": "客服代码或 JS 片段"
+        },
+        "appearance": {
+          "inherit": "跟随主站",
+          "inheritHint": "留空的项目继承主站设置；选择模板后使用该模板的默认配色，填写颜色可单独覆盖。",
+          "template": "店铺模板",
+          "layout": "商品布局",
+          "card": "卡片",
+          "list": "列表",
+          "colorPlaceholder": "留空则使用默认颜色",
+          "primary_color": "主色",
+          "secondary_color": "辅助色",
+          "accent_color": "强调色",
+          "background_color": "背景色",
+          "surface_color": "卡片色",
+          "text_color": "文字色"
         }
       },
       "productSettings": {
@@ -1451,7 +1468,8 @@
         "support": "客服",
         "seo": "SEO",
         "announcement": "公告"
-      }
+      },
+      "appearanceEntry": "模板与配色"
     },
     "products": {
       "title": "商品定价",

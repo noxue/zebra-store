@@ -9,7 +9,7 @@ export interface TabItem {
   count?: number
 }
 
-/** Pill tabs; horizontally scrollable on small screens. */
+/** Pill tabs wrap on narrow screens so every option remains visible. */
 export const Tabs = defineComponent({
   name: 'ZsTabs',
   props: {
@@ -20,8 +20,8 @@ export const Tabs = defineComponent({
   emits: { 'update:modelValue': (_v: string) => true },
   setup(props, { emit }) {
     return () => (
-      <div class="zs-scroll-x">
-        <div role="tablist" class="inline-flex min-w-max gap-1 rounded-full border border-line bg-surface p-1">
+      <div>
+        <div role="tablist" class="inline-flex max-w-full flex-wrap gap-1 rounded-zs border border-line bg-surface p-1">
           {props.items.map((item) => {
             const active = item.key === props.modelValue
             const Icon = item.icon

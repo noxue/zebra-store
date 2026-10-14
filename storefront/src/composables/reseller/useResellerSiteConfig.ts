@@ -1,5 +1,6 @@
 import { computed, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 import { errorMessage } from '@/api/client'
 import { resellerAPI } from '@/api/reseller'
 import type { ResellerSiteConfigSnapshotData } from '@/api/types'
@@ -18,10 +19,11 @@ import {
 } from '@/utils/reseller/siteConfig'
 import { useResellerProfileContext } from './useResellerProfile'
 
-export type SiteSection = 'brand' | 'support' | 'content' | 'navigation' | 'scripts'
+export type SiteSection = 'brand' | 'appearance' | 'support' | 'content' | 'navigation' | 'scripts'
 
 export const useResellerSiteConfig = () => {
   const { t } = useI18n()
+  const route = useRoute()
   const appStore = useAppStore()
   const profile = useResellerProfileContext()
   const loading = ref(true)
@@ -31,7 +33,8 @@ export const useResellerSiteConfig = () => {
   const form = reactive(createBlankSiteConfigForm())
   const baseline = ref('')
   const activeLocale = ref<ResellerLocale>('zh-CN')
-  const activeSection = ref<SiteSection>('brand')
+  const section = route.query.section
+  const activeSection = ref<SiteSection>(section === 'appearance' ? 'appearance' : 'brand')
 
   const canEdit = computed(() => canEditResellerSiteConfig(snapshot.value))
   const dirty = computed(() => !loading.value && !saving.value && baseline.value !== '' && JSON.stringify(form) !== baseline.value)
@@ -75,7 +78,7 @@ export const useResellerSiteConfig = () => {
     alert.value = null
     try {
       const res = await resellerAPI.updateSiteConfig(siteConfigFormToPayload(form))
-      assign(res.data && 'config' in res.data ? res.data : { opened: true, can_edit: true, config: snapshot.value?.config })
+      assign({ opened: true, can_edit: true, config: res.data })
       alert.value = { tone: 'success', message: t('personalCenter.reseller.siteConfig.saveSuccess') }
       await appStore.loadConfig(true).catch(() => undefined)
     } catch (err) {

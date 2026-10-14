@@ -24,6 +24,7 @@ export default defineComponent({
       { to: '/reseller/domains', label: 'resellerConsole.nav.domains', icon: Globe },
       { to: '/reseller/products', label: 'resellerConsole.nav.products', icon: Tag },
       { to: '/reseller/site', label: 'resellerConsole.nav.site', icon: Settings },
+      { to: '/reseller/site?section=appearance', label: 'resellerConsole.site.appearanceEntry', icon: Palette },
     ]
 
     const orderColumns = columns<ResellerOrderData>([
@@ -175,7 +176,7 @@ export default defineComponent({
 
             <section>
               <h3 class="zs-title mb-3 text-lg text-fg">{t('resellerConsole.dashboard.quickActions')}</h3>
-              <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <div class="grid grid-cols-2 gap-3 lg:grid-cols-5">
                 {quickActions.map((a) => {
                   const Icon = a.icon
                   return (

@@ -25,7 +25,7 @@ export const Tabs = defineComponent({
       <div
         role="tablist"
         class={cn(
-          'flex max-w-full gap-1 overflow-x-auto',
+          'flex max-w-full flex-wrap gap-1',
           props.variant === 'pills' ? 'zs-glass w-fit flex-wrap rounded-zs p-1' : 'border-b border-line',
         )}
       >

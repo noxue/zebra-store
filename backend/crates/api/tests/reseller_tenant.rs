@@ -8,6 +8,20 @@ use reseller_common::{App, BASE, config, data, err};
 use serde_json::json;
 use zs_domain::content::public::Tenant;
 
+async fn public_config_at(app: &App, host: &str) -> serde_json::Value {
+    let (status, body) = app
+        .raw(
+            "GET",
+            "/api/v1/public/config",
+            None,
+            None,
+            &[("host", host)],
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    data(&body).clone()
+}
+
 #[tokio::test]
 async fn reseller_script_scope_isolated_even_without_site_config() {
     let app = App::new().await;
@@ -379,7 +393,7 @@ async fn rsl06_public_config_endpoint_serves_reseller_branding() {
         &app.call(
             "PUT",
             "/api/v1/reseller/site-config",
-            Some(json!({"site_name": "HTTP White Label"})),
+            Some(json!({"site_name": "HTTP White Label", "storefront_template": "noir", "template_mode": "list", "theme": {"primary_color": "#abcdef"}})),
             Some(&token),
         )
         .await,
@@ -398,6 +412,10 @@ async fn rsl06_public_config_endpoint_serves_reseller_branding() {
     let d = data(&body);
     assert_eq!(d["tenant"]["mode"], "reseller");
     assert_eq!(d["brand"]["site_name"], "HTTP White Label");
+    assert_eq!(d["storefront_template"], "noir");
+    assert_eq!(d["template_mode"], "list");
+    assert_eq!(d["theme"]["primary_color"], "#abcdef");
+    assert_eq!(d["theme"]["default_mode"], "dark");
 
     let (_, body) = app
         .raw(
@@ -411,4 +429,79 @@ async fn rsl06_public_config_endpoint_serves_reseller_branding() {
     let d = data(&body);
     assert_eq!(d["tenant"]["mode"], "main");
     assert_ne!(d["brand"]["site_name"], "HTTP White Label");
+    assert_ne!(d["storefront_template"], "noir");
+    assert_ne!(d["theme"]["primary_color"], "#abcdef");
+}
+
+// RSL-06: tenant-aware appearance and cached host URL stay isolated.
+#[tokio::test]
+async fn reseller_appearance_is_isolated_from_main_and_other_resellers() {
+    let app = App::new().await;
+    let (_, first_token, first_id) = app.reseller("appearance-one@example.test", "0").await;
+    let (_, second_token, second_id) = app.reseller("appearance-two@example.test", "0").await;
+    let first_host = app.system_domain(first_id, "appearance-one").await;
+    let second_host = app.system_domain(second_id, "appearance-two").await;
+    let first_alias = "appearance-alias.shop.example.com";
+
+    let main_before = public_config_at(&app, "localhost").await;
+    let second_before = public_config_at(&app, &second_host).await;
+    data(
+        &app.call(
+            "PUT",
+            "/api/v1/reseller/site-config",
+            Some(json!({
+                "site_name": "First shop", "reseller_id": second_id, "storefront_template": "noir",
+                "theme": {"primary_color": "#123abc"}
+            })),
+            Some(&first_token),
+        )
+        .await,
+    );
+
+    let first = public_config_at(&app, &first_host).await;
+    let alias = app
+        .services
+        .content
+        .public_config
+        .get(&Tenant {
+            reseller_id: Some(first_id),
+            host: first_alias.into(),
+        })
+        .await
+        .unwrap_or_else(|e| panic!("{e}"));
+    let main_after = public_config_at(&app, "localhost").await;
+    let second_after = public_config_at(&app, &second_host).await;
+    assert_eq!(first["storefront_template"], "noir");
+    assert_eq!(first["theme"]["primary_color"], "#123abc");
+    assert_eq!(first["brand"]["site_url"], format!("https://{first_host}"));
+    assert_eq!(alias["brand"]["site_url"], format!("https://{first_alias}"));
+    assert_eq!(
+        main_after["storefront_template"],
+        main_before["storefront_template"]
+    );
+    assert_eq!(main_after["theme"], main_before["theme"]);
+    assert_eq!(
+        second_after["storefront_template"],
+        second_before["storefront_template"]
+    );
+    assert_eq!(second_after["theme"], second_before["theme"]);
+
+    data(
+        &app.call(
+            "PUT",
+            "/api/v1/reseller/site-config",
+            Some(json!({
+                "site_name": "Second shop", "storefront_template": "aurora",
+                "theme": {"primary_color": "#fedcba"}
+            })),
+            Some(&second_token),
+        )
+        .await,
+    );
+    let first_after = public_config_at(&app, &first_host).await;
+    let second_after = public_config_at(&app, &second_host).await;
+    assert_eq!(first_after["storefront_template"], "noir");
+    assert_eq!(first_after["theme"]["primary_color"], "#123abc");
+    assert_eq!(second_after["storefront_template"], "aurora");
+    assert_eq!(second_after["theme"]["primary_color"], "#fedcba");
 }

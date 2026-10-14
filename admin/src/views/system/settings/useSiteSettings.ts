@@ -1,7 +1,6 @@
 import { reactive, ref, shallowRef } from 'vue'
 import { adminAPI } from '@/api/admin'
-import type { SiteTheme } from '@/api/types'
-import { applyThemeOverrides, useAppStore } from '@/stores/app'
+import { useAppStore } from '@/stores/app'
 import { applySiteIcon } from '@/utils/favicon'
 import { notifyError, notifySuccess } from '@/utils/notify'
 import { notifyFailure, tr } from './common'
@@ -216,7 +215,6 @@ export function useSiteSettings() {
     rawSiteConfig.value = value
     applySiteIcon(form.brand.site_icon)
     await useAppStore().loadConfig(true)
-    applyThemeOverrides(value.theme as SiteTheme)
   }
 
   const save = async () => {

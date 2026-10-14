@@ -955,6 +955,9 @@ export type ResellerLocalizedText = Record<Locale, string>
 
 export interface ResellerSiteConfigPayload {
   site_name: string
+  storefront_template?: string
+  template_mode?: string
+  theme?: Partial<Record<'primary_color' | 'secondary_color' | 'accent_color' | 'background_color' | 'surface_color' | 'text_color', string>>
   logo?: string
   favicon?: string
   scripts?: Array<{ name: string; enabled: boolean; position: 'head' | 'body_end'; code: string }>

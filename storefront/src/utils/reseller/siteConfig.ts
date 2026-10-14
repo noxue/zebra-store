@@ -32,6 +32,9 @@ export const isResellerSiteSeoConfigured = (
 /** Full form model with every nested object present. */
 export interface ResellerSiteConfigForm {
   site_name: string
+  storefront_template: string
+  template_mode: string
+  theme: Record<'primary_color' | 'secondary_color' | 'accent_color' | 'background_color' | 'surface_color' | 'text_color', string>
   logo: string
   favicon: string
   scripts: Array<{ name: string; enabled: boolean; position: 'head' | 'body_end'; code: string }>
@@ -44,6 +47,9 @@ export interface ResellerSiteConfigForm {
 
 export const createBlankSiteConfigForm = (): ResellerSiteConfigForm => ({
   site_name: '',
+  storefront_template: '',
+  template_mode: '',
+  theme: { primary_color: '', secondary_color: '', accent_color: '', background_color: '', surface_color: '', text_color: '' },
   logo: '',
   favicon: '',
   scripts: [],
@@ -58,6 +64,9 @@ export const siteConfigToForm = (config?: ResellerSiteConfigData | null): Resell
   const next = createBlankSiteConfigForm()
   if (!config) return next
   next.site_name = config.site_name || ''
+  next.storefront_template = config.storefront_template || ''
+  next.template_mode = config.template_mode || ''
+  for (const key of Object.keys(next.theme) as Array<keyof typeof next.theme>) next.theme[key] = config.theme?.[key] || ''
   next.logo = config.logo || ''
   next.favicon = config.favicon || ''
   next.scripts = Array.isArray(config.scripts) ? config.scripts.map((script) => ({
@@ -92,6 +101,9 @@ export const siteConfigToForm = (config?: ResellerSiteConfigData | null): Resell
 
 export const siteConfigFormToPayload = (form: ResellerSiteConfigForm): ResellerSiteConfigPayload => ({
   site_name: form.site_name.trim(),
+  storefront_template: form.storefront_template,
+  template_mode: form.template_mode,
+  theme: Object.fromEntries(Object.entries(form.theme).map(([key, color]) => [key, color.trim()])),
   logo: form.logo.trim(),
   favicon: form.favicon.trim(),
   scripts: form.scripts.filter((script) => script.code.trim()).slice(0, MAX_SITE_SCRIPTS).map((script) => ({ ...script, name: script.name.trim(), code: script.code.trim() })),
