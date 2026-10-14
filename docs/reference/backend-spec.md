@@ -184,7 +184,7 @@ A parent order's status is recalculated from its children (`CalcParentStatus`).
   - type: `order_profit`, `refund_deduct`, `manual_adjust`, `withdraw_lock` or `withdraw_paid`
   - status: `pending_confirm`, `available`, `locked`, `withdrawn` or `canceled`
   - available_at, withdraw_request_id, remark
-- **reseller_withdraw_requests**: reseller_id, amount, currency, channel, account, status (`pending`, `rejected`, `paid`), reject_reason, processed_by, processed_at
+- **reseller_withdraw_requests**: reseller_id, amount, currency, channel, account, payee_name, qr_code_url, status (`pending`, `rejected`, `paid`), reject_reason, processed_by, processed_at
 - **reseller_balance_accounts**: reseller_id + currency (unique), status, available / locked / negative amount caches, last_ledger_entry_id, risk_note
 - **reseller_related_accounts**: reseller_id + user_id (unique), relation_type, source, status, remark, created_by
 
@@ -863,7 +863,7 @@ All four paths can be replaced by admin-set custom paths (settings key `callback
 
 | Key | Contents |
 |---|---|
-| `site_config` | `brand{site_name, site_url, site_icon, site_logo, site_logo_dark, site_description(ml)}`, `contact{telegram, whatsapp}`, `seo{title, keywords, description}` (ml), `legal{terms, privacy}` (ml), `about{hero, introduction, services{title, items}, contact{title, text}}`, `scripts[{name, enabled, position: head/body_end, code}]` (max 20), `footer_links[{name, url}]` (max 20), `currency` (3 letters, default CNY), `template_mode` (card/list), `storefront_template` (classic/vault/aurora/atelier/noir), `theme` (colours, images, effects, `show_home_hero`, `show_footer_quick_links`, `show_repository_link`), `languages` |
+| `site_config` | `brand{site_name, site_url, site_icon, site_logo, site_logo_dark, site_description(ml)}`, `contact{telegram, whatsapp, wechat_id, wechat_qr_code, qq_number, qq_group, wechat_group_qr_code}`, `seo{title, keywords, description}` (ml), `legal{terms, privacy}` (ml), `about{hero, introduction, services{title, items}, contact{title, text}}`, `scripts[{name, enabled, position: head/body_end, code}]` (max 20), `footer_links[{name, url}]` (max 20), `currency` (3 letters, default CNY), `template_mode` (card/list), `storefront_template` (classic/vault/aurora/atelier/noir), `theme` (colours, images, effects, `show_home_hero`, `show_footer_quick_links`, `show_repository_link`), `languages` |
 | `order_config` | payment_expire_minutes, max_refund_days |
 | `smtp_config` | enabled, host, port, username, password, from, from_name, use_tls, use_ssl, order_notification_enabled, verify_code{expire_minutes, send_interval_seconds, max_attempts, length} |
 | `captcha_config` | provider, scenes{…}, image{length, width, height, noise_count, show_line, expire_seconds, max_store}, turnstile{site_key, secret_key, verify_url, timeout_ms} |

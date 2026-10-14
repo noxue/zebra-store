@@ -65,6 +65,16 @@ describe('settingsUtils: basic tab', () => {
 })
 
 describe('settingsUtils: theme', () => {
+  it('keeps uploaded customer-service QR paths when saving main-site settings', () => {
+    const settings = useSiteSettings()
+    settings.loadSite({ contact: { telegram: 'https://t.me/main', wechat_id: 'main_wechat', wechat_qr_code: '/uploads/common/support.png', qq_number: '12345', qq_group: '67890', wechat_group_qr_code: '/uploads/common/group.png' } })
+    const contact = settings.buildSitePayload().contact as Record<string, string>
+    expect(contact.telegram).toBe('https://t.me/main')
+    expect(contact.wechat_id).toBe('main_wechat')
+    expect(contact.wechat_qr_code).toBe('/uploads/common/support.png')
+    expect(contact.qq_group).toBe('67890')
+    expect(contact.wechat_group_qr_code).toBe('/uploads/common/group.png')
+  })
   it('keeps an intentional Sakura palette and resets colours to the selected template', () => {
     const settings = useSiteSettings()
     settings.loadSite({

@@ -214,14 +214,29 @@ it('FE-04 preserves withdrawal success and clears the form when every subsequent
   vi.spyOn(resellerAPI, 'balanceAccounts').mockRejectedValue(new Error('offline'))
   vi.spyOn(resellerAPI, 'withdraws').mockRejectedValue(new Error('offline'))
   const page = harness(useResellerWithdraws)
-  Object.assign(page.form, { amount: '1.00', currency: 'CNY', channel: 'alipay', account: 'test' })
+  Object.assign(page.form, { amount: '1.00', currency: 'CNY', channel: 'alipay', account: 'test', payee_name: '张三', qr_code_url: '/uploads/reseller/payee.png' })
   const submitting = page.submit()
   useConfirmDialog().handleConfirm()
   await submitting
   expect(apply).toHaveBeenCalledOnce()
+  expect(apply).toHaveBeenCalledWith({ amount: '1.00', currency: 'CNY', channel: 'alipay', account: 'test', payee_name: '张三', qr_code_url: '/uploads/reseller/payee.png' })
   expect(page.alert.value?.tone).toBe('success')
   expect(page.form.amount).toBe('')
   expect(page.submittingWithdraw.value).toBe(false)
+})
+
+it('UPL-05 assigns the uploaded reseller QR path and rejects non-images', async () => {
+  const { resellerAPI } = await import('@/api/reseller')
+  const { useResellerWithdraws } = await import('@/composables/reseller/useResellerWithdraws')
+  const upload = vi.spyOn(resellerAPI, 'uploadImage').mockResolvedValue(response({ url: '/uploads/reseller/receipt.png', filename: 'receipt.png', size: 10 }))
+  const page = harness(useResellerWithdraws)
+  await page.uploadQr(new File(['not an image'], 'note.txt', { type: 'text/plain' }))
+  expect(upload).not.toHaveBeenCalled()
+  expect(page.qrUploadError.value).toContain('图片')
+  await page.uploadQr(new File(['png'], 'receipt.png', { type: 'image/png' }))
+  expect(upload).toHaveBeenCalledOnce()
+  expect(page.form.qr_code_url).toBe('/uploads/reseller/receipt.png')
+  expect(page.qrUploadError.value).toBe('')
 })
 
 it('FE-08 immediate purchase leaves existing cart lines and storage unchanged', async () => {

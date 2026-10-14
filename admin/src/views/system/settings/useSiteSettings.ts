@@ -59,7 +59,7 @@ export function useSiteSettings() {
       site_description: createLocalizedField(),
     },
     currency: 'CNY',
-    contact: { telegram: '', whatsapp: '' },
+    contact: { telegram: '', whatsapp: '', wechat_id: '', wechat_qr_code: '', qq_number: '', qq_group: '', wechat_group_qr_code: '' },
     seo: { title: createLocalizedField(), keywords: createLocalizedField(), description: createLocalizedField() },
     about: {
       hero: { title: createLocalizedField(), subtitle: createLocalizedField() },
@@ -89,6 +89,11 @@ export function useSiteSettings() {
     const contact = asRecord(data.contact)
     form.contact.telegram = asString(contact.telegram)
     form.contact.whatsapp = asString(contact.whatsapp)
+    form.contact.wechat_id = asString(contact.wechat_id)
+    form.contact.wechat_qr_code = asString(contact.wechat_qr_code)
+    form.contact.qq_number = asString(contact.qq_number)
+    form.contact.qq_group = asString(contact.qq_group)
+    form.contact.wechat_group_qr_code = asString(contact.wechat_group_qr_code)
     const seo = asRecord(data.seo)
     form.seo.title = normalizeLocalizedField(seo.title)
     form.seo.keywords = normalizeLocalizedField(seo.keywords)

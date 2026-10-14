@@ -131,7 +131,7 @@ export interface SiteConfig {
   storefront_template?: string
   nav_config?: NavConfig
   footer_links?: FooterLink[]
-  contact?: { telegram?: string; whatsapp?: string }
+  contact?: { telegram?: string; whatsapp?: string; email?: string; support_url?: string; wechat_id?: string; wechat_qr_code?: string; qq_number?: string; qq_group?: string; wechat_group_qr_code?: string }
   support?: { telegram?: string; whatsapp?: string; email?: string; support_url?: string }
   announcement?: AnnouncementConfig | null
   about?: AboutConfig
@@ -972,6 +972,11 @@ export interface ResellerSiteConfigPayload {
     whatsapp?: string
     email?: string
     support_url?: string
+    wechat_id?: string
+    wechat_qr_code?: string
+    qq_number?: string
+    qq_group?: string
+    wechat_group_qr_code?: string
   }
   seo?: {
     title: ResellerLocalizedText
@@ -1118,6 +1123,8 @@ export interface ResellerWithdrawData {
   currency: string
   channel: string
   account: string
+  payee_name?: string
+  qr_code_url?: string
   status: string
   reject_reason?: string
   processed_at?: string
@@ -1188,6 +1195,8 @@ export interface ResellerWithdrawApplyPayload {
   currency: string
   channel: string
   account: string
+  payee_name?: string
+  qr_code_url?: string
 }
 
 export interface PageParams {

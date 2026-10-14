@@ -1047,6 +1047,11 @@ export interface AdminResellerSiteConfigPayload {
     whatsapp?: string
     email?: string
     support_url?: string
+    wechat_id?: string
+    wechat_qr_code?: string
+    qq_number?: string
+    qq_group?: string
+    wechat_group_qr_code?: string
   }
   seo?: {
     title?: AdminResellerLocalizedText
@@ -1313,6 +1318,8 @@ export interface AdminResellerWithdraw {
   currency: string
   channel: string
   account: string
+  payee_name?: string
+  qr_code_url?: string
   status: string
   reject_reason?: string
   processed_by?: number

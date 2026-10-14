@@ -192,6 +192,11 @@ export interface ResellerSiteConfigForm {
     whatsapp: string
     email: string
     support_url: string
+    wechat_id: string
+    wechat_qr_code: string
+    qq_number: string
+    qq_group: string
+    wechat_group_qr_code: string
   }
   seo: {
     title: ResellerLocalizedText
@@ -217,7 +222,7 @@ export const createBlankSiteConfigForm = (): ResellerSiteConfigForm => ({
     title: blankLocalizedText(),
     content: blankLocalizedText(),
   },
-  support: { telegram: '', whatsapp: '', email: '', support_url: '' },
+  support: { telegram: '', whatsapp: '', email: '', support_url: '', wechat_id: '', wechat_qr_code: '', qq_number: '', qq_group: '', wechat_group_qr_code: '' },
   seo: {
     title: blankLocalizedText(),
     keywords: blankLocalizedText(),
@@ -258,6 +263,11 @@ export const siteConfigToForm = (row: AdminResellerSiteConfig): ResellerSiteConf
       whatsapp: String(support.whatsapp || ''),
       email: String(support.email || ''),
       support_url: String(support.support_url || ''),
+      wechat_id: String(support.wechat_id || ''),
+      wechat_qr_code: String(support.wechat_qr_code || ''),
+      qq_number: String(support.qq_number || ''),
+      qq_group: String(support.qq_group || ''),
+      wechat_group_qr_code: String(support.wechat_group_qr_code || ''),
     },
     seo: {
       title: normalizeLocalizedTextForForm(seo.title),
@@ -295,6 +305,11 @@ export const buildSiteConfigPayload = (form: ResellerSiteConfigForm): AdminResel
     whatsapp: form.support.whatsapp.trim(),
     email: form.support.email.trim(),
     support_url: form.support.support_url.trim(),
+    wechat_id: form.support.wechat_id.trim(),
+    wechat_qr_code: form.support.wechat_qr_code.trim(),
+    qq_number: form.support.qq_number.trim(),
+    qq_group: form.support.qq_group.trim(),
+    wechat_group_qr_code: form.support.wechat_group_qr_code.trim(),
   },
   seo: {
     title: form.seo.title,

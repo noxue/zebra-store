@@ -42,6 +42,11 @@ pub struct SupportInput {
     pub whatsapp: String,
     pub email: String,
     pub support_url: String,
+    pub wechat_id: String,
+    pub wechat_qr_code: String,
+    pub qq_number: String,
+    pub qq_group: String,
+    pub wechat_group_qr_code: String,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -279,7 +284,21 @@ pub fn normalize_support(input: &SupportInput) -> Result<Value> {
         return Err(field(keys::SUPPORT_EMAIL_INVALID));
     }
     let url = support_url(&input.support_url).ok_or_else(|| field(keys::SUPPORT_URL_INVALID))?;
-    Ok(json!({"telegram": telegram, "whatsapp": whatsapp, "email": email, "support_url": url}))
+    let wechat_qr_code =
+        http_or_upload(&input.wechat_qr_code).ok_or_else(|| field(keys::IMAGE_INVALID))?;
+    let wechat_group_qr_code =
+        http_or_upload(&input.wechat_group_qr_code).ok_or_else(|| field(keys::IMAGE_INVALID))?;
+    Ok(json!({
+        "telegram": telegram,
+        "whatsapp": whatsapp,
+        "email": email,
+        "support_url": url,
+        "wechat_id": trim_limit(&input.wechat_id, 100),
+        "wechat_qr_code": wechat_qr_code,
+        "qq_number": trim_limit(&input.qq_number, 100),
+        "qq_group": trim_limit(&input.qq_group, 100),
+        "wechat_group_qr_code": wechat_group_qr_code,
+    }))
 }
 
 fn normalize_announcement(input: &AnnouncementInput) -> Value {
@@ -512,16 +531,22 @@ pub fn overlay_public_config(
     }
     out.insert("scripts".into(), Value::Array(scripts));
     let Some(cfg) = site else {
+        // A reseller without its own support settings must not expose the main site's contacts.
+        out.insert("contact".into(), json!({}));
         return Value::Object(out);
     };
-    let mut contact = out
-        .remove("contact")
-        .and_then(|c| match c {
-            Value::Object(m) => Some(m),
-            _ => None,
-        })
-        .unwrap_or_default();
-    for key in ["telegram", "whatsapp", "email", "support_url"] {
+    let mut contact = Map::new();
+    for key in [
+        "telegram",
+        "whatsapp",
+        "email",
+        "support_url",
+        "wechat_id",
+        "wechat_qr_code",
+        "qq_number",
+        "qq_group",
+        "wechat_group_qr_code",
+    ] {
         if let Some(v) = cfg
             .support
             .get(key)
@@ -782,7 +807,7 @@ mod tests {
         assert_eq!(out["brand"]["site_icon"], "/uploads/f.ico");
         assert_eq!(out["brand"]["site_url"], "https://r.test");
         assert_eq!(out["contact"]["telegram"], "https://t.me/r");
-        assert_eq!(out["contact"]["whatsapp"], "https://wa.me/1");
+        assert!(out["contact"].get("whatsapp").is_none());
         assert_eq!(out["footer_links"], json!([{"url": "https://a.test"}]));
         assert_eq!(out["nav_config"], json!({"builtin": {"blog": false}}));
     }
@@ -816,6 +841,7 @@ mod tests {
         let out = overlay_public_config(base(), "", "p.test", None);
         assert_eq!(out["brand"]["site_name"], "Main");
         assert_eq!(out["brand"]["site_url"], "https://p.test");
+        assert_eq!(out["contact"], json!({}));
         assert_eq!(out["announcement"]["version"], "main0000");
     }
 

@@ -334,7 +334,7 @@ Three booleans under `site_config.theme` control independent page sections. `sho
 Other config keys in use:
 - `template_mode` (`card` | `list`), `storefront_template`
 - `nav_config{builtin{blog,notice,about}, custom_items[{title,url,link_type,target,icon,sort_order,enabled}]}`
-- `footer_links`, `contact{telegram,whatsapp}`, `support{…}`
+- `footer_links`, `contact{telegram,whatsapp,email,support_url,wechat_id,wechat_qr_code,qq_number,qq_group,wechat_group_qr_code}`, `support{…}`; reseller contacts replace main-site contacts per tenant.
 - `announcement`, `about`, `legal{terms,privacy}`
 - `captcha{provider:'none'|'image'|'turnstile', scenes{login,register_send_code,reset_send_code,guest_create_order,gift_card_redeem}, turnstile{site_key}}`
 - `telegram_auth{enabled,bot_username,mode,mini_app_url}`, `google_auth{enabled,client_id}`
@@ -471,7 +471,7 @@ Other config keys in use:
 - Site config: `GET|PUT /reseller/site-config`; `POST /reseller/upload` (multipart `file`).
 - Product settings: `GET /reseller/product-settings`, `GET|PUT|DELETE(?sku_id) /reseller/product-settings/:productId`, `POST …/preview`.
 - Dashboard and orders: `GET /reseller/dashboard`, `GET /reseller/orders`, `GET /reseller/orders/stats`, `GET /reseller/orders/:no`.
-- Finance: `GET /reseller/balance-accounts`, `GET /reseller/ledger-entries`, `GET|POST /reseller/withdraws`.
+- Finance: `GET /reseller/balance-accounts`, `GET /reseller/ledger-entries`, `GET|POST /reseller/withdraws` (`POST` accepts optional `payee_name` and uploaded `qr_code_url` in addition to amount/currency/channel/account; current Alipay/WeChat UI requires both).
 
 ---
 

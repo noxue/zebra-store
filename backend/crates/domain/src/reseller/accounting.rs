@@ -227,6 +227,8 @@ pub struct WithdrawDraft {
     pub currency: String,
     pub channel: String,
     pub account: String,
+    pub payee_name: String,
+    pub qr_code_url: String,
 }
 
 /// Validates withdrawal input (amount > 0, currency, channel and account required).
@@ -235,6 +237,18 @@ pub fn withdraw_draft(
     currency: &str,
     channel: &str,
     account: &str,
+) -> Result<WithdrawDraft> {
+    withdraw_draft_with_payout(amount, currency, channel, account, "", "")
+}
+
+/// Validates optional payout details while keeping older withdrawal clients valid.
+pub fn withdraw_draft_with_payout(
+    amount: Decimal,
+    currency: &str,
+    channel: &str,
+    account: &str,
+    payee_name: &str,
+    qr_code_url: &str,
 ) -> Result<WithdrawDraft> {
     let amount = round2(amount);
     if amount <= Decimal::ZERO {
@@ -248,11 +262,23 @@ pub fn withdraw_draft(
     if channel.is_empty() || account.is_empty() {
         return Err(Error::bad_request(keys::WITHDRAW_AMOUNT_INVALID));
     }
+    let (payee_name, qr_code_url) = (payee_name.trim(), qr_code_url.trim());
+    if payee_name.chars().count() > 100
+        || qr_code_url.len() > 512
+        || (!qr_code_url.is_empty()
+            && (!qr_code_url.starts_with("/uploads/reseller/")
+                || qr_code_url.contains("..")
+                || qr_code_url.contains(['?', '#'])))
+    {
+        return Err(Error::bad_request(keys::WITHDRAW_PAYOUT_INVALID));
+    }
     Ok(WithdrawDraft {
         amount: Amount::new(amount),
         currency: currency.to_owned(),
         channel: channel.to_owned(),
         account: account.to_owned(),
+        payee_name: payee_name.to_owned(),
+        qr_code_url: qr_code_url.to_owned(),
     })
 }
 
@@ -517,6 +543,49 @@ mod tests {
                 ok.account.as_str()
             ),
             ("1.01".into(), "CNY", "a@b")
+        );
+    }
+
+    #[test]
+    fn payout_qr_validation_preserves_legacy_withdrawals() {
+        let legacy = withdraw_draft(d("1"), "CNY", "alipay", "a").unwrap_or_else(|e| panic!("{e}"));
+        assert!(legacy.payee_name.is_empty());
+        assert!(legacy.qr_code_url.is_empty());
+        let valid = withdraw_draft_with_payout(
+            d("1"),
+            "CNY",
+            "wechat",
+            "a",
+            " 张三 ",
+            "/uploads/reseller/qr.png",
+        )
+        .unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(valid.payee_name, "张三");
+        assert_eq!(valid.qr_code_url, "/uploads/reseller/qr.png");
+        for qr in [
+            "javascript:alert(1)",
+            "/uploads/reseller/../other.png",
+            "https://other.test/qr.png",
+        ] {
+            assert_eq!(
+                withdraw_draft_with_payout(d("1"), "CNY", "wechat", "a", "张三", qr)
+                    .unwrap_err()
+                    .key(),
+                keys::WITHDRAW_PAYOUT_INVALID
+            );
+        }
+        assert_eq!(
+            withdraw_draft_with_payout(
+                d("1"),
+                "CNY",
+                "wechat",
+                "a",
+                &"x".repeat(101),
+                "/uploads/reseller/qr.png"
+            )
+            .unwrap_err()
+            .key(),
+            keys::WITHDRAW_PAYOUT_INVALID
         );
     }
 

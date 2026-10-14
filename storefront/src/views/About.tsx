@@ -3,6 +3,7 @@ import { useI18n } from 'vue-i18n'
 import { Check, MessageCircle, Send, Sparkles } from 'lucide-vue-next'
 import { useAbout } from '@/composables/useAbout'
 import { Card, Mascot } from '@/components/ui'
+import { getImageUrl } from '@/utils/image'
 
 export default defineComponent({
   name: 'AboutView',
@@ -72,6 +73,33 @@ export default defineComponent({
                           </span>
                           WhatsApp
                         </a>
+                      )}
+                      {s.contactConfig.value.support_url && (
+                        <a href={s.contactConfig.value.support_url} target="_blank" rel="noopener noreferrer" class="zs-card-hover rounded-zs border border-line bg-surface-strong px-6 py-4 font-bold text-fg">{t('about.supportLink')}</a>
+                      )}
+                      {s.contactConfig.value.email && (
+                        <a href={`mailto:${s.contactConfig.value.email}`} class="zs-card-hover rounded-zs border border-line bg-surface-strong px-6 py-4 font-bold text-fg">{t('about.supportEmail')}: {s.contactConfig.value.email}</a>
+                      )}
+                      {s.contactConfig.value.wechat_id && (
+                        <div class="rounded-zs border border-line bg-surface-strong px-6 py-4 font-bold text-fg">{t('about.wechatId')}: <span class="select-all break-all">{s.contactConfig.value.wechat_id}</span></div>
+                      )}
+                      {s.contactConfig.value.qq_number && (
+                        <div class="rounded-zs border border-line bg-surface-strong px-6 py-4 font-bold text-fg">{t('about.qqNumber')}: <span class="select-all break-all">{s.contactConfig.value.qq_number}</span></div>
+                      )}
+                      {s.contactConfig.value.qq_group && (
+                        <div class="rounded-zs border border-line bg-surface-strong px-6 py-4 font-bold text-fg">{t('about.qqGroup')}: <span class="select-all break-all">{s.contactConfig.value.qq_group}</span></div>
+                      )}
+                      {s.contactConfig.value.wechat_qr_code && (
+                        <div class="rounded-zs border border-line bg-surface-strong px-6 py-4 font-bold text-fg">
+                          <p class="mb-3">{t('about.wechatQrCode')}</p>
+                          <a href={getImageUrl(s.contactConfig.value.wechat_qr_code)} target="_blank" rel="noopener noreferrer"><img src={getImageUrl(s.contactConfig.value.wechat_qr_code)} alt={t('about.wechatQrCode')} class="h-36 w-36 max-w-full rounded-zs object-contain" /></a>
+                        </div>
+                      )}
+                      {s.contactConfig.value.wechat_group_qr_code && (
+                        <div class="rounded-zs border border-line bg-surface-strong px-6 py-4 font-bold text-fg">
+                          <p class="mb-3">{t('about.wechatGroupQrCode')}</p>
+                          <a href={getImageUrl(s.contactConfig.value.wechat_group_qr_code)} target="_blank" rel="noopener noreferrer"><img src={getImageUrl(s.contactConfig.value.wechat_group_qr_code)} alt={t('about.wechatGroupQrCode')} class="h-36 w-36 max-w-full rounded-zs object-contain" /></a>
+                        </div>
                       )}
                     </div>
                   )}

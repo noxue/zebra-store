@@ -28,7 +28,7 @@ export function useAbout() {
   const contactText = computed(() => text(about.value?.contact?.text))
   const hasIntroduction = computed(() => introductionText.value !== '')
   const hasServices = computed(() => servicesTitle.value !== '' || serviceItems.value.length > 0)
-  const hasContactLinks = computed(() => !!(contactConfig.value.telegram || contactConfig.value.whatsapp))
+  const hasContactLinks = computed(() => Object.values(contactConfig.value).some((value) => typeof value === 'string' && value.trim() !== ''))
   const hasContact = computed(() => contactTitle.value !== '' || contactText.value !== '' || hasContactLinks.value)
 
   return {

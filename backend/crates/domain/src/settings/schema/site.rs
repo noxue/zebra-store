@@ -94,9 +94,24 @@ fn normalize_brand(raw: Option<&Value>) -> Value {
 
 fn normalize_contact(raw: Option<&Value>) -> Value {
     let c = as_obj(raw);
+    let image = |key: &str| {
+        let value = safe_url(c.and_then(|o| o.get(key)));
+        if (value.starts_with("/uploads/") && !value.contains(".."))
+            || value.starts_with("https://")
+        {
+            value
+        } else {
+            String::new()
+        }
+    };
     json!({
         "telegram": text(c.and_then(|o| o.get("telegram"))),
         "whatsapp": text(c.and_then(|o| o.get("whatsapp"))),
+        "wechat_id": text_limit(c.and_then(|o| o.get("wechat_id")), 100),
+        "wechat_qr_code": image("wechat_qr_code"),
+        "qq_number": text_limit(c.and_then(|o| o.get("qq_number")), 100),
+        "qq_group": text_limit(c.and_then(|o| o.get("qq_group")), 100),
+        "wechat_group_qr_code": image("wechat_group_qr_code"),
     })
 }
 
@@ -654,6 +669,7 @@ mod tests {
             .collect();
         let out = normalize_site(&json!({
             "brand": {"site_name": " Zebra ", "site_url": "https://a.com///", "site_logo": "/uploads/l.png", "site_logo_dark": "/uploads/d.png"},
+            "contact": {"wechat_id": " main ", "wechat_qr_code": "/uploads/wechat.png", "qq_number": "12345", "qq_group": "67890", "wechat_group_qr_code": "javascript:alert(1)"},
             "scripts": scripts,
             "footer_links": [{"name": "", "url": "x"}, {"name": "A", "url": " /a "}],
             "currency": "usd",
@@ -667,6 +683,10 @@ mod tests {
         assert_eq!(out["brand"]["site_logo"], "/uploads/l.png");
         assert_eq!(out["brand"]["site_logo_dark"], "/uploads/d.png");
         assert_eq!(out["brand"]["site_icon"], "");
+        assert_eq!(out["contact"]["wechat_id"], "main");
+        assert_eq!(out["contact"]["wechat_qr_code"], "/uploads/wechat.png");
+        assert_eq!(out["contact"]["qq_group"], "67890");
+        assert_eq!(out["contact"]["wechat_group_qr_code"], "");
         assert_eq!(out["scripts"].as_array().unwrap().len(), SCRIPTS_MAX);
         assert_eq!(out["scripts"][0]["position"], "head");
         assert_eq!(out["scripts"][0]["enabled"], true);

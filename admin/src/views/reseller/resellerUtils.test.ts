@@ -167,7 +167,7 @@ describe('site config form', () => {
       favicon: '',
       scripts: [{ name: ' Chat ', enabled: true, position: 'body_end', code: ' chat() ' }],
       announcement: { enabled: true, type: '', title: { 'zh-CN': 'Hi' } },
-      support: { email: ' a@b.c ' },
+      support: { email: ' a@b.c ', wechat_id: ' seller ', wechat_qr_code: '/uploads/reseller/support.png', qq_number: ' 123 ', qq_group: ' 456 ', wechat_group_qr_code: '/uploads/reseller/group.png' },
       seo: {},
       nav_config: { builtin: { blog: false } },
       footer_links: [
@@ -195,6 +195,9 @@ describe('site config form', () => {
     expect(payload.theme?.primary_color).toBe('#aabbcc')
     expect(payload.announcement?.type).toBe('info')
     expect(payload.support?.email).toBe('a@b.c')
+    expect(payload.support?.wechat_id).toBe('seller')
+    expect(payload.support?.qq_number).toBe('123')
+    expect(payload.support?.wechat_group_qr_code).toBe('/uploads/reseller/group.png')
     expect(payload.footer_links).toHaveLength(1)
     expect(payload.scripts).toEqual([{ name: 'Chat', enabled: true, position: 'body_end', code: 'chat()' }])
     expect(payload.nav_config).toEqual({

@@ -543,6 +543,8 @@ pub async fn apply_withdraw_in<C: ConnectionTrait>(
         currency: Set(draft.currency.clone()),
         channel: Set(draft.channel.clone()),
         account: Set(draft.account.clone()),
+        payee_name: Set(draft.payee_name.clone()),
+        qr_code_url: Set(draft.qr_code_url.clone()),
         status: Set(WithdrawStatus::Pending.as_str().to_owned()),
         reject_reason: Set(String::new()),
         created_at: Set(now),

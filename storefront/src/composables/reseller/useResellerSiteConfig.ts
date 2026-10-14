@@ -45,7 +45,7 @@ export const useResellerSiteConfig = () => {
     const support = cfg?.support || {}
     return [
       { key: 'brand', label: t('resellerConsole.site.readiness.brand'), done: Boolean(cfg?.site_name || cfg?.logo || cfg?.favicon) },
-      { key: 'support', label: t('resellerConsole.site.readiness.support'), done: Boolean(support.telegram || support.whatsapp || support.email || support.support_url) },
+      { key: 'support', label: t('resellerConsole.site.readiness.support'), done: Boolean(support.telegram || support.whatsapp || support.email || support.support_url || support.wechat_id || support.wechat_qr_code || support.qq_number || support.qq_group || support.wechat_group_qr_code) },
       { key: 'seo', label: t('resellerConsole.site.readiness.seo'), done: isResellerSiteSeoConfigured(cfg?.seo) },
       { key: 'announcement', label: t('resellerConsole.site.readiness.announcement'), done: Boolean(cfg?.announcement?.enabled) },
     ]

@@ -206,6 +206,21 @@ export default defineComponent({
               <FormField label={t('admin.resellerSiteConfigs.fields.supportUrl')}>
                 <Input v-model={form.support.support_url} />
               </FormField>
+              <FormField label={t('admin.resellerSiteConfigs.fields.wechatId')}>
+                <Input v-model={form.support.wechat_id} />
+              </FormField>
+              <FormField label={t('admin.resellerSiteConfigs.fields.qqNumber')}>
+                <Input v-model={form.support.qq_number} />
+              </FormField>
+              <FormField label={t('admin.resellerSiteConfigs.fields.qqGroup')}>
+                <Input v-model={form.support.qq_group} />
+              </FormField>
+              <FormField label={t('admin.resellerSiteConfigs.fields.wechatQrCode')}>
+                <MediaPicker v-model={form.support.wechat_qr_code} scene="common" />
+              </FormField>
+              <FormField label={t('admin.resellerSiteConfigs.fields.wechatGroupQrCode')}>
+                <MediaPicker v-model={form.support.wechat_group_qr_code} scene="common" />
+              </FormField>
             </div>
           )
         case 'seo':

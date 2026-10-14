@@ -45,6 +45,7 @@ pub mod keys {
     pub const COUPON_NOT_ALLOWED: &str = "error.reseller_coupon_not_allowed";
     pub const SKU_INVALID: &str = "error.order_item_invalid";
     pub const WITHDRAW_AMOUNT_INVALID: &str = "error.reseller_withdraw_amount_invalid";
+    pub const WITHDRAW_PAYOUT_INVALID: &str = "error.reseller_withdraw_payout_invalid";
     pub const WITHDRAW_INSUFFICIENT: &str = "error.reseller_withdraw_insufficient";
     pub const WITHDRAW_CURRENCY_UNAVAILABLE: &str = "error.reseller_withdraw_currency_unavailable";
     pub const BALANCE_FROZEN: &str = "error.reseller_balance_frozen";

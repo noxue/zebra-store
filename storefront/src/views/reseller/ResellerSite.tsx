@@ -26,6 +26,9 @@ export default defineComponent({
       { key: 'whatsapp' as const, label: 'fields.whatsapp', placeholder: 'https://wa.me/1234567890' },
       { key: 'email' as const, label: 'fields.email', placeholder: 'support@example.com' },
       { key: 'support_url' as const, label: 'fields.supportUrl', placeholder: 'https://example.com/support' },
+      { key: 'wechat_id' as const, label: 'fields.wechatId', placeholder: 'WeChat ID' },
+      { key: 'qq_number' as const, label: 'fields.qqNumber', placeholder: 'QQ' },
+      { key: 'qq_group' as const, label: 'fields.qqGroup', placeholder: 'QQ group' },
     ]
     const disabled = computed(() => !s.canEdit.value || s.saving.value)
 
@@ -91,6 +94,12 @@ export default defineComponent({
             <Input v-model={s.form.support[f.key]} placeholder={f.placeholder} disabled={disabled.value} />
           </Field>
         ))}
+        <Field label={k('fields.wechatQrCode')} hint={k('imageHint')}>
+          <ResellerImageField v-model={s.form.support.wechat_qr_code} disabled={disabled.value} />
+        </Field>
+        <Field label={k('fields.wechatGroupQrCode')} hint={k('imageHint')}>
+          <ResellerImageField v-model={s.form.support.wechat_group_qr_code} disabled={disabled.value} />
+        </Field>
       </div>
     )
 

@@ -168,6 +168,10 @@ describe('finance', () => {
     expect(validateWithdrawForm({ amount: '', currency: 'CNY', channel: 'a', account: 'b' })).toBe('withdrawAmountRequired')
     expect(validateWithdrawForm({ amount: '1', currency: 'CNY', channel: '', account: 'b' })).toBe('withdrawChannelRequired')
     expect(validateWithdrawForm({ amount: '1', currency: 'CNY', channel: 'a', account: 'b' })).toBeNull()
+    expect(validateWithdrawForm({ amount: '1', currency: 'CNY', channel: 'alipay', account: 'b' })).toBe('withdrawPayeeRequired')
+    expect(validateWithdrawForm({ amount: '1', currency: 'CNY', channel: 'wechat', account: 'b', payee_name: '张三' })).toBe('withdrawQrRequired')
+    expect(validateWithdrawForm({ amount: '1', currency: 'CNY', channel: 'wechat', account: 'b', payee_name: '张三', qr_code_url: '/uploads/reseller/qr.png' })).toBeNull()
+    expect(validateWithdrawForm({ amount: '1', currency: 'CNY', channel: '支付宝', account: 'b', payee_name: '张三' })).toBe('withdrawQrRequired')
   })
 })
 
@@ -198,6 +202,7 @@ describe('site config form', () => {
       theme: { primary_color: '#123abc', background_color: '#eeeeee' },
       footer_links: [{ name: { 'zh-CN': '链接', 'zh-TW': '', 'en-US': '' }, url: 'https://a' }],
       nav_config: { builtin: { blog: false }, custom_items: [] },
+      support: { wechat_id: 'seller', wechat_qr_code: '/uploads/reseller/support.png', qq_number: '123', qq_group: '456', wechat_group_qr_code: '/uploads/reseller/group.png' },
     })
     expect(form.nav_config.builtin).toEqual({ blog: false, notice: true, about: true })
     expect(form.announcement.type).toBe('info')
@@ -207,6 +212,8 @@ describe('site config form', () => {
     expect(payload.storefront_template).toBe('noir')
     expect(payload.template_mode).toBe('list')
     expect(payload.theme?.primary_color).toBe('#123abc')
+    expect(payload.support?.wechat_id).toBe('seller')
+    expect(payload.support?.wechat_group_qr_code).toBe('/uploads/reseller/group.png')
     expect(payload.footer_links).toHaveLength(1)
     expect(payload.scripts).toEqual([{ name: 'Chat', enabled: true, position: 'body_end', code: 'chat()' }])
   })

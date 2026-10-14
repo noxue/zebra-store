@@ -267,7 +267,14 @@
     "service3": "快速回應的客戶支援",
     "service4": "定期更新的產品資訊",
     "contactUs": "聯絡我們",
-    "contactText": "如果您對我們的產品或服務有任何疑問，歡迎透過以下方式聯絡我們："
+    "contactText": "如果您對我們的產品或服務有任何疑問，歡迎透過以下方式聯絡我們：",
+    "wechatId": "微信號",
+    "wechatQrCode": "微信客服二維碼",
+    "qqNumber": "QQ 號",
+    "qqGroup": "QQ 群號",
+    "wechatGroupQrCode": "微信群二維碼",
+    "supportLink": "客服連結",
+    "supportEmail": "客服電郵"
   },
   "navbar": {
     "cart": "購物車",
@@ -795,6 +802,11 @@
           "whatsapp": "WhatsApp",
           "email": "客服信箱",
           "supportUrl": "客服連結",
+          "wechatId": "微信號",
+          "wechatQrCode": "微信客服二維碼",
+          "qqNumber": "QQ 號",
+          "qqGroup": "QQ 群號",
+          "wechatGroupQrCode": "微信群二維碼",
           "announcementEnabled": "啟用公告",
           "announcementType": "公告類型",
           "announcementTitle": "公告標題",
@@ -960,6 +972,8 @@
         "withdrawCurrencyRequired": "請選擇或輸入提現幣種",
         "withdrawChannelRequired": "請輸入提現渠道",
         "withdrawAccountRequired": "請輸入提現帳號",
+        "withdrawPayeeRequired": "請輸入收款人姓名",
+        "withdrawQrRequired": "請上傳收款二維碼",
         "withdrawFailed": "提現申請提交失敗，請稍後重試"
       }
     },
@@ -1561,7 +1575,17 @@
       "exceedAvailable": "超出目前可用餘額",
       "noCurrency": "暫無可提現幣種",
       "confirmTitle": "確認提現",
-      "confirmMessage": "確認對 {amount} {currency} 發起提現申請？"
+      "confirmMessage": "確認對 {amount} {currency} 發起提現申請？",
+      "channels": {"alipay": "支付寶", "wechat": "微信"},
+      "payeeName": "收款人姓名",
+      "payeeNamePlaceholder": "請輸入與收款帳號一致的姓名",
+      "qrCode": "收款二維碼",
+      "qrHint": "支付寶和微信提現需上傳收款二維碼",
+      "uploadQr": "上傳二維碼",
+      "removeQr": "移除二維碼",
+      "viewQr": "查看收款碼",
+      "qrImageOnly": "請選擇圖片檔案",
+      "qrUploadFailed": "二維碼上傳失敗"
     },
     "orders": {
       "title": "銷售訂單",

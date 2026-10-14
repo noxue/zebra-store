@@ -6,6 +6,7 @@ use axum::extract::{DefaultBodyLimit, Multipart, Path, State};
 use axum::handler::Handler;
 use serde::Deserialize;
 use serde_json::{Value, json};
+use zs_app::reseller::finance::PayoutDetails;
 use zs_app::reseller::product_setting::{Owner, ProductQuery};
 use zs_domain::reseller::ports::{FinanceFilter, OrderFilter};
 use zs_domain::reseller::site::SiteConfigInput;
@@ -469,6 +470,10 @@ struct WithdrawRequestBody {
     currency: String,
     channel: String,
     account: String,
+    #[serde(default)]
+    payee_name: String,
+    #[serde(default)]
+    qr_code_url: String,
 }
 
 impl BindRules for WithdrawRequestBody {
@@ -496,12 +501,16 @@ async fn apply_withdraw(
         .svc
         .reseller
         .finance
-        .apply_withdraw(
+        .apply_withdraw_with_payout(
             uid,
             amount.decimal(),
             &req.currency,
             &req.channel,
             &req.account,
+            PayoutDetails {
+                payee_name: &req.payee_name,
+                qr_code_url: &req.qr_code_url,
+            },
         )
         .await
         .map_err(|e| finance(e, "error.save_failed"))?;

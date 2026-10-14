@@ -22,6 +22,63 @@ async fn public_config_at(app: &App, host: &str) -> serde_json::Value {
     data(&body).clone()
 }
 
+// RSL-06: support QR codes and IDs belong only to the reseller that saved them.
+#[tokio::test]
+async fn rsl06_customer_support_isolated_between_main_and_resellers() {
+    let app = App::new().await;
+    let saved_main = app.admin_call("PUT", "/api/v1/admin/settings", Some(json!({
+        "key": "site_config", "value": {"contact": {"wechat_id": "main-id", "wechat_qr_code": "/uploads/main.png", "qq_number": "10001"}}
+    }))).await;
+    data(&saved_main);
+    let (_, first_token, first_id) = app.reseller("support-one@example.test", "0").await;
+    let (_, second_token, second_id) = app.reseller("support-two@example.test", "0").await;
+    let saved_first = app.call("PUT", "/api/v1/reseller/site-config", Some(json!({
+        "support": {"wechat_id": "seller-one", "wechat_qr_code": "/uploads/reseller/one.png", "qq_group": "20002"}
+    })), Some(&first_token)).await;
+    data(&saved_first);
+    let saved_second = app.call("PUT", "/api/v1/reseller/site-config", Some(json!({
+        "support": {"wechat_id": "seller-two", "wechat_group_qr_code": "/uploads/reseller/two.png"}
+    })), Some(&second_token)).await;
+    data(&saved_second);
+
+    let config = &app.services.content.public_config;
+    let main = config
+        .get(&Tenant {
+            reseller_id: None,
+            host: "main.example.com".into(),
+        })
+        .await
+        .unwrap();
+    let first = config
+        .get(&Tenant {
+            reseller_id: Some(first_id),
+            host: "one.shop.example.com".into(),
+        })
+        .await
+        .unwrap();
+    let second = config
+        .get(&Tenant {
+            reseller_id: Some(second_id),
+            host: "two.shop.example.com".into(),
+        })
+        .await
+        .unwrap();
+    assert_eq!(main["contact"]["wechat_id"], "main-id");
+    assert_eq!(first["contact"]["wechat_id"], "seller-one");
+    assert_eq!(
+        first["contact"]["wechat_qr_code"],
+        "/uploads/reseller/one.png"
+    );
+    assert!(first["contact"].get("qq_number").is_none());
+    assert_eq!(second["contact"]["wechat_id"], "seller-two");
+    assert_eq!(
+        second["contact"]["wechat_group_qr_code"],
+        "/uploads/reseller/two.png"
+    );
+    assert!(second["contact"].get("wechat_qr_code").is_none());
+    assert_eq!(main["contact"]["wechat_qr_code"], "/uploads/main.png");
+}
+
 #[tokio::test]
 async fn reseller_script_scope_isolated_even_without_site_config() {
     let app = App::new().await;
