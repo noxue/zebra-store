@@ -273,6 +273,8 @@ pub struct ProductSetting {
     pub markup_percent: Amount,
     pub fixed_markup_amount: Amount,
     pub fixed_price_amount: Amount,
+    /// Admin-set base price for this reseller; None inherits the SKU's shared base.
+    pub agent_price_amount: Option<Amount>,
     pub sort_order: i32,
     /// None inherits the main site's product content.
     pub content: Option<serde_json::Map<String, serde_json::Value>>,
@@ -297,6 +299,7 @@ impl ProductSetting {
             markup_percent: Amount::ZERO,
             fixed_markup_amount: Amount::ZERO,
             fixed_price_amount: Amount::ZERO,
+            agent_price_amount: None,
             sort_order: 0,
             content: None,
             instructions: None,

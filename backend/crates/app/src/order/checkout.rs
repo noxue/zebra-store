@@ -408,7 +408,7 @@ impl OrderService {
                     product_id: meta.product.id,
                     sku_id: meta.sku.id,
                     quantity: line.quantity,
-                    base_unit: meta.sku.price_amount,
+                    base_unit: meta.sku.reseller_base_price(),
                     cost: meta.sku.cost_price_amount,
                 },
             )?);

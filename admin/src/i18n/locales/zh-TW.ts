@@ -1716,6 +1716,9 @@ const messages = {
         skuSpec: '規格名稱（{lang}）',
         skuSpecPlaceholder: '例如 標準版 / 專業版',
         skuPrice: 'SKU 價格 *',
+        skuAgentPrice: '統一代理價',
+        skuAgentPriceHint: '留空時使用 SKU 售價；代理價不得低於成本價',
+        skuAgentPricePlaceholder: '留空使用 SKU 售價',
         skuPricePlaceholder: '例如 99.99',
         skuCostPrice: '成本價',
         skuCostPricePlaceholder: '例如 50.00',
@@ -1796,6 +1799,7 @@ const messages = {
         skuCodeRequired: '第 {index} 個 SKU 編碼不能為空',
         skuCodeDuplicate: 'SKU 編碼重複：{code}',
         skuPriceInvalid: '第 {index} 個 SKU 價格必須大於 0',
+        skuAgentPriceInvalid: '第 {index} 個 SKU 代理價必須大於 0 且不低於成本價',
         skuNeedActive: '至少需要啟用一個 SKU',
       },
       batch: {
@@ -4042,6 +4046,10 @@ const messages = {
     },
     resellerProductSettings: {
       title: '分銷商品配置',
+      agentPrice: '分站代理價',
+      sharedAgentPrice: '統一代理價',
+      agentPriceHint: '留空繼承統一代理價；不得低於商品成本價',
+      agentPricePlaceholder: '留空繼承',
       contentOverrides: '分站內容覆蓋',
       overrideContent: '覆蓋商品詳情',
       overrideInstructions: '覆蓋交付使用說明',
@@ -4080,6 +4088,8 @@ const messages = {
       },
       actions: {
         edit: '編輯',
+        configure: '設定指定分站商品',
+        chooseIds: '請先輸入有效的分銷商 ID 和商品 ID',
         reset: '重置',
         save: '儲存',
         saving: '儲存中...',
@@ -4092,7 +4102,7 @@ const messages = {
       },
       preview: {
         effectivePrice: '預計生效價',
-        priceInvalid: '售價需不低於基準價與成本價',
+        priceInvalid: '代理價不得低於成本；售價不得低於代理價',
         markupExceeded: '超出最高加價比例',
       },
       empty: '暫無分銷商品配置',

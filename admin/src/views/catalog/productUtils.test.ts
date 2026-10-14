@@ -135,7 +135,7 @@ describe('buildProductPayload', () => {
     expect(payload.price_amount).toBe(15)
     expect(payload.cost_price_amount).toBe(5)
     expect(payload.manual_stock_total).toBe(10)
-    expect(payload.skus[1]).toEqual({ id: 7, sku_code: 'B', spec_values: {}, price_amount: 15, cost_price_amount: 5, manual_stock_total: 4, is_active: true, sort_order: 0 })
+    expect(payload.skus[1]).toEqual({ id: 7, sku_code: 'B', spec_values: {}, price_amount: 15, agent_price_amount: null, cost_price_amount: 5, manual_stock_total: 4, is_active: true, sort_order: 0 })
     expect(payload.skus[0]!.id).toBeUndefined()
   })
 
@@ -148,6 +148,22 @@ describe('buildProductPayload', () => {
     expect(() => buildProductPayload({ ...f, skus: [createSKUFormItem({ sku_code: 'a', price_amount: 0 })] }, t, opts)).toThrow('skuPriceInvalid')
     expect(() => buildProductPayload({ ...f, skus: [{ ...createSKUFormItem({ sku_code: 'a', price_amount: 1 }), is_active: false }] }, t, opts)).toThrow('skuNeedActive')
     expect(() => buildProductPayload({ ...f, min_purchase_quantity: 5, max_purchase_quantity: 2 }, t, opts)).toThrow('purchaseLimitInvalid')
+  })
+
+  it('sends an optional reseller base price and allows clearing it', () => {
+    const sku = createSKUFormItem({ sku_code: 'DEFAULT', price_amount: 40, agent_price_amount: '35.00' })
+    const form = { ...baseForm(), skus: [sku] }
+    expect(buildProductPayload(form, t, opts).skus[0]!.agent_price_amount).toBe(35)
+    sku.agent_price_amount = ''
+    expect(buildProductPayload(form, t, opts).skus[0]!.agent_price_amount).toBeNull()
+    sku.agent_price_amount = 0
+    expect(() => buildProductPayload(form, t, opts)).toThrow('skuAgentPriceInvalid')
+    sku.agent_price_amount = 29
+    sku.cost_price_amount = 30
+    expect(() => buildProductPayload(form, t, opts)).toThrow('skuAgentPriceInvalid')
+    sku.agent_price_amount = ''
+    sku.price_amount = 25
+    expect(() => buildProductPayload(form, t, opts)).toThrow('skuAgentPriceInvalid')
   })
 
   it('zeroes SKU manual stock for auto fulfilment', () => {

@@ -1717,6 +1717,9 @@ const messages = {
         skuSpec: 'Spec label ({lang})',
         skuSpecPlaceholder: 'e.g. Standard / Pro',
         skuPrice: 'SKU price *',
+        skuAgentPrice: 'Shared reseller base',
+        skuAgentPriceHint: 'Blank uses the SKU sale price; the base cannot be below cost',
+        skuAgentPricePlaceholder: 'Blank uses SKU price',
         skuPricePlaceholder: 'e.g. 99.99',
         skuCostPrice: 'Cost Price',
         skuCostPricePlaceholder: 'e.g. 50.00',
@@ -1797,6 +1800,7 @@ const messages = {
         skuCodeRequired: 'SKU code is required for item #{index}',
         skuCodeDuplicate: 'Duplicate SKU code: {code}',
         skuPriceInvalid: 'SKU price must be greater than 0 for item #{index}',
+        skuAgentPriceInvalid: 'Reseller base must be positive and at least cost for SKU #{index}',
         skuNeedActive: 'At least one SKU must be active',
       },
       batch: {
@@ -4043,6 +4047,10 @@ const messages = {
     },
     resellerProductSettings: {
       title: 'Reseller products',
+      agentPrice: 'Site reseller base',
+      sharedAgentPrice: 'Shared reseller base',
+      agentPriceHint: 'Blank inherits the shared base; cannot be below product cost',
+      agentPricePlaceholder: 'Inherit shared base',
       contentOverrides: 'Storefront content overrides',
       overrideContent: 'Override product details',
       overrideInstructions: 'Override delivery instructions',
@@ -4081,6 +4089,8 @@ const messages = {
       },
       actions: {
         edit: 'Edit',
+        configure: 'Configure reseller product',
+        chooseIds: 'Enter a valid reseller ID and product ID first',
         reset: 'Reset',
         save: 'Save',
         saving: 'Saving...',
@@ -4093,7 +4103,7 @@ const messages = {
       },
       preview: {
         effectivePrice: 'Effective Price',
-        priceInvalid: 'Price must be at least the base and cost price',
+        priceInvalid: 'Base must cover cost; sale price must cover the base',
         markupExceeded: 'Exceeds the maximum markup',
       },
       empty: 'No reseller product configurations',

@@ -117,7 +117,7 @@ export default defineComponent({
             </Button>
           )}
         </div>
-        <div class="grid grid-cols-1 gap-3 md:grid-cols-6">
+        <div class="grid grid-cols-1 gap-3 md:grid-cols-7">
           <FormField label={t('admin.products.form.skuCode')}>
             <Input v-model={sku.sku_code} placeholder={t('admin.products.form.skuCodePlaceholder')} disabled={mapped.value} mono />
           </FormField>
@@ -128,6 +128,9 @@ export default defineComponent({
           </div>
           <FormField label={t('admin.products.form.skuPrice')}>
             <Input v-model={sku.price_amount} type="number" step="0.01" min={0} placeholder={t('admin.products.form.skuPricePlaceholder')} />
+          </FormField>
+          <FormField label={t('admin.products.form.skuAgentPrice')} hint={t('admin.products.form.skuAgentPriceHint')}>
+            <Input v-model={sku.agent_price_amount} type="number" step="0.01" min={0} placeholder={t('admin.products.form.skuAgentPricePlaceholder')} />
           </FormField>
           <FormField label={t('admin.products.form.skuCostPrice')} hint={mapped.value ? t('admin.products.form.costPriceAutoFromUpstream') : undefined}>
             <Input v-model={sku.cost_price_amount} type="number" step="0.01" min={0} placeholder={t('admin.products.form.skuCostPricePlaceholder')} disabled={mapped.value} />

@@ -25,6 +25,14 @@ async fn sync_three_times_keeps_custom_indexes(env: &str) {
     for _ in 0..3 {
         zs_infra::db::sync_schema(&db).await.unwrap();
     }
+    for table in ["product_skus", "reseller_product_settings"] {
+        db.query_all_raw(Statement::from_string(
+            db.get_database_backend(),
+            format!("SELECT agent_price_amount FROM {table} LIMIT 0"),
+        ))
+        .await
+        .unwrap();
+    }
     for (table, name) in zs_migration::custom_unique_indexes() {
         let (sql, values) = match db.get_database_backend() {
             DbBackend::MySql => (

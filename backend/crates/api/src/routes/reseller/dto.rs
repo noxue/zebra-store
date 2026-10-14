@@ -186,6 +186,8 @@ pub struct SettingResp {
     pub markup_percent: Amount,
     pub fixed_markup_amount: Amount,
     pub fixed_price_amount: Amount,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent_price_amount: Option<Amount>,
     #[serde(skip_serializing_if = "is_empty")]
     pub effective_price_amount: String,
     #[serde(skip_serializing_if = "is_empty")]
@@ -208,6 +210,7 @@ fn setting_resp(s: &ProductSetting, view: &SettingView) -> SettingResp {
         markup_percent: s.markup_percent,
         fixed_markup_amount: s.fixed_markup_amount,
         fixed_price_amount: s.fixed_price_amount,
+        agent_price_amount: s.agent_price_amount,
         effective_price_amount: effective(view, s.sku_id),
         rule_source: view
             .effective
@@ -242,7 +245,10 @@ pub fn setting_detail(view: &SettingView) -> Value {
                 "id": sku.id,
                 "sku_code": sku.sku_code,
                 "spec_values": sku.spec_values,
-                "base_price_amount": sku.price,
+                "base_price_amount": Amount::new(zs_domain::reseller::pricing::resolve_base(
+                    find(0), find(sku.id), sku.price.decimal(),
+                )),
+                "shared_agent_price_amount": sku.price,
                 "is_active": sku.is_active,
             });
             if let Some(s) = find(sku.id) {
@@ -304,6 +310,7 @@ pub fn admin_setting(s: &ProductSetting) -> Value {
         "markup_percent": s.markup_percent,
         "fixed_markup_amount": s.fixed_markup_amount,
         "fixed_price_amount": s.fixed_price_amount,
+        "agent_price_amount": s.agent_price_amount,
         "sort_order": s.sort_order,
         "content": s.content,
         "instructions": s.instructions,

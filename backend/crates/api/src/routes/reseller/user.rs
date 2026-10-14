@@ -310,7 +310,7 @@ async fn preview_product(
         .svc
         .reseller
         .product_settings
-        .preview(Owner::User(uid), pid, &req.inputs()?)
+        .preview(Owner::User(uid), pid, &req.inputs(false)?)
         .await
         .map_err(user_fetch)?;
     ok(dto::preview(&items))
@@ -327,7 +327,7 @@ async fn save_product(
         .svc
         .reseller
         .product_settings
-        .save(Owner::User(uid), pid, &req.inputs()?)
+        .save(Owner::User(uid), pid, &req.inputs(false)?)
         .await
         .map_err(save_failed)?;
     ok(dto::setting_detail(&view))

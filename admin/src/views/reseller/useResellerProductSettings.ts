@@ -12,7 +12,7 @@ import { useListPage } from '@/composables/useListPage'
 import { useListRefresh } from '@/composables/useListRefresh'
 import { confirmAction } from '@/utils/confirm'
 import { cleanParams } from '@/utils/format'
-import { notifySuccess } from '@/utils/notify'
+import { notifyError, notifySuccess } from '@/utils/notify'
 import { blankSettingForm, queryString, seedPreviewEntries, settingFormFromRule, type PreviewEntry } from './resellerUtils'
 
 const PREVIEW_DEBOUNCE_MS = 350
@@ -68,7 +68,10 @@ export function useResellerProductSettings() {
   }
 
   const buildPayload = (): AdminResellerProductSettingUpdatePayload => ({
-    settings: [productForm.value, ...(detail.value?.skus ?? []).map((sku) => skuForm(sku.id))],
+    settings: [productForm.value, ...(detail.value?.skus ?? []).map((sku) => skuForm(sku.id))].map((row) => ({
+      ...row,
+      agent_price_amount: String(row.agent_price_amount ?? '').trim() || null,
+    })),
   })
 
   const runPreview = async () => {
@@ -126,6 +129,24 @@ export function useResellerProductSettings() {
       scope.value = null
     } finally {
       operatingId.value = null
+    }
+  }
+
+  const openByIds = async () => {
+    const resellerId = Number(filters.resellerId)
+    const productId = Number(filters.productId)
+    if (!Number.isSafeInteger(resellerId) || resellerId <= 0 || !Number.isSafeInteger(productId) || productId <= 0) {
+      notifyError(t('admin.resellerProductSettings.actions.chooseIds'))
+      return
+    }
+    scope.value = { resellerId, productId }
+    try {
+      const res = await adminAPI.getResellerProductSetting(resellerId, productId)
+      if (!res.data) return
+      applyDetail(res.data)
+      showEditor.value = true
+    } catch {
+      scope.value = null
     }
   }
 
@@ -200,6 +221,7 @@ export function useResellerProductSettings() {
     skuForm,
     preview,
     openEditor,
+    openByIds,
     closeEditor,
     save,
     reset,

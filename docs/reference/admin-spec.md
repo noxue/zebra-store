@@ -154,7 +154,7 @@ Conventions shared by list pages:
   - fulfillment_type `manual|auto`. This field and several others are locked when the product `is_mapped` (upstream).
   - manual_stock_total.
   - **manual_form_schema** builder (list of fields): key, type (`text|textarea|phone|email|number|select|radio|checkbox`), required, label[lang], placeholder[lang], regex, max_len, min, max, options_text.
-  - **SKUs** (list): sku_code, spec_values[lang], price_amount, cost_price_amount, manual_stock_total (−1 means unlimited), sort_order, is_active.
+  - **SKUs** (list): sku_code, spec_values[lang], price_amount, optional agent_price_amount (blank inherits price_amount for reseller pricing/profit; must be at least cost_price_amount), cost_price_amount, manual_stock_total (−1 means unlimited), sort_order, is_active.
   - price_amount and cost_price_amount (hidden or hinted when SKUs exist), sort_order.
   - images (MediaPicker, multiple, scene `product`), description[lang] (textarea), content[lang] (RichEditor), instructions[lang] (RichEditor), tags (chips).
   - payment_channel_ids (chip multi-select from `getPaymentChannels`), is_affiliate_enabled, is_active.
@@ -387,7 +387,7 @@ Settings key `order_risk_control_config`:
 - **ResellerProductSettings:**
   - Filters: keyword, resellerId, userId, productId, listed (listed/hidden), pricingMode (`inherit|markup_percent|fixed_markup|fixed_price`).
   - Columns: id, owner, product, sku, listed, pricingMode, pricingValue, updatedAt, actions (edit, reset → `DELETE product-settings/:rid/:pid?sku_id=`).
-  - Editor: loads `GET product-settings/:rid/:pid` (the AdminResellerProductSettingDetail type). Fields: is_listed, pricing_mode, markup_percent, fixed_markup_amount, fixed_price_amount, all per product and per SKU. Preview → `POST …/preview` (returns items with effective_price_amount, valid, error_code). Save → `PUT {settings:[…]}`.
+  - Editor: accepts a reseller ID and product ID even before any rule exists; loads `GET product-settings/:rid/:pid` (the AdminResellerProductSettingDetail type). Fields: is_listed, pricing_mode, markup_percent, fixed_markup_amount, fixed_price_amount, optional agent_price_amount (blank inherits the shared SKU base), all per product and per SKU. Preview → `POST …/preview` (returns items with effective_price_amount, valid, error_code). Save → `PUT {settings:[…]}`. Admin base override must be positive and not below each affected SKU cost; reseller console cannot change it.
   - Zebra Store adds product-level `content` and `instructions` localized overrides. Each can be enabled independently; null inherits the main product.
 - **ResellerLedgerEntries**:
   - Filters: keyword, resellerId, userId, orderId, orderNo, type (`order_profit, refund_deduct, manual_adjust, withdraw_lock, withdraw_paid`), status (`pending_confirm, available, locked, withdrawn, canceled`), created range.

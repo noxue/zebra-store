@@ -114,6 +114,7 @@ pub struct ProductSku {
     pub sku_code: String,
     pub spec_values: JsonMap,
     pub price_amount: Amount,
+    pub agent_price_amount: Option<Amount>,
     pub cost_price_amount: Amount,
     pub manual_stock_total: i32,
     pub manual_stock_locked: i32,
@@ -130,6 +131,10 @@ pub struct ProductSku {
 }
 
 impl ProductSku {
+    pub fn reseller_base_price(&self) -> Amount {
+        self.agent_price_amount.unwrap_or(self.price_amount)
+    }
+
     pub fn is_default_code(&self) -> bool {
         self.sku_code.trim().eq_ignore_ascii_case(DEFAULT_SKU_CODE)
     }
@@ -300,6 +305,7 @@ pub struct SkuInput {
     pub sku_code: String,
     pub spec_values: Option<JsonMap>,
     pub price_amount: Amount,
+    pub agent_price_amount: Option<Amount>,
     pub cost_price_amount: Amount,
     pub manual_stock_total: i32,
     pub is_active: Option<bool>,
@@ -312,6 +318,7 @@ pub struct SkuFields {
     pub sku_code: String,
     pub spec_values: JsonMap,
     pub price_amount: Amount,
+    pub agent_price_amount: Option<Amount>,
     pub cost_price_amount: Amount,
     pub manual_stock_total: i32,
     pub is_active: bool,
@@ -360,7 +367,13 @@ pub fn normalize_sku_inputs(
         if code.is_empty() || !seen.insert(code.to_lowercase()) {
             return Err(invalid_sku());
         }
-        if !input.price_amount.is_positive() || input.cost_price_amount.is_negative() {
+        if !input.price_amount.is_positive()
+            || input
+                .agent_price_amount
+                .is_some_and(|price| !price.is_positive() || price < input.cost_price_amount)
+            || input.agent_price_amount.unwrap_or(input.price_amount) < input.cost_price_amount
+            || input.cost_price_amount.is_negative()
+        {
             return Err(Error::bad_request(keys::PRICE_INVALID));
         }
         if input.manual_stock_total < MANUAL_STOCK_UNLIMITED {
@@ -392,6 +405,7 @@ pub fn normalize_sku_inputs(
                 sku_code: code.to_owned(),
                 spec_values: input.spec_values.clone().unwrap_or_default(),
                 price_amount: input.price_amount,
+                agent_price_amount: input.agent_price_amount,
                 cost_price_amount: input.cost_price_amount,
                 manual_stock_total: stock,
                 is_active,
@@ -510,6 +524,7 @@ pub fn plan_single_sku_sync(
             sku_code: DEFAULT_SKU_CODE.to_owned(),
             spec_values: JsonMap::new(),
             price_amount: price,
+            agent_price_amount: None,
             cost_price_amount: cost,
             manual_stock_total,
             is_active: true,
@@ -528,6 +543,7 @@ pub fn plan_single_sku_sync(
             sku_code: code,
             spec_values: current.spec_values.clone(),
             price_amount: price,
+            agent_price_amount: current.agent_price_amount,
             cost_price_amount: cost,
             manual_stock_total,
             is_active: true,
@@ -850,6 +866,7 @@ pub(crate) mod testkit {
             sku_code: code.into(),
             spec_values: JsonMap::new(),
             price_amount: Amount::from(10),
+            agent_price_amount: None,
             cost_price_amount: Amount::ZERO,
             manual_stock_total: 0,
             manual_stock_locked: 0,
@@ -1061,12 +1078,47 @@ mod tests {
                 sku_code: code.into(),
                 spec_values: JsonMap::new(),
                 price_amount: Amount::from(1),
+                agent_price_amount: None,
                 cost_price_amount: Amount::ZERO,
                 manual_stock_total: 0,
                 is_active: active,
                 sort_order: 0,
             },
         }
+    }
+
+    #[test]
+    fn reseller_base_price_inherits_or_overrides_sku_price() {
+        let mut row = sku(1, "DEFAULT", true);
+        row.price_amount = Amount::from(40);
+        assert_eq!(row.reseller_base_price(), Amount::from(40));
+        row.agent_price_amount = Some(Amount::from(35));
+        assert_eq!(row.reseller_base_price(), Amount::from(35));
+
+        let mut sku_input = input("DEFAULT", 40, 0, None);
+        sku_input.agent_price_amount = Some(Amount::from(35));
+        let normalized = normalize_sku_inputs(&[sku_input], FulfillmentType::Auto, None).unwrap();
+        assert_eq!(
+            normalized.rows[0].fields.agent_price_amount,
+            Some(Amount::from(35))
+        );
+        let mut invalid = input("DEFAULT", 40, 0, None);
+        invalid.agent_price_amount = Some(Amount::ZERO);
+        assert_eq!(
+            normalize_sku_inputs(&[invalid], FulfillmentType::Auto, None)
+                .unwrap_err()
+                .key(),
+            keys::PRICE_INVALID
+        );
+        let mut below_cost = input("DEFAULT", 40, 0, None);
+        below_cost.cost_price_amount = Amount::from(30);
+        below_cost.agent_price_amount = Some(Amount::from(29));
+        assert_eq!(
+            normalize_sku_inputs(&[below_cost], FulfillmentType::Auto, None)
+                .unwrap_err()
+                .key(),
+            keys::PRICE_INVALID
+        );
     }
 
     // ORD-11

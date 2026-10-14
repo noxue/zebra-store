@@ -86,6 +86,7 @@ describe('product settings', () => {
       markup_percent: '0.00',
       fixed_markup_amount: '0.00',
       fixed_price_amount: '0.00',
+      agent_price_amount: '',
       sort_order: 0,
     })
     const f = settingFormFromRule(
@@ -97,6 +98,7 @@ describe('product settings', () => {
         markup_percent: '',
         fixed_markup_amount: 0,
         fixed_price_amount: '12.00',
+        agent_price_amount: '8.50',
         sort_order: 2,
       },
       0,
@@ -105,6 +107,7 @@ describe('product settings', () => {
     expect(f.fixed_price_amount).toBe('12.00')
     expect(f.markup_percent).toBe('0.00')
     expect(f.fixed_markup_amount).toBe('0')
+    expect(f.agent_price_amount).toBe('8.50')
   })
   it('seeds preview entries from saved effective prices', () => {
     const detail = {
