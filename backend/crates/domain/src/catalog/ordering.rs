@@ -30,6 +30,8 @@ pub enum StockMove {
     /// Order paid: consume the lock (or the missing part from `total` for legacy
     /// unreserved orders), `sold += q`.
     Consume,
+    /// A payment-time order sells only free stock, without touching another order's lock.
+    ConsumeAvailable,
 }
 
 /// Catalog operations needed to place, pay and deliver orders.

@@ -517,6 +517,8 @@ pub struct OrderSetting {
     pub payment_expire_minutes: i64,
     /// `0` means refunds are not time-limited.
     pub max_refund_days: i64,
+    /// Reserve limited inventory only after a successful payment.
+    pub reserve_stock_on_payment: bool,
 }
 
 impl Default for OrderSetting {
@@ -524,6 +526,7 @@ impl Default for OrderSetting {
         Self {
             payment_expire_minutes: PAYMENT_EXPIRE_DEFAULT,
             max_refund_days: REFUND_DAYS_DEFAULT,
+            reserve_stock_on_payment: false,
         }
     }
 }
@@ -564,6 +567,9 @@ impl OrderSetting {
             }
             if let Some(v) = parse_int(o.get("max_refund_days")) {
                 out.max_refund_days = v;
+            }
+            if let Some(v) = o.get("reserve_stock_on_payment").and_then(Value::as_bool) {
+                out.reserve_stock_on_payment = v;
             }
         }
         out.normalized()
@@ -829,5 +835,13 @@ mod tests {
         assert_eq!(s.payment_expire_minutes, 15);
         assert_eq!(s.max_refund_days, 3650);
         assert_eq!(OrderSetting::from_config(30, 0).max_refund_days, 0);
+        assert!(!OrderSetting::default().reserve_stock_on_payment);
+        assert!(
+            OrderSetting::decode(
+                Some(&json!({"reserve_stock_on_payment": true})),
+                OrderSetting::default()
+            )
+            .reserve_stock_on_payment
+        );
     }
 }

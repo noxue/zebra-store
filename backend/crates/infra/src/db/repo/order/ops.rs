@@ -8,6 +8,7 @@ use sea_orm::sea_query::Expr;
 use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter};
 use zs_domain::catalog::ordering::{StockMove, StockTarget};
 use zs_domain::order::model::{Order, OrderItem, OrderStatus, fulfillment_type};
+use zs_domain::order::ports::Reservation;
 use zs_domain::order::status::{calc_parent_status, should_mark_fulfilling};
 use zs_domain::payment::types::PaymentStatus;
 use zs_domain::wallet::model::txn_type;
@@ -17,7 +18,9 @@ use zs_shared::money::Amount;
 use super::map;
 use super::wallet;
 use crate::db::entity::{orders, payments};
-use crate::db::repo::catalog::ordering::{manual_stock_in, release_secrets_in};
+use crate::db::repo::catalog::ordering::{
+    manual_stock_in, release_secrets_in, reserve_p1_secrets_in, reserve_secrets_in,
+};
 use crate::db::repo::marketing::coupon::release_in as release_coupon_in;
 use crate::db::repo::support::DbResultExt;
 
@@ -98,6 +101,32 @@ pub(crate) async fn consume_manual_stock<C: ConnectionTrait>(
     Ok(())
 }
 
+async fn deferred_reservation<C: ConnectionTrait>(conn: &C, id: Id) -> Result<Option<Reservation>> {
+    let row = orders::Entity::find_by_id(id)
+        .one(conn)
+        .await
+        .dom()?
+        .ok_or_else(|| Error::internal_msg("order vanished while reserving stock"))?;
+    row.deferred_reservation_json
+        .map(|value| {
+            serde_json::from_value(value)
+                .map_err(|error| Error::internal(error).or_internal("error.order_update_failed"))
+        })
+        .transpose()
+}
+
+pub(crate) async fn has_deferred_reservation<C: ConnectionTrait>(
+    conn: &C,
+    order: &Order,
+) -> Result<bool> {
+    for child in &order.children {
+        if deferred_reservation(conn, child.id).await?.is_some() {
+            return Ok(true);
+        }
+    }
+    Ok(deferred_reservation(conn, order.id).await?.is_some())
+}
+
 /// Open payments of the orders become `expired` (ORD-04).
 pub(crate) async fn expire_open_payments<C: ConnectionTrait>(
     conn: &C,
@@ -132,11 +161,34 @@ pub(crate) async fn mark_paid<C: ConnectionTrait>(
     conn: &C,
     order: &mut Order,
     now: DateTime<Utc>,
+    allocate_stock: bool,
 ) -> Result<()> {
     if order.status != OrderStatus::PendingPayment {
         return Err(Error::bad_request(
             zs_domain::order::keys::ORDER_STATUS_INVALID,
         ));
+    }
+    if allocate_stock {
+        for child in &order.children {
+            match deferred_reservation(conn, child.id).await? {
+                Some(Reservation::Secrets {
+                    product_id,
+                    sku_id,
+                    quantity,
+                }) => {
+                    reserve_secrets_in(conn, product_id, sku_id, quantity, child.id, now).await?;
+                }
+                Some(Reservation::P1Secrets {
+                    product_id,
+                    sku_id,
+                    quantity,
+                }) => {
+                    reserve_p1_secrets_in(conn, product_id, sku_id, quantity, child.id, now)
+                        .await?;
+                }
+                Some(Reservation::None | Reservation::ManualSku { .. }) | None => {}
+            }
+        }
     }
     let online = (order.total_amount - order.wallet_paid_amount).non_negative();
     let changed = orders::Entity::update_many()
@@ -166,10 +218,14 @@ pub(crate) async fn mark_paid<C: ConnectionTrait>(
     order.online_paid_amount = online;
     order.updated_at = now;
     if order.children.is_empty() {
-        return consume_manual_stock(conn, &order.items).await;
+        return if allocate_stock {
+            consume_manual_stock(conn, &order.items).await
+        } else {
+            Ok(())
+        };
     }
     for child in &mut order.children {
-        let status = if should_mark_fulfilling(&child.items) {
+        let status = if !allocate_stock || should_mark_fulfilling(&child.items) {
             OrderStatus::Fulfilling
         } else {
             OrderStatus::Paid
@@ -182,7 +238,21 @@ pub(crate) async fn mark_paid<C: ConnectionTrait>(
             .exec(conn)
             .await
             .dom()?;
-        consume_manual_stock(conn, &child.items).await?;
+        if allocate_stock {
+            match deferred_reservation(conn, child.id).await? {
+                Some(Reservation::ManualSku { sku_id, quantity }) => {
+                    manual_stock_in(
+                        conn,
+                        StockTarget::Sku(sku_id),
+                        StockMove::ConsumeAvailable,
+                        quantity,
+                    )
+                    .await?;
+                }
+                Some(_) => {}
+                None => consume_manual_stock(conn, &child.items).await?,
+            }
+        }
         child.status = status;
         child.paid_at = Some(now);
         child.updated_at = now;
@@ -244,11 +314,15 @@ pub(crate) async fn cancel_locked<C: ConnectionTrait>(
     }
     if order.children.is_empty() {
         release_secrets_in(conn, order.id, now).await?;
-        release_manual_stock(conn, &order.items).await?;
+        if deferred_reservation(conn, order.id).await?.is_none() {
+            release_manual_stock(conn, &order.items).await?;
+        }
     } else {
         for child in &order.children {
             release_secrets_in(conn, child.id, now).await?;
-            release_manual_stock(conn, &child.items).await?;
+            if deferred_reservation(conn, child.id).await?.is_none() {
+                release_manual_stock(conn, &child.items).await?;
+            }
         }
     }
     release_coupon_in(conn, order.id, now).await?;

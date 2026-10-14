@@ -924,6 +924,7 @@ const messages = {
     },
     orders: {
       title: '訂單管理',
+      stockShortageAfterPayment: '此訂單已付款，但付款時庫存不足。請核實入帳後補貨並人工處理，或按原支付渠道退款；勿重複交付。',
       empty: '暫無訂單',
       filterUserId: '用戶ID',
       filterUserKeyword: '用戶信箱 / 暱稱 / 第三方帳號',
@@ -1101,6 +1102,7 @@ const messages = {
         legacy_customer_surcharge: '用戶承擔（升級前舊記錄）',
       },
       exceptions: {
+        stock_insufficient: '已收款，但付款時庫存不足；請補貨並人工處理或退款',
         superseded_payment_succeeded: '已替換的舊支付連結遲到成功',
         duplicate_payment_succeeded: '訂單已支付後又收到另一筆成功款',
         closed_order_payment_succeeded: '已關閉訂單收到成功款',
@@ -3084,6 +3086,8 @@ const messages = {
         maxRefundDays: '訂單最大可退款時間（天）',
         maxRefundDaysPlaceholder: '輸入最大可退款天數（0 表示不限制）',
         maxRefundDaysTip: '超過該時間後，訂單詳情將不再顯示退款卡片；設為 0 則不限制',
+        reserveStockOnPayment: '付款成功後才佔用庫存',
+        reserveStockOnPaymentTip: '未付款訂單不預留庫存；多位買家同時待付款時，按付款成功先後分配。收款時若已售罄，訂單轉人工處理。',
       },
       seo: {
         title: 'SEO 配置',

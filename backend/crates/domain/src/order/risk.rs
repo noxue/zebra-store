@@ -434,19 +434,18 @@ mod tests {
         let q = pending_query(&p, &input);
         assert_eq!(q.guest_ip.as_deref(), Some("2001:db8::/64"));
         assert_eq!(q.guest_quantity_products, vec![1]);
-        // two pending orders already → rejected
+        // One pending order already → rejected under the recommended policy.
         let full = PendingCounts {
-            by_ip: 2,
+            by_ip: 1,
             ..PendingCounts::default()
         };
         assert_eq!(
             check_pending(&p, &input, &full),
             Err(RiskError::TooManyPendingOrders)
         );
-        // pending quantity 2 + 1 > 2
+        // Pending quantity 1 + 1 exceeds the recommended per-IP product limit.
         let qty = PendingCounts {
-            by_ip: 1,
-            guest_quantity: HashMap::from([(1, 2)]),
+            guest_quantity: HashMap::from([(1, 1)]),
             ..PendingCounts::default()
         };
         assert_eq!(

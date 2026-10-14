@@ -924,6 +924,7 @@ const messages = {
     },
     orders: {
       title: '订单管理',
+      stockShortageAfterPayment: '该订单已付款，但付款时库存不足。请核实到账后补货并人工处理，或按原支付渠道退款；不要重复发货。',
       empty: '暂无订单',
       filterUserId: '用户ID',
       filterUserKeyword: '用户邮箱 / 昵称 / 第三方账号',
@@ -1101,6 +1102,7 @@ const messages = {
         legacy_customer_surcharge: '用户承担（升级前旧记录）',
       },
       exceptions: {
+        stock_insufficient: '已收款，但付款时库存不足；请补货并人工处理或退款',
         superseded_payment_succeeded: '已替换的旧支付链接迟到成功',
         duplicate_payment_succeeded: '订单已支付后又收到另一笔成功款',
         closed_order_payment_succeeded: '已关闭订单收到成功款',
@@ -3084,6 +3086,8 @@ const messages = {
         maxRefundDays: '订单最大可退款时间（天）',
         maxRefundDaysPlaceholder: '输入最大可退款天数（0 表示不限制）',
         maxRefundDaysTip: '超过该时间后，订单详情不再显示退款卡片；设置为 0 则不限制',
+        reserveStockOnPayment: '付款成功后才占用库存',
+        reserveStockOnPaymentTip: '未付款订单不预留库存；多个买家同时待支付时，以付款成功先后分配库存。若收款时已售罄，订单转人工处理。',
       },
       seo: {
         title: 'SEO 配置',

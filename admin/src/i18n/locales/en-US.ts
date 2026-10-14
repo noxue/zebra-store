@@ -925,6 +925,7 @@ const messages = {
     },
     orders: {
       title: 'Orders',
+      stockShortageAfterPayment: 'Payment succeeded but stock ran out. Verify the payment, then restock and resolve manually or refund to the original channel. Do not deliver twice.',
       empty: 'No orders',
       filterUserId: 'User ID',
       filterUserKeyword: 'User email / nickname / third-party account',
@@ -1102,6 +1103,7 @@ const messages = {
         legacy_customer_surcharge: 'Customer surcharge (pre-upgrade)',
       },
       exceptions: {
+        stock_insufficient: 'Payment received but stock ran out; restock and resolve manually or refund',
         superseded_payment_succeeded: 'A superseded payment link succeeded late',
         duplicate_payment_succeeded: 'Another payment succeeded after the order was already paid',
         closed_order_payment_succeeded: 'A closed order received a successful payment',
@@ -3085,6 +3087,8 @@ const messages = {
         maxRefundDays: 'Maximum Refundable Time (Days)',
         maxRefundDaysPlaceholder: 'Enter max refundable days (0 means unlimited)',
         maxRefundDaysTip: 'Refund card will be hidden after this period; set to 0 for unlimited',
+        reserveStockOnPayment: 'Reserve stock after payment',
+        reserveStockOnPaymentTip: 'Unpaid orders do not hold inventory. Stock goes to the first successful payment; paid orders without stock require manual handling.',
       },
       seo: {
         title: 'SEO Settings',

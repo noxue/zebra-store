@@ -28,7 +28,8 @@ use std::sync::{
 };
 use zs_domain::queue::kinds;
 use zs_infra::db::entity::{
-    gateway_refund_attempts, order_items, orders, payments, procurement_orders, products,
+    gateway_refund_attempts, order_items, orders, payments, procurement_orders, product_skus,
+    products,
 };
 use zs_infra::payment::http::{HttpResponse, MockTransport};
 
@@ -55,6 +56,108 @@ async fn create_and_pay(app: &OrderApp, product: i64, sku: i64, qty: i32, channe
         .await;
     assert_eq!(res["status_code"], 0, "create-and-pay failed: {res}");
     res["data"].clone()
+}
+
+/// ORD-03 / DLV-03: the configured mode leaves unpaid orders unreserved, then allocates
+/// available cards on the first successful payment. A later paid buyer stays visible for
+/// manual resolution when those cards have sold out; the gateway success is never lost.
+#[tokio::test]
+async fn deferred_stock_reservation_is_atomic_with_payment() {
+    let app = OrderApp::new().await;
+    app.set_setting(
+        "order_config",
+        json!({"payment_expire_minutes": 15, "max_refund_days": 30, "reserve_stock_on_payment": true}),
+    )
+    .await;
+    let (product, sku) = app.product("card", json!({"price_amount": "10.00"})).await;
+    app.secrets(product, sku, 1).await;
+    let channel = app.epay_channel().await;
+    let first = create_and_pay(&app, product, sku, 1, channel).await;
+    let second = create_and_pay(&app, product, sku, 1, channel).await;
+    assert_eq!(app.secrets_with(product, "available").await, 1);
+    assert_eq!(app.secrets_with(product, "reserved").await, 0);
+
+    let first_payment = first["payment_id"].as_i64().unwrap();
+    let second_payment = second["payment_id"].as_i64().unwrap();
+    assert_eq!(app.epay_callback(first_payment, "10.00").await, "success");
+    assert_eq!(app.secrets_with(product, "reserved").await, 1);
+    assert_eq!(app.epay_callback(second_payment, "10.00").await, "success");
+    assert_eq!(app.payment(second_payment).await.status, "success");
+    assert_eq!(
+        app.payment(second_payment).await.exception_code,
+        "stock_insufficient"
+    );
+    let second_order = app.order_by_no(second["order_no"].as_str().unwrap()).await;
+    assert_eq!(second_order.status, "fulfilling");
+    assert_eq!(app.secrets_with(product, "reserved").await, 1);
+    assert_eq!(app.epay_callback(second_payment, "10.00").await, "success");
+    assert_eq!(
+        app.payment(second_payment).await.exception_code,
+        "stock_insufficient"
+    );
+    assert_eq!(app.secrets_with(product, "reserved").await, 1);
+}
+
+/// ORD-03: a payment-time manual sale must never consume stock held by an older unpaid order.
+#[tokio::test]
+async fn deferred_manual_stock_does_not_consume_other_orders_lock() {
+    let app = OrderApp::new().await;
+    let (product, sku) = app
+        .product(
+            "manual",
+            json!({"price_amount": "10.00", "fulfillment_type": "manual", "manual_stock_total": 2}),
+        )
+        .await;
+    let channel = app.epay_channel().await;
+    let old = create_and_pay(&app, product, sku, 1, channel).await;
+    app.set_setting(
+        "order_config",
+        json!({"payment_expire_minutes": 15, "max_refund_days": 30, "reserve_stock_on_payment": true}),
+    )
+    .await;
+    let deferred = create_and_pay(&app, product, sku, 1, channel).await;
+    let stock = product_skus::Entity::find_by_id(sku)
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        (stock.manual_stock_total, stock.manual_stock_locked),
+        (1, 1)
+    );
+    let deferred_payment = deferred["payment_id"].as_i64().unwrap();
+    assert_eq!(
+        app.epay_callback(deferred_payment, "10.00").await,
+        "success"
+    );
+    let stock = product_skus::Entity::find_by_id(sku)
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        (
+            stock.manual_stock_total,
+            stock.manual_stock_locked,
+            stock.manual_stock_sold
+        ),
+        (0, 1, 1)
+    );
+    let old_payment = old["payment_id"].as_i64().unwrap();
+    assert_eq!(app.epay_callback(old_payment, "10.00").await, "success");
+    let stock = product_skus::Entity::find_by_id(sku)
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        (
+            stock.manual_stock_total,
+            stock.manual_stock_locked,
+            stock.manual_stock_sold
+        ),
+        (0, 0, 2)
+    );
 }
 
 /// ORD-02 / DLV-05 / DLV-09 / PAY-04: the full guest flow.

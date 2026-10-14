@@ -489,6 +489,7 @@ pub async fn seed_order_row<C: sea_orm::ConnectionTrait>(
         reseller_profit_amount: 0.into(),
         client_ip: String::new(),
         risk_ip: String::new(),
+        deferred_reservation_json: None,
         expires_at: None,
         paid_at: Some(now),
         canceled_at: None,

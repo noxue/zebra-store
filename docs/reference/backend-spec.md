@@ -723,6 +723,7 @@ All four paths can be replaced by admin-set custom paths (settings key `callback
    - for `manual` items with limited stock, reserve SKU stock;
    - record coupon usage (with row locks and limit checks);
    - save the reseller snapshot.
+   - When `order_config.reserve_stock_on_payment` is enabled, save each child's reservation plan instead of occupying cards or limited manual stock. On a successful payment, allocate the saved plan in the settlement transaction. If stock has sold out, keep the successful payment, set `exception_code=stock_insufficient`, and leave the order in `fulfilling` for manual resolution. A pending order keeps the mode it was created with, even when the setting changes.
 8. Schedule the timeout-cancel job to run after the payment window; if scheduling fails, roll the order back. The window comes from `order_config.payment_expire_minutes`, default 15.
 
 **Payment** (`modules/payment/application/*`):

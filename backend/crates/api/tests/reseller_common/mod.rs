@@ -435,6 +435,7 @@ impl App {
             reseller_profit_amount: ctx.effective_profit,
             client_ip: String::new(),
             risk_ip: String::new(),
+            deferred_reservation_json: None,
             expires_at: None,
             paid_at: (status != "pending_payment").then_some(now),
             canceled_at: None,

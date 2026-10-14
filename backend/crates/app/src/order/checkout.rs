@@ -533,6 +533,7 @@ impl OrderService {
             now,
         );
         let new = NewOrder {
+            reserve_stock_on_payment: setting.reserve_stock_on_payment,
             risk: prep.map(|prep| RiskGate {
                 prep,
                 input: risk_input,
@@ -725,6 +726,7 @@ impl OrderService {
         NewOrder {
             order: parent,
             reservations,
+            reserve_stock_on_payment: false,
             coupon: r.applied_coupon.as_ref().map(|c| (c.id, r.discount_amount)),
             reseller: built.reseller.clone(),
             risk: None,

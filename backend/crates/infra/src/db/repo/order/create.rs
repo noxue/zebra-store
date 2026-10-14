@@ -59,6 +59,7 @@ fn order_model(
         reseller_profit_amount: Set(o.reseller_profit_amount.decimal()),
         client_ip: Set(o.client_ip.clone()),
         risk_ip: Set(o.risk_ip.clone()),
+        deferred_reservation_json: Set(None),
         expires_at: Set(o.expires_at),
         paid_at: Set(None),
         canceled_at: Set(None),
@@ -138,10 +139,11 @@ pub(crate) async fn create_in<C: ConnectionTrait>(
     let mut pricing = new.reseller.clone();
     for (idx, (child, reservation)) in new.order.children.iter().zip(&new.reservations).enumerate()
     {
-        let child_row = order_model(child, Some(parent.id), guest_secret, now)
-            .insert(conn)
-            .await
-            .dom()?;
+        let mut child_model = order_model(child, Some(parent.id), guest_secret, now);
+        if new.reserve_stock_on_payment {
+            child_model.deferred_reservation_json = Set(to_json(reservation)?);
+        }
+        let child_row = child_model.insert(conn).await.dom()?;
         let mut item_id = 0;
         for item in &child.items {
             item_id = item_model(item, child_row.id, now)?
@@ -152,6 +154,9 @@ pub(crate) async fn create_in<C: ConnectionTrait>(
         }
         if let Some(ctx) = pricing.as_mut() {
             ctx.bind_created_order_item(idx, child_row.id, item_id);
+        }
+        if new.reserve_stock_on_payment {
+            continue;
         }
         match *reservation {
             Reservation::None => {}

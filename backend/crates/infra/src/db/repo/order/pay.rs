@@ -426,7 +426,7 @@ pub(crate) async fn begin_in<C: ConnectionTrait>(
         )
         .await?;
         supersede_in(conn, order.id, payment.id, now).await?;
-        ops::mark_paid(conn, &mut order, now).await?;
+        ops::mark_paid(conn, &mut order, now, true).await?;
         post_profit(conn, &order, &payment, req.reseller_confirm_days, now).await?;
         return Ok(BeginOutcome::PaidByWallet { payment, order });
     }
@@ -630,8 +630,55 @@ pub(crate) async fn settle_in(
         ops::expire_open_payments(conn, &[order.id], now).await?;
     }
     if can_fulfill {
-        ops::mark_paid(conn, &mut order, now).await?;
-        post_profit(conn, &order, &payment, confirm_days, now).await?;
+        if ops::has_deferred_reservation(conn, &order).await? {
+            conn.execute_unprepared("SAVEPOINT order_stock_allocation")
+                .await
+                .dom()?;
+            match ops::mark_paid(conn, &mut order, now, true).await {
+                Ok(()) => {
+                    conn.execute_unprepared("RELEASE SAVEPOINT order_stock_allocation")
+                        .await
+                        .dom()?;
+                    post_profit(conn, &order, &payment, confirm_days, now).await?;
+                }
+                Err(error)
+                    if matches!(
+                        error.key(),
+                        keys::CARD_SECRET_INSUFFICIENT | keys::MANUAL_STOCK_INSUFFICIENT
+                    ) =>
+                {
+                    conn.execute_unprepared("ROLLBACK TO SAVEPOINT order_stock_allocation")
+                        .await
+                        .dom()?;
+                    conn.execute_unprepared("RELEASE SAVEPOINT order_stock_allocation")
+                        .await
+                        .dom()?;
+                    order = map::load_locked(conn, order.id)
+                        .await?
+                        .ok_or_else(|| Error::internal_msg("paid order vanished"))?;
+                    payment.exception_code = "stock_insufficient".to_owned();
+                    payments::Entity::update_many()
+                        .col_expr(
+                            payments::Column::ExceptionCode,
+                            Expr::value(payment.exception_code.clone()),
+                        )
+                        .filter(payments::Column::Id.eq(payment.id))
+                        .exec(conn)
+                        .await
+                        .dom()?;
+                    ops::mark_paid(conn, &mut order, now, false).await?;
+                    tracing::error!(
+                        order_id = order.id,
+                        payment_id = payment.id,
+                        "paid_order_stock_insufficient"
+                    );
+                }
+                Err(error) => return Err(error),
+            }
+        } else {
+            ops::mark_paid(conn, &mut order, now, true).await?;
+            post_profit(conn, &order, &payment, confirm_days, now).await?;
+        }
     }
     if underpaid && order.user_id > 0 && covered.is_positive() {
         wallet::credit(

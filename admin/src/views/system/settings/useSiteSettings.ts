@@ -47,7 +47,7 @@ export function useSiteSettings() {
     email_domain_allowlist_enabled: false,
     allowed_email_domains_text: '',
   })
-  const order = reactive({ payment_expire_minutes: 15 as number | '', max_refund_days: 30 as number | '' })
+  const order = reactive({ payment_expire_minutes: 15 as number | '', max_refund_days: 30 as number | '', reserve_stock_on_payment: false })
 
   const form = reactive({
     brand: {
@@ -125,6 +125,7 @@ export function useSiteSettings() {
     const data = asRecord(raw)
     order.max_refund_days = clampNumber(data.max_refund_days, 0, 3650, 30)
     order.payment_expire_minutes = clampNumber(data.payment_expire_minutes, 1, 10080, 15)
+    order.reserve_stock_on_payment = data.reserve_stock_on_payment === true
   }
 
   const loadRegistration = (raw: unknown) => {
@@ -187,7 +188,7 @@ export function useSiteSettings() {
     order.payment_expire_minutes = paymentExpire
     return adminAPI.updateSettings({
       key: 'order_config',
-      value: { payment_expire_minutes: paymentExpire, max_refund_days: maxRefundDays },
+      value: { payment_expire_minutes: paymentExpire, max_refund_days: maxRefundDays, reserve_stock_on_payment: order.reserve_stock_on_payment },
     })
   }
 

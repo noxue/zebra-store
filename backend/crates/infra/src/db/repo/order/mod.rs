@@ -129,7 +129,9 @@ impl OrderStore for SeaOrderStore {
                             .await
                             .dom()?;
                         release_secrets_in(&txn, order.id, now).await?;
-                        ops::release_manual_stock(&txn, &order.items).await?;
+                        if !ops::has_deferred_reservation(&txn, &order).await? {
+                            ops::release_manual_stock(&txn, &order.items).await?;
+                        }
                         wallet::release_order_balance(
                             &txn,
                             &mut order,

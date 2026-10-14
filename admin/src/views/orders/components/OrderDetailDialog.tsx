@@ -457,6 +457,9 @@ export default defineComponent({
       const fee = orderPaymentFee(o)
       return (
         <div class="space-y-5">
+          {o.payments?.some((payment) => payment.exception_code === 'stock_insufficient') && (
+            <Alert tone="danger">{t('admin.orders.stockShortageAfterPayment')}</Alert>
+          )}
           {/* basic info */}
           <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
             <Tile label={t('admin.orders.table.id')}>

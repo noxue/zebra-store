@@ -71,6 +71,10 @@ macro_rules! manual_stock_update {
                     )),
                 )
                 .col_expr(t::Column::ManualStockSold, Expr::col(t::Column::ManualStockSold).add(q)),
+            StockMove::ConsumeAvailable => base
+                .filter(t::Column::ManualStockTotal.gte(q))
+                .col_expr(t::Column::ManualStockTotal, Expr::col(t::Column::ManualStockTotal).sub(q))
+                .col_expr(t::Column::ManualStockSold, Expr::col(t::Column::ManualStockSold).add(q)),
         };
         let affected = stmt.exec($conn).await.dom()?.rows_affected;
         let unlimited = if affected == 0 {

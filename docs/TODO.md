@@ -54,6 +54,7 @@
 - [x] 迁移：cart_items, orders, order_items, order_refund_records, order_risk_lock_keys, fulfillments, payment_channels, payments, coupons, coupon_usages, promotions
 - [x] 定价引擎（活动价 → 批发价取低 → 会员价 → 优惠券分摊）+ 单测
 - [x] 订单风控（IP 黑名单、待支付上限、限流）
+- [x] 订单库存占用时机可配置（付款成功后才占库存）；支付后库存不足保留收款事实并转人工处理；游客推荐每 IP 一笔，三库回归通过。
 - [x] 订单创建（父子单、卡密预留、库存预留、优惠券占用）、预览、列表、详情、取消、统计
 - [x] 游客订单（Guest 认证头）
 - [x] 支付：渠道 CRUD、可用渠道筛选、手续费策略、创建支付、钱包抵扣、capture、latest

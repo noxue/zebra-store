@@ -162,7 +162,7 @@ pub trait OrderRepo: Send + Sync {
 }
 
 /// Stock reservation of a new child order.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Reservation {
     None,
     /// Reserve `quantity` available card secrets (`sku_id` 0 = any SKU).
@@ -199,6 +199,8 @@ pub struct NewOrder {
     pub order: Order,
     /// Aligned with `order.children`.
     pub reservations: Vec<Reservation>,
+    /// Snapshot of the store setting so later changes never alter pending orders.
+    pub reserve_stock_on_payment: bool,
     /// Coupon usage to claim (PRC-01).
     pub coupon: Option<(Id, Amount)>,
     pub reseller: Option<OrderPricingContext>,
