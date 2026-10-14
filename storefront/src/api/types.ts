@@ -1010,6 +1010,7 @@ export interface ResellerProductSettingData {
   markup_percent: string
   fixed_markup_amount: string
   fixed_price_amount: string
+  agent_price_amount?: string
   effective_price_amount?: string
   rule_source?: string
   sort_order: number
@@ -1023,6 +1024,7 @@ export interface ResellerProductSettingSKUData {
   sku_code: string
   spec_values: Record<string, unknown>
   base_price_amount: string
+  shared_agent_price_amount?: string
   is_active: boolean
   setting?: ResellerProductSettingData
   effective_price_amount?: string

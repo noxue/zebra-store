@@ -135,6 +135,7 @@ export const blankSettingForm = (skuId: number): AdminResellerProductSettingPayl
   markup_percent: '0.00',
   fixed_markup_amount: '0.00',
   fixed_price_amount: '0.00',
+  agent_price_amount: '',
   sort_order: 0,
   ...(skuId === 0 ? { content: null, instructions: null } : {}),
 })
@@ -146,6 +147,7 @@ export const settingFormFromRule = (rule: AdminResellerProductSettingRule | unde
   markup_percent: amountOrZero(rule?.markup_percent),
   fixed_markup_amount: amountOrZero(rule?.fixed_markup_amount),
   fixed_price_amount: amountOrZero(rule?.fixed_price_amount),
+  agent_price_amount: rule?.agent_price_amount == null ? '' : String(rule.agent_price_amount),
   sort_order: Number(rule?.sort_order || 0),
   ...(skuId === 0 ? { content: rule?.content ?? null, instructions: rule?.instructions ?? null } : {}),
 })

@@ -26,6 +26,38 @@ async fn sku_rows(app: &TestApp, product_id: i64) -> Vec<product_skus::Model> {
 }
 
 #[tokio::test]
+async fn sku_agent_price_round_trips_and_can_be_cleared() {
+    let app = TestApp::new().await;
+    let cat = category(&app, "agent-price", 0).await;
+    let created = product(
+        &app,
+        cat,
+        "agent-price",
+        json!({"skus": [{"sku_code": "DEFAULT", "price_amount": "40.00", "agent_price_amount": "35.00", "cost_price_amount": "30.00"}]}),
+    )
+    .await;
+    let id = id_of(&created);
+    let sku = &created["skus"][0];
+    assert_eq!(sku["price_amount"], "40.00");
+    assert_eq!(sku["agent_price_amount"], "35.00");
+    assert_eq!(
+        zs_shared::money::Amount::new(sku_rows(&app, id).await[0].agent_price_amount.unwrap())
+            .to_string(),
+        "35.00"
+    );
+
+    let updated = app
+        .put(
+            &format!("{PRODUCTS}/{id}"),
+            json!({"category_id": cat, "slug": "agent-price", "title": {"zh-CN": "商品"}, "price_amount": "40.00",
+                "skus": [{"id": sku["id"], "sku_code": "DEFAULT", "price_amount": "40.00", "agent_price_amount": null, "cost_price_amount": "30.00"}]}),
+        )
+        .await;
+    assert_eq!(data(&updated)["skus"][0]["agent_price_amount"], Value::Null);
+    assert_eq!(sku_rows(&app, id).await[0].agent_price_amount, None);
+}
+
+#[tokio::test]
 async fn product_crud_contract() {
     let app = TestApp::new().await;
     let cat = category(&app, "cards", 0).await;

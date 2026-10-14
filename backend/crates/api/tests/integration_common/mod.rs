@@ -608,6 +608,7 @@ pub async fn seed_product(
             sku_code: (*code).into(),
             spec_values_json: Some(json!({})),
             price_amount: price.parse().unwrap(),
+            agent_price_amount: None,
             cost_price_amount: "1".parse().unwrap(),
             manual_stock_total: 30,
             manual_stock_locked: 0,

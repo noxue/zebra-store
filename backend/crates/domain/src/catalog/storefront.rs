@@ -550,7 +550,12 @@ pub fn priced_product(product: &Product) -> PricedProduct {
         id: product.id,
         slug: product.slug.clone(),
         title: serde_json::Value::Object(product.title.clone()),
-        price: product.price_amount,
+        price: product
+            .skus
+            .iter()
+            .find(|sku| sku.is_active)
+            .map(ProductSku::reseller_base_price)
+            .unwrap_or(product.price_amount),
         cost_price: product.cost_price_amount,
         is_active: product.is_active,
         skus: product
@@ -561,7 +566,7 @@ pub fn priced_product(product: &Product) -> PricedProduct {
                 id: s.id,
                 sku_code: s.sku_code.clone(),
                 spec_values: serde_json::Value::Object(s.spec_values.clone()),
-                price: s.price_amount,
+                price: s.reseller_base_price(),
                 cost_price: s.cost_price_amount,
                 is_active: s.is_active,
             })

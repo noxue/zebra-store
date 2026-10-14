@@ -171,6 +171,7 @@ export default defineComponent({
                     <SettingRuleRow
                       label={t('admin.resellerProductSettings.columns.sku')}
                       name={skuLabel(sku)}
+                      sharedBase={String(sku.shared_agent_price_amount ?? sku.base_price_amount)}
                       form={s.skuForm(sku.id)}
                       preview={s.preview[sku.id]}
                       hint={previewHint(sku.id)}
@@ -244,7 +245,12 @@ export default defineComponent({
                 />
               </>
             ),
-            actions: () => <RefreshButton loading={s.refreshing.value} onClick={s.refresh} />,
+            actions: () => (
+              <div class="flex gap-2">
+                <Button onClick={s.openByIds}>{t('admin.resellerProductSettings.actions.configure')}</Button>
+                <RefreshButton loading={s.refreshing.value} onClick={s.refresh} />
+              </div>
+            ),
           }}
         </FilterBar>
         <div>

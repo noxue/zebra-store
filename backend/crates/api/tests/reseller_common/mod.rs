@@ -331,6 +331,7 @@ impl App {
                 sku_code: format!("SKU{i}"),
                 spec_values_json: Some(json!({"zh-CN": format!("规格{i}")})),
                 price_amount: sku_price.parse().unwrap(),
+                agent_price_amount: None,
                 cost_price_amount: cost.parse().unwrap(),
                 manual_stock_total: -1,
                 manual_stock_locked: 0,

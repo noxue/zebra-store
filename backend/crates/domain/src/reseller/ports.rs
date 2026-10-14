@@ -215,6 +215,7 @@ pub trait ProductSettingRepo: Send + Sync {
         reseller_id: Id,
         product_id: Id,
         rows: &[ProductSetting],
+        agent_price_writable: bool,
         now: DateTime<Utc>,
     ) -> Result<()>;
     /// Soft-deletes one rule.
@@ -223,6 +224,7 @@ pub trait ProductSettingRepo: Send + Sync {
         reseller_id: Id,
         product_id: Id,
         sku_id: Id,
+        agent_price_writable: bool,
         now: DateTime<Utc>,
     ) -> Result<()>;
     async fn list_settings(

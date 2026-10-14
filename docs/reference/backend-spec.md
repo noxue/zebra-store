@@ -62,7 +62,7 @@ The order-risk data fix-up runs before `resellerstore.Migrate`, so it will be in
   - Manual stock: manual_stock_total (-1 = unlimited), manual_stock_locked, manual_stock_sold
   - payment_channel_ids (JSON text; empty = any channel), is_affiliate_enabled, is_mapped, is_active, sort_order
   - Has many product_skus
-- **product_skus**: product_id + sku_code (unique together), spec_values (JSON), price_amount, cost_price_amount, the same three manual-stock fields, is_active, sort_order
+- **product_skus**: product_id + sku_code (unique together), spec_values (JSON), price_amount, nullable agent_price_amount (shared reseller base; null inherits price_amount), cost_price_amount, the same three manual-stock fields, is_active, sort_order. The effective shared base must be positive and not below cost_price_amount.
 - **product_mappings**: connection_id, local_product_id (unique), upstream_product_id, upstream_fulfillment_type, upstream_status, is_active, last_synced_at
 - **sku_mappings**: product_mapping_id, local_sku_id, upstream_sku_id, upstream_price, upstream_stock, upstream_is_active, stock_synced_at
 
@@ -176,7 +176,7 @@ A parent order's status is recalculated from its children (`CalcParentStatus`).
 - **reseller_product_settings**
   - reseller_id + product_id + sku_id (unique), is_listed
   - pricing_mode: `inherit`, `markup_percent`, `fixed_markup` or `fixed_price`
-  - markup_percent, fixed_markup_amount, fixed_price_amount, sort_order
+  - markup_percent, fixed_markup_amount, fixed_price_amount, nullable agent_price_amount (admin-only reseller base override; SKU → product → shared SKU base), sort_order
   - Zebra Store extension: nullable `content_json` and `instructions_json` on the product-level (`sku_id=0`) rule. Null inherits the main product; a JSON object overrides it. Order items snapshot the effective instructions at checkout.
 - **reseller_order_snapshots**: order_id (unique), reseller_id, domain, currency, reseller_user_id, buyer_user_id, base_amount, reseller_amount, profit_amount, profit_eligible, profit_block_reason, pricing_snapshot, risk_snapshot
 - **reseller_ledger_entries**
@@ -784,7 +784,7 @@ All four paths can be replaced by admin-set custom paths (settings key `callback
 - Optional `reseller.cname_target` is the config-file fallback for one shared CNAME destination for custom subdomains. `reseller_domain_review_config` in the generic admin settings API holds `{mode:"manual"|"auto",cname_target:"hostname"}`; its saved target overrides the config fallback and may be a CDN hostname. Default mode is `manual`. Manual mode creates a `pending_review` row and checks the public CNAME on admin approval; wrong DNS leaves it pending. Auto mode requires a configured shared target and checks the CNAME on submission, activating a correct domain immediately; wrong or unavailable DNS rejects submission. Without a target, the existing manual flow applies. Mode changes affect only new submissions. `GET /api/v1/reseller/domain-setup` returns `{cname_target,review_mode}` to authenticated console users.
 - Requests are matched to a reseller by Host (`ResellerTenantMiddleware`, cached); `main_hosts` means the main shop.
 - Optional reverse-proxy reads: `GET /api/v1/internal/reseller-domains/allow?domain=<DNS name>` returns HTTP 204 only when reseller support is enabled and the domain and its profile are active; any other result denies on-demand certificate issuance. `GET /api/v1/internal/reseller-domains` requires `Authorization: Bearer <reseller.domain_sync_token>` and returns `{status_code:0,msg:"success",data:{domains:[...]}}` for Nginx certificate synchronization. The inventory route is disabled when the token is blank; both routes return 404 when reseller support is off. These internal routes are for loopback proxy access and should not be publicly proxied.
-- The reseller controls branding (`reseller_site_configs`, layered over `/public/config`) and which products are listed and how they are priced (inherit, markup %, fixed markup, fixed price, capped by `max_markup_percent`).
+- The reseller controls branding (`reseller_site_configs`, layered over `/public/config`) and which products are listed and how they are priced (inherit, markup %, fixed markup, fixed price, capped by `max_markup_percent`). Admins can override the reseller base per site/product/SKU. Sale prices may be below the main shop price but cannot be below the effective reseller base or SKU cost. Reseller accounts cannot change or clear admin base overrides.
 - Each order records the reseller profit. It is posted to the ledger as `pending_confirm` and becomes `available` after `settlement_confirm_days` (job every minute). Resellers request withdrawals; admins pay them.
 
 **Supplying other shops, and buying from other shops:**

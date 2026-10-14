@@ -481,16 +481,29 @@ impl ProductSettingRepo for MemStore {
         reseller_id: Id,
         product_id: Id,
         rows: &[ProductSetting],
+        agent_price_writable: bool,
         _now: DateTime<Utc>,
     ) -> Result<()> {
         let mut all = self.settings.lock().unwrap();
         for row in rows {
+            let previous_agent_price = all
+                .iter()
+                .find(|s| {
+                    s.reseller_id == reseller_id
+                        && s.product_id == product_id
+                        && s.sku_id == row.sku_id
+                })
+                .and_then(|s| s.agent_price_amount);
             all.retain(|s| {
                 !(s.reseller_id == reseller_id
                     && s.product_id == product_id
                     && s.sku_id == row.sku_id)
             });
-            all.push(row.clone());
+            let mut saved = row.clone();
+            if !agent_price_writable {
+                saved.agent_price_amount = previous_agent_price;
+            }
+            all.push(saved);
         }
         Ok(())
     }
@@ -499,8 +512,26 @@ impl ProductSettingRepo for MemStore {
         reseller_id: Id,
         product_id: Id,
         sku_id: Id,
+        agent_price_writable: bool,
         _now: DateTime<Utc>,
     ) -> Result<()> {
+        if !agent_price_writable {
+            let mut all = self.settings.lock().unwrap();
+            if let Some(row) = all.iter_mut().find(|s| {
+                s.reseller_id == reseller_id
+                    && s.product_id == product_id
+                    && s.sku_id == sku_id
+                    && s.agent_price_amount.is_some()
+            }) {
+                let agent_price = row.agent_price_amount;
+                *row =
+                    ProductSetting::draft(sku_id, true, zs_domain::reseller::PricingMode::Inherit);
+                row.reseller_id = reseller_id;
+                row.product_id = product_id;
+                row.agent_price_amount = agent_price;
+                return Ok(());
+            }
+        }
         self.settings.lock().unwrap().retain(|s| {
             !(s.reseller_id == reseller_id && s.product_id == product_id && s.sku_id == sku_id)
         });

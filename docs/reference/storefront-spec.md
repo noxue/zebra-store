@@ -281,6 +281,7 @@ A separate layout with ResellerConsoleTopbar. Pages:
 - **Site:** ResellerSiteConfigPanel. Fields: site_name, logo, favicon (upload), announcement (localized, rich text via tiptap), support (telegram/whatsapp/email/url), SEO, footer_links, nav_config.
 - **Products:** ResellerProductSettingsPanel and ResellerProductRuleEditor.
   - Per-SKU `pricing_mode`: inherit, markup_percent, fixed_markup, fixed_price; plus is_listed and sort_order; preview, save, reset.
+  - Reseller pricing base resolves from the site/SKU admin agent-price override, then site/product override, then the shared SKU agent price, then the main-shop price. A reseller sale price may be below the main-shop price but must cover its effective base and SKU cost.
   - The product-level rule has independent optional `content` and `instructions` localized overrides. Null inherits the main product; the delivery instructions are snapshotted into new reseller orders.
 - **Orders:** filters (status, order_no, date range); orders list, stats, detail with profit snapshot.
 - **Finance:** balances, settlement status.
