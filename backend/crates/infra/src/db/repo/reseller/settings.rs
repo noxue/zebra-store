@@ -44,6 +44,7 @@ fn sku_model(m: skus::Model) -> PricedSku {
         sku_code: m.sku_code,
         spec_values: m.spec_values_json.unwrap_or(Value::Null),
         price: Amount::new(m.agent_price_amount.unwrap_or(m.price_amount)),
+        retail_price: Amount::new(m.price_amount),
         cost_price: Amount::new(m.cost_price_amount),
         is_active: m.is_active,
     }
@@ -54,11 +55,16 @@ fn product_model(m: products::Model, skus: Vec<PricedSku>) -> PricedProduct {
         .first()
         .map(|sku| sku.price)
         .unwrap_or(Amount::new(m.price_amount));
+    let retail = skus
+        .first()
+        .map(|sku| sku.retail_price)
+        .unwrap_or(Amount::new(m.price_amount));
     PricedProduct {
         id: m.id,
         slug: m.slug,
         title: m.title_json.unwrap_or(Value::Null),
         price: base,
+        retail_price: retail,
         cost_price: Amount::new(m.cost_price_amount),
         is_active: m.is_active,
         skus,

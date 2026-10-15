@@ -159,6 +159,7 @@ impl MemStore {
             slug: format!("p{id}"),
             title: Value::Null,
             price: amount(price),
+            retail_price: amount(price),
             cost_price: Amount::ZERO,
             is_active: true,
             skus: skus
@@ -168,6 +169,7 @@ impl MemStore {
                     sku_code: String::new(),
                     spec_values: Value::Null,
                     price: amount(p),
+                    retail_price: amount(p),
                     cost_price: Amount::ZERO,
                     is_active: true,
                 })

@@ -176,6 +176,7 @@ A parent order's status is recalculated from its children (`CalcParentStatus`).
 - **reseller_product_settings**
   - reseller_id + product_id + sku_id (unique), is_listed
   - pricing_mode: `inherit`, `markup_percent`, `fixed_markup` or `fixed_price`
+  - no effective pricing rule and zero default markup: sale price inherits the main-site SKU price (not the agent base); settlement/profit still uses the effective agent base. If retail is below the base, use the base as the safe fallback. The inherited retail price is exempt from the reseller markup cap; explicit rules and profile default markup remain capped.
   - markup_percent, fixed_markup_amount, fixed_price_amount, nullable agent_price_amount (admin-only reseller base override; SKU → product → shared SKU base), sort_order
   - Zebra Store extension: nullable `content_json` and `instructions_json` on the product-level (`sku_id=0`) rule. Null inherits the main product; a JSON object overrides it. Order items snapshot the effective instructions at checkout.
 - **reseller_order_snapshots**: order_id (unique), reseller_id, domain, currency, reseller_user_id, buyer_user_id, base_amount, reseller_amount, profit_amount, profit_eligible, profit_block_reason, pricing_snapshot, risk_snapshot

@@ -136,6 +136,80 @@ async fn lqa_r1_reseller_catalog_matches_checkout() {
     assert!(xml.contains("/products/qa-int-b"));
 }
 
+// RSL-07/RSL-09: no per-product rule is needed to sell at the main-site SKU price.
+#[tokio::test]
+async fn unconfigured_reseller_uses_main_sale_price_and_agent_profit() {
+    use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter, Set};
+    use zs_infra::db::entity::{orders, product_skus, reseller_order_snapshots};
+
+    let app = App::new().await;
+    let (_, reseller_token, reseller_id) = app.reseller("default-price@example.test", "5").await;
+    let host = app.system_domain(reseller_id, "default-price").await;
+    let (product_id, skus) = app
+        .product("default-main-price", "40.00", &[("40.00", "33.00")])
+        .await;
+    let mut sku = product_skus::Entity::find_by_id(skus[0])
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap()
+        .into_active_model();
+    sku.agent_price_amount = Set(Some("36.00".parse().unwrap()));
+    sku.update(&app.db).await.unwrap();
+
+    let detail = app
+        .call(
+            "GET",
+            &format!("/api/v1/reseller/product-settings/{product_id}"),
+            None,
+            Some(&reseller_token),
+        )
+        .await;
+    assert_eq!(data(&detail)["skus"][0]["base_price_amount"], "36.00");
+    assert_eq!(data(&detail)["skus"][0]["effective_price_amount"], "40.00");
+    assert!(data(&detail)["skus"][0].get("setting").is_none());
+
+    let (_, public) = app
+        .raw(
+            "GET",
+            "/api/v1/public/products/default-main-price",
+            None,
+            None,
+            &[("host", host.as_str())],
+        )
+        .await;
+    assert_eq!(data(&public)["skus"][0]["price_amount"], "40.00");
+
+    let (_, buyer) = app.user("default-price-buyer@example.test").await;
+    let (_, order) = app
+        .raw(
+            "POST",
+            "/api/v1/orders",
+            Some(json!({"items": [{"product_id": product_id, "sku_id": skus[0], "quantity": 1}]})),
+            Some(&buyer),
+            &[("host", host.as_str())],
+        )
+        .await;
+    assert_eq!(data(&order)["total_amount"], "40.00", "{order}");
+    let order_no = data(&order)["order_no"].as_str().unwrap();
+    let order_id = orders::Entity::find()
+        .filter(orders::Column::OrderNo.eq(order_no))
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap()
+        .id;
+    let snapshot = reseller_order_snapshots::Entity::find()
+        .filter(reseller_order_snapshots::Column::OrderId.eq(order_id))
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(snapshot.base_amount, "36.00".parse().unwrap());
+    assert_eq!(snapshot.reseller_amount, "40.00".parse().unwrap());
+    assert_eq!(snapshot.profit_amount, "4.00".parse().unwrap());
+}
+
 // RSL-07/RSL-09: admin base overrides are isolated by reseller, and console edits cannot erase them.
 #[tokio::test]
 async fn reseller_agent_base_isolated_and_used_for_checkout_profit() {
@@ -202,7 +276,7 @@ async fn reseller_agent_base_isolated_and_used_for_checkout_profit() {
         .await;
     assert_eq!(data(&a)["skus"][0]["price_amount"], "90.00");
     assert_eq!(data(&a)["skus"][1]["price_amount"], "85.00");
-    assert_eq!(data(&b)["skus"][0]["price_amount"], "80.00");
+    assert_eq!(data(&b)["skus"][0]["price_amount"], "100.00");
     assert_eq!(data(&main)["skus"][0]["price_amount"], "100.00");
 
     let (_, buyer) = app.user("base-buyer@example.test").await;

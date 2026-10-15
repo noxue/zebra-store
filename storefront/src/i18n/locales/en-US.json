@@ -1541,7 +1541,7 @@
       "focusDescription": "Start with high-converting products, then refine SKU pricing and visibility rules.",
       "cards": {
         "defaultMarkup": "Default markup",
-        "defaultMarkupDescription": "Products without individual rules use the default markup to generate reseller prices.",
+        "defaultMarkupDescription": "With no product price rule, a zero default markup uses the main store price. A positive markup is calculated from the agent price.",
         "maxMarkup": "Max markup",
         "maxMarkupDescription": "A cap of 0 means unlimited; pricing above the admin limit will be rejected.",
         "storefront": "Storefront",

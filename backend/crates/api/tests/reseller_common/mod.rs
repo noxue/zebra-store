@@ -387,6 +387,7 @@ impl App {
             sku_id,
             quantity: 1,
             base_unit: base.parse().unwrap(),
+            retail_unit: base.parse().unwrap(),
             cost: Amount::ZERO,
         };
         let mut item = price_order_line(&profile, &SettingIndex::new(&settings), &line).unwrap();

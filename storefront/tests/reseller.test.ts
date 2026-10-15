@@ -94,6 +94,8 @@ describe('domains', () => {
 describe('pricing', () => {
   it('estimates price by mode', () => {
     expect(estimateResellerPrice('100.00', { sku_id: 0, pricing_mode: 'inherit' }, '10')).toBe('110.00')
+    expect(estimateResellerPrice('36.00', { sku_id: 0, pricing_mode: 'inherit' }, '0', '40.00')).toBe('40.00')
+    expect(estimateResellerPrice('42.00', { sku_id: 0, pricing_mode: 'inherit' }, '0', '40.00')).toBe('42.00')
     expect(estimateResellerPrice('98.00', { sku_id: 0, pricing_mode: 'markup_percent', markup_percent: '12.5' })).toBe('110.25')
     expect(estimateResellerPrice('98.00', { sku_id: 0, pricing_mode: 'fixed_markup', fixed_markup_amount: '2.5' })).toBe('100.50')
     expect(estimateResellerPrice('98.00', { sku_id: 0, pricing_mode: 'fixed_price', fixed_price_amount: '120' })).toBe('120.00')

@@ -1541,7 +1541,7 @@
       "focusDescription": "先處理高轉化商品，再逐步細化 SKU 價格和隱藏規則。",
       "cards": {
         "defaultMarkup": "預設加價",
-        "defaultMarkupDescription": "未單獨配置商品時，系統會使用預設加價比例生成分銷價。",
+        "defaultMarkupDescription": "未單獨定價時，預設加價為 0 則按主站售價出售；設定加價後按代理價計算。",
         "maxMarkup": "最高加價",
         "maxMarkupDescription": "封頂為 0 表示不限制；超過後台上限的價格配置會被拒絕儲存。",
         "storefront": "分銷站",

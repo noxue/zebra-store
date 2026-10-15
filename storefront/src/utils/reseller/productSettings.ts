@@ -102,9 +102,10 @@ export const buildResellerProductSettingPayload = (items: ResellerProductSetting
 
 /**
  * Local estimate of the reseller price for a rule (the backend preview is
- * authoritative). `inherit` uses `defaultMarkupPercent`. Returns null on bad input.
+ * authoritative). With zero default markup, `inherit` uses the main sale price.
+ * Returns null on bad input.
  */
-export const estimateResellerPrice = (basePrice: string, form: ResellerProductSettingFormItem, defaultMarkupPercent = '0'): string | null => {
+export const estimateResellerPrice = (basePrice: string, form: ResellerProductSettingFormItem, defaultMarkupPercent = '0', mainPrice = basePrice): string | null => {
   const base = amountToCents(basePrice)
   if (base === null) return null
   const mode = form.pricing_mode || RESELLER_PRICING_MODE_INHERIT
@@ -114,6 +115,10 @@ export const estimateResellerPrice = (basePrice: string, form: ResellerProductSe
     return base + Math.round((base * bp) / 10000)
   }
   if (mode === RESELLER_PRICING_MODE_INHERIT) {
+    if (Number(defaultMarkupPercent) === 0) {
+      const retail = amountToCents(mainPrice)
+      return retail === null ? null : centsToAmount(Math.max(base, retail))
+    }
     const v = percentOf(defaultMarkupPercent)
     return v === null ? null : centsToAmount(v)
   }

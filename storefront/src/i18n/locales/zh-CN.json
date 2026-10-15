@@ -1494,7 +1494,7 @@
       "focusDescription": "先处理高转化商品，再逐步细化 SKU 价格和隐藏规则。",
       "cards": {
         "defaultMarkup": "默认加价",
-        "defaultMarkupDescription": "未单独配置商品时，系统会使用默认加价比例生成分销价。",
+        "defaultMarkupDescription": "未单独定价时，默认加价为 0 则按主站售价出售；设置加价后按代理价计算。",
         "maxMarkup": "最高加价",
         "maxMarkupDescription": "封顶为 0 表示不限制；超过后台上限的价格配置会被拒绝保存。",
         "storefront": "分销站",
