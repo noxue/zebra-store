@@ -103,6 +103,7 @@ router.beforeEach(async (to) => {
   if (!appStore.config) await appStore.loadConfig()
   if (to.meta.requiresUserAuth) {
     if (!auth.isAuthenticated) return `/auth/login?redirect=${encodeURIComponent(to.fullPath)}`
+    if (to.path === '/me/affiliate' && appStore.config?.affiliate?.enabled !== true) return '/me'
     if (to.meta.resellerConsole && !appStore.canAccessResellerConsole) return '/me/orders'
     return true
   }

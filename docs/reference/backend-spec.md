@@ -769,7 +769,7 @@ All four paths can be replaced by admin-set custom paths (settings key `callback
 
 **Affiliate:**
 - Visitors are tracked by `affiliate_code` and visitor key; the order keeps a snapshot.
-- Commission = base amount (only affiliate-enabled products) × `commission_rate`%.
+- Commission = `commission_rate`% of the smaller of affiliate-enabled items' margin and the full order margin. Item margin uses the purchase-time cost snapshot; order margin subtracts all item costs, payment fees and reseller profit from the paid amount. A zero or negative margin creates no commission.
 - It stays `pending_confirm` for `confirm_days`, then becomes `available` (job every minute).
 - Withdrawals need at least `min_withdraw_amount` and use a configured channel; admins pay or reject.
 - Self-referral is ignored.

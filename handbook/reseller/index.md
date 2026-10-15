@@ -37,6 +37,8 @@ reseller:
   settlement_confirm_days: 7                                      # 利润结算确认天数
 ```
 
+`reseller.enabled` 是分站总开关，目前在服务器配置文件中统一设置。关闭时主站个人中心不显示分销入口，分销控制台也无法直接访问；开启并重启后入口出现。
+
 然后：
 
 1. **DNS**：添加泛解析 `*.example.com → 服务器 IP`，或者给每个分站单独加 A 记录；

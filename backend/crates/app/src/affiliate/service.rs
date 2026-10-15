@@ -156,7 +156,7 @@ impl AffiliateService {
     }
 
     /// Creates the order's commission after payment (`HandleOrderPaid`); idempotent.
-    /// Base = affiliate-enabled items' payable amounts; no self-referral.
+    /// Base = eligible margin capped by order margin after fees and reseller share.
     pub async fn handle_order_paid(&self, order_id: Id) -> Result<()> {
         if order_id <= 0 {
             return Ok(());
@@ -183,7 +183,7 @@ impl AffiliateService {
         {
             return Ok(());
         }
-        let base = commission_base(&order.items);
+        let base = commission_base(&order);
         if !base.is_positive() {
             return Ok(());
         }
@@ -670,6 +670,8 @@ mod tests {
             product_id: 1,
             total_price: Amount::from(total),
             coupon_discount: Amount::ZERO,
+            cost_price: Amount::from(if enabled { 60 } else { 0 }),
+            quantity: 1,
             affiliate_enabled: enabled,
         }
     }
@@ -682,6 +684,9 @@ mod tests {
             paid_at: Some(now()),
             affiliate_profile_id: Some(1),
             affiliate_code: String::new(),
+            total_amount: Amount::from(140),
+            payment_fee: Amount::from(2),
+            reseller_profit: Amount::from(3),
             items: vec![item(100, true), item(40, false)],
         };
         let repo = Arc::new(Repo {
@@ -696,8 +701,8 @@ mod tests {
             .await
             .unwrap();
         let c = repo.commissions.lock().unwrap()[0].clone();
-        assert_eq!(c.base_amount, Amount::from(100));
-        assert_eq!(c.commission_amount, Amount::from(10));
+        assert_eq!(c.base_amount, Amount::from(40));
+        assert_eq!(c.commission_amount, Amount::from(4));
         assert_eq!(c.status, "pending_confirm");
         assert_eq!(c.confirm_at, Some(now() + Duration::days(7)));
 

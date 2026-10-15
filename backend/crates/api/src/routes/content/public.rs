@@ -4,7 +4,7 @@ use axum::extract::{Path, State};
 use axum::http::HeaderMap;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Value, json};
 use zs_domain::Id;
 use zs_domain::content::banner::{Banner, POSITION_HOME_HERO};
 use zs_domain::content::post::{POST_TYPE_BLOG, Post, PostCategory, RelatedProduct};
@@ -59,7 +59,11 @@ async fn config(
             host: request_host(&headers),
         },
     };
-    ok(s.svc.content.public_config.get(&tenant).await?)
+    let mut config = s.svc.content.public_config.get(&tenant).await?;
+    if let Value::Object(fields) = &mut config {
+        fields.insert("reseller_enabled".into(), json!(s.cfg.reseller.enabled));
+    }
+    ok(config)
 }
 
 /// Public post shape (`presenter.PostResp`).

@@ -25,7 +25,7 @@ use zs_shared::page::{Page, PageRequest};
 use crate::db::entity::{
     admins, affiliate_clicks as clicks, affiliate_commissions as commissions,
     affiliate_profiles as profiles, affiliate_withdraw_requests as withdraws, order_items, orders,
-    products, users,
+    payments, products, users,
 };
 use crate::db::repo::support::DbResultExt;
 use crate::db::repo::wallet::repo::{contains, ilike};
@@ -976,18 +976,38 @@ impl AffiliateRepo for SeaAffiliateRepo {
                 .dom()?;
             enabled.extend(found);
         }
+        let successful_payments = payments::Entity::find()
+            .filter(payments::Column::OrderId.eq(order.id))
+            .filter(payments::Column::Status.eq("success"))
+            .filter(payments::Column::DeletedAt.is_null())
+            .all(&self.db)
+            .await
+            .dom()?;
+        let payment_fee: Amount = successful_payments
+            .iter()
+            .map(|p| {
+                let calculated =
+                    Amount::new(p.amount * p.fee_rate / Decimal::ONE_HUNDRED + p.fixed_fee);
+                calculated.max(Amount::new(p.fee_amount))
+            })
+            .sum();
         Ok(Some(CommissionOrder {
             id: order.id,
             user_id: order.user_id,
             paid_at: order.paid_at,
             affiliate_profile_id: order.affiliate_profile_id,
             affiliate_code: order.affiliate_code,
+            total_amount: Amount::new(order.total_amount),
+            payment_fee,
+            reseller_profit: Amount::new(order.reseller_profit_amount),
             items: items
                 .into_iter()
                 .map(|i| CommissionItem {
                     product_id: i.product_id,
                     total_price: Amount::new(i.total_price),
                     coupon_discount: Amount::new(i.coupon_discount),
+                    cost_price: Amount::new(i.cost_price),
+                    quantity: i64::from(i.quantity),
                     affiliate_enabled: enabled.contains(&i.product_id),
                 })
                 .collect(),

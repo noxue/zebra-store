@@ -46,7 +46,7 @@ export const useAppStore = defineStore('app', () => {
     return /^[A-Z]{3}$/.test(raw) ? raw : 'CNY'
   })
   const isResellerTenant = computed(() => String(config.value?.tenant?.mode || '').trim().toLowerCase() === 'reseller')
-  const canAccessResellerConsole = computed(() => !!config.value && !isResellerTenant.value)
+  const canAccessResellerConsole = computed(() => config.value?.reseller_enabled === true && !isResellerTenant.value)
   const isListMode = computed(() => config.value?.template_mode === 'list')
   const template = computed(() => storefrontTemplate(config.value?.storefront_template))
   const sakuraEnabled = computed(() => config.value?.theme?.effects?.sakura !== false && !hasLegacyClassicPalette(config.value))

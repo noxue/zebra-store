@@ -5,10 +5,11 @@
 
 mod wallet_common;
 
-use sea_orm::EntityTrait;
+use chrono::Utc;
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 use serde_json::{Value, json};
-use wallet_common::{App, data, err};
-use zs_infra::db::entity::affiliate_commissions as commissions;
+use wallet_common::{App, data, dec, err};
+use zs_infra::db::entity::{affiliate_commissions as commissions, order_items, payments};
 
 const BAD: &str = "Invalid request parameters";
 
@@ -48,6 +49,65 @@ async fn withdraw(app: &App, token: &str, amount: &str) -> i64 {
         )
         .await;
     data(&res)["id"].as_i64().unwrap()
+}
+
+#[tokio::test]
+async fn commission_uses_cost_snapshot_and_successful_payment_fee() {
+    let app = App::new().await;
+    let (pid, _, _) = setup(&app).await;
+    let (buyer, _) = app.user("margin-buyer@example.com").await;
+    let product = app.product("margin-product", true).await;
+    let order = app.order("DJMARGIN1", buyer, "40", None, Some(pid)).await;
+    app.order_item(order, product, "40", "0").await;
+    let item = order_items::Entity::find()
+        .filter(order_items::Column::OrderId.eq(order))
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut active: order_items::ActiveModel = item.into();
+    active.cost_price = Set(dec("33"));
+    active.update(&app.db).await.unwrap();
+    let now = Utc::now();
+    payments::ActiveModel {
+        order_id: Set(order),
+        channel_id: Set(1),
+        provider_type: Set("huifu".into()),
+        channel_type: Set("wechat".into()),
+        interaction_mode: Set("redirect".into()),
+        amount: Set(dec("40")),
+        fee_rate: Set(dec("0.5")),
+        fixed_fee: Set(dec("0")),
+        fee_amount: Set(dec("0")),
+        fee_policy: Set("none".into()),
+        currency: Set("CNY".into()),
+        status: Set("success".into()),
+        exception_code: Set(String::new()),
+        provider_ref: Set(String::new()),
+        gateway_order_no: Set("DJMARGIN1".into()),
+        pay_url: Set(String::new()),
+        qr_code: Set(String::new()),
+        created_at: Set(now),
+        updated_at: Set(now),
+        ..Default::default()
+    }
+    .insert(&app.db)
+    .await
+    .unwrap();
+    app.services
+        .affiliate
+        .service
+        .handle_order_paid(order)
+        .await
+        .unwrap();
+    let commission = commissions::Entity::find()
+        .filter(commissions::Column::OrderId.eq(order))
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(commission.base_amount, dec("6.8"));
+    assert_eq!(commission.commission_amount, dec("0.68"));
 }
 
 #[tokio::test]

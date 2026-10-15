@@ -154,6 +154,7 @@ export interface SiteConfig {
     min_withdraw_amount?: number | string
     withdraw_channels?: string[]
   }
+  reseller_enabled?: boolean
   seo?: SeoConfig
   scripts?: CustomScript[]
   tenant?: { mode?: string; host?: string }

@@ -339,7 +339,7 @@ Other config keys in use:
 - `captcha{provider:'none'|'image'|'turnstile', scenes{login,register_send_code,reset_send_code,guest_create_order,gift_card_redeem}, turnstile{site_key}}`
 - `telegram_auth{enabled,bot_username,mode,mini_app_url}`, `google_auth{enabled,client_id}`
 - `registration_enabled`, `email_verification_enabled`, `email_domain_allowlist_enabled`, `allowed_email_domains`
-- `wallet_only_payment`, `wallet_recharge_channel_ids`, `affiliate.withdraw_channels`
+- `wallet_only_payment`, `wallet_recharge_channel_ids`, `affiliate.withdraw_channels`, `reseller_enabled` (server-wide reseller switch; hides the personal-center entry and guards console routes when false)
 - `seo{title,keywords,description,default_og_image}`, `scripts[{name,enabled,position:'head'|'body_end',scope:'global'|'main'|'reseller',code}]`; reseller scripts run only in a sandboxed frame.
 - `tenant.mode`, `server_time`, `app_version`
 
