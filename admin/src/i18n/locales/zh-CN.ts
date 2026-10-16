@@ -4080,6 +4080,11 @@ const messages = {
     },
     resellerProductSettings: {
       title: '分销商品配置',
+      picker: {
+        configure: '配置分站商品', title: '选择分销商和商品', reseller: '分销商 / 用户', product: '商品',
+        resellerSearch: '输入用户名或邮箱搜索分销商', productSearch: '输入商品名称搜索商品',
+        loading: '搜索中…', noResults: '没有匹配结果', continue: '打开配置',
+      },
       agentPrice: '分站代理价',
       sharedAgentPrice: '统一代理价',
       agentPriceHint: '留空继承统一代理价；不得低于商品成本价',

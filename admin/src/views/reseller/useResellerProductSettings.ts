@@ -51,6 +51,7 @@ export function useResellerProductSettings() {
   const operatingId = ref<number | null>(null)
   const saving = ref(false)
   const showEditor = ref(false)
+  const showPicker = ref(false)
   const scope = ref<{ resellerId: number; productId: number } | null>(null)
   const detail = ref<AdminResellerProductSettingDetail | null>(null)
   const productForm = ref<AdminResellerProductSettingPayloadItem>(blankSettingForm(0))
@@ -132,21 +133,17 @@ export function useResellerProductSettings() {
     }
   }
 
-  const openByIds = async () => {
-    const resellerId = Number(filters.resellerId)
-    const productId = Number(filters.productId)
-    if (!Number.isSafeInteger(resellerId) || resellerId <= 0 || !Number.isSafeInteger(productId) || productId <= 0) {
-      notifyError(t('admin.resellerProductSettings.actions.chooseIds'))
-      return
-    }
+  const openBySelection = async (resellerId: number, productId: number) => {
     scope.value = { resellerId, productId }
     try {
       const res = await adminAPI.getResellerProductSetting(resellerId, productId)
       if (!res.data) return
       applyDetail(res.data)
+      showPicker.value = false
       showEditor.value = true
     } catch {
       scope.value = null
+      notifyError(t('admin.resellerProductSettings.actions.loadFailed'))
     }
   }
 
@@ -215,13 +212,14 @@ export function useResellerProductSettings() {
     operatingId,
     saving,
     showEditor,
+    showPicker,
     scope,
     detail,
     productForm,
     skuForm,
     preview,
     openEditor,
-    openByIds,
+    openBySelection,
     closeEditor,
     save,
     reset,

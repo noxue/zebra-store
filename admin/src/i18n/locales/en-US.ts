@@ -4081,6 +4081,11 @@ const messages = {
     },
     resellerProductSettings: {
       title: 'Reseller products',
+      picker: {
+        configure: 'Configure reseller product', title: 'Choose reseller and product', reseller: 'Reseller / user', product: 'Product',
+        resellerSearch: 'Search resellers by name or email', productSearch: 'Search products by name',
+        loading: 'Searching…', noResults: 'No matches', continue: 'Open settings',
+      },
       agentPrice: 'Site reseller base',
       sharedAgentPrice: 'Shared reseller base',
       agentPriceHint: 'Blank inherits the shared base; cannot be below product cost',
