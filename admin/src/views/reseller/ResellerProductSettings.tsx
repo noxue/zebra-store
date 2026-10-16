@@ -229,7 +229,7 @@ export default defineComponent({
     return () => (
       <div class="space-y-6">
         <PageHeader title={t('admin.resellerProductSettings.title')} subtitle={t('admin.resellerProductSettings.subtitle')} />
-        <FilterBar cols={6}>
+        <FilterBar cols={6} class="relative z-10">
           {{
             default: () => (
               <>
