@@ -22,6 +22,25 @@ it('shows partial search matches and emits the chosen record, never a typed ID',
   wrapper.unmount()
 })
 
+it('reseller_picker_01 selects a pointer result before Safari can blur and close the list', async () => {
+  const chosen = { id: 5, label: 'llry · llry@live.cn (R#5)' }
+  const wrapper = mount(SearchPicker, { props: {
+    modelValue: null,
+    search: async (): Promise<SearchOption[]> => [chosen],
+    placeholder: 'Search reseller',
+    emptyText: 'None',
+    loadingText: 'Loading',
+  } })
+  await wrapper.get('input').trigger('focus')
+  await flushPromises()
+  const result = wrapper.get('[role="option"]')
+  await result.trigger('pointerdown')
+  expect(wrapper.emitted('update:modelValue')?.at(-1)?.[0]).toEqual(chosen)
+  expect((wrapper.get('input').element as HTMLInputElement).value).toBe(chosen.label)
+  expect(wrapper.find('[role="listbox"]').exists()).toBe(false)
+  wrapper.unmount()
+})
+
 it('ignores an older search response after a newer query completes', async () => {
   vi.useFakeTimers()
   let completeOld: ((value: SearchOption[]) => void) | undefined

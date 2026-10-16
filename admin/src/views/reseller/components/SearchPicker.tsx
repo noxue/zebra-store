@@ -90,17 +90,22 @@ export const SearchPicker = defineComponent({
           onKeydown={onKeydown}
         />
         {open.value && (
-          <div role="listbox" class="absolute z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-zs border border-line bg-surface-solid p-1 shadow-zs">
-            {loading.value ? <div class="px-3 py-2 text-sm text-muted">{props.loadingText}</div> : options.value.length ? options.value.map((item, index) => (
+          <div role="listbox" class="absolute z-30 mt-1 min-h-28 max-h-72 w-full overflow-y-auto rounded-zs border border-line bg-surface-solid p-2 shadow-zs">
+            {loading.value ? <div class="px-3 py-3 text-sm text-muted">{props.loadingText}</div> : options.value.length ? options.value.map((item, index) => (
               <button
                 key={item.id}
                 type="button"
                 role="option"
                 aria-selected={index === active.value}
-                class={['block w-full rounded-zs-sm px-3 py-2 text-left text-sm hover:bg-primary-soft', index === active.value ? 'bg-primary-soft' : '']}
+                class={['block min-h-12 w-full rounded-zs-sm px-3 py-3 text-left text-sm hover:bg-primary-soft', index === active.value ? 'bg-primary-soft' : '']}
+                onPointerdown={(event: PointerEvent) => {
+                  // Safari may report a null relatedTarget on blur and remove the list before click.
+                  event.preventDefault()
+                  select(item)
+                }}
                 onClick={() => select(item)}
               >{item.label}</button>
-            )) : <div class="px-3 py-2 text-sm text-muted">{props.emptyText}</div>}
+            )) : <div class="px-3 py-3 text-sm text-muted">{props.emptyText}</div>}
           </div>
         )}
       </div>
