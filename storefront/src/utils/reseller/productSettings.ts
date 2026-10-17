@@ -161,10 +161,10 @@ const sortMoney = (items: string[]) =>
   })
 
 /** `"12.00"` or `"10.00 - 18.00"` over listed SKUs, falling back to product rule price. */
-export const summarizeProductEffectivePrice = (detail?: DetailLike | null, fallback = '-'): string => {
+export const summarizeProductEffectivePrice = (detail?: DetailLike | null, fallback = '-', preview?: Record<number, { effective: string }>): string => {
   const values = new Set<string>()
   for (const sku of (detail?.skus || []).filter(isSkuListed)) {
-    const v = String(sku.effective_price_amount || sku.setting?.effective_price_amount || '').trim()
+    const v = String(preview?.[sku.id]?.effective || sku.effective_price_amount || sku.setting?.effective_price_amount || '').trim()
     if (v) values.add(v)
   }
   if (values.size > 0) {
@@ -172,6 +172,18 @@ export const summarizeProductEffectivePrice = (detail?: DetailLike | null, fallb
     return sorted.length === 1 ? sorted[0] : `${sorted[0]} - ${sorted[sorted.length - 1]}`
   }
   return String(detail?.product_setting?.effective_price_amount || '').trim() || fallback
+}
+
+/** The reseller's effective purchase cost for the SKUs shown in the product list. */
+export const summarizeProductBasePrice = (detail?: DetailLike | null, fallback = '-'): string => {
+  const values = new Set<string>()
+  for (const sku of (detail?.skus || []).filter(isSkuListed)) {
+    const value = String(sku.base_price_amount || '').trim()
+    if (value) values.add(value)
+  }
+  if (values.size === 0) return fallback
+  const sorted = sortMoney([...values])
+  return sorted.length === 1 ? sorted[0] : `${sorted[0]} - ${sorted[sorted.length - 1]}`
 }
 
 export const getResellerRuleSourceLabelKey = (source?: string): string => {

@@ -282,6 +282,7 @@ A separate layout with ResellerConsoleTopbar. Pages:
 - **Products:** ResellerProductSettingsPanel and ResellerProductRuleEditor.
   - Per-SKU `pricing_mode`: inherit, markup_percent, fixed_markup, fixed_price; plus is_listed and sort_order; preview, save, reset.
   - Reseller pricing base resolves from the site/SKU admin agent-price override, then site/product override, then the shared SKU agent price, then the main-shop price. A reseller sale price may be below the main-shop price but must cover its effective base and SKU cost.
+  - The reseller console labels the effective agent price as **成本价** (the reseller's purchase cost) and the customer-facing effective price as **售价**. List rows and product-level editor badges summarize the listed SKUs' own effective base prices; SKU editor badges show each SKU's effective base. The product's main-shop price is never used as the console's cost display. For multiple listed SKUs, display the minimum–maximum price range.
   - The product-level rule has independent optional `content` and `instructions` localized overrides. Null inherits the main product; the delivery instructions are snapshotted into new reseller orders.
 - **Orders:** filters (status, order_no, date range); orders list, stats, detail with profit snapshot.
 - **Finance:** balances, settlement status.

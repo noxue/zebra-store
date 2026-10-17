@@ -21,6 +21,7 @@ import {
   countListedSkus,
   estimateResellerPrice,
   normalizeResellerProductSettingsPagination,
+  summarizeProductBasePrice,
   summarizeProductEffectivePrice,
 } from '@/utils/reseller/productSettings'
 import { siteConfigFormToPayload, siteConfigToForm } from '@/utils/reseller/siteConfig'
@@ -133,6 +134,23 @@ describe('pricing', () => {
     }
     expect(summarizeProductEffectivePrice(detail)).toBe('8.00 - 12.00')
     expect(countListedSkus(detail)).toBe(2)
+  })
+
+  // RSL-11: the displayed cost belongs to this reseller, never the shared product price.
+  it('shows per-site SKU costs and excludes hidden or inactive SKUs', () => {
+    const detail = {
+      product_setting: undefined,
+      skus: [
+        { id: 10, sku_code: 'a', spec_values: {}, base_price_amount: '38.67', shared_agent_price_amount: '45.00', is_active: true, effective_price_amount: '50.00' },
+        { id: 11, sku_code: 'b', spec_values: {}, base_price_amount: '120.33', shared_agent_price_amount: '125.00', is_active: true, effective_price_amount: '135.00' },
+        { id: 12, sku_code: 'c', spec_values: {}, base_price_amount: '500.00', is_active: true, setting: { product_id: 1, sku_id: 12, is_listed: false, pricing_mode: 'inherit', markup_percent: '0.00', fixed_markup_amount: '0.00', fixed_price_amount: '0.00', sort_order: 0 } },
+        { id: 13, sku_code: 'd', spec_values: {}, base_price_amount: '600.00', is_active: false },
+      ],
+    }
+    expect(summarizeProductBasePrice(detail)).toBe('38.67 - 120.33')
+    expect(summarizeProductEffectivePrice(detail)).toBe('50.00 - 135.00')
+    expect(summarizeProductEffectivePrice(detail, '-', { 10: { effective: '55.00' }, 11: { effective: '140.00' } })).toBe('55.00 - 140.00')
+    expect(summarizeProductBasePrice({ product_setting: undefined, skus: [detail.skus[0]] })).toBe('38.67')
   })
 
   it('normalizes pagination', () => {

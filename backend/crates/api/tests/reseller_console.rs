@@ -369,6 +369,51 @@ async fn reseller_customer_qr_can_be_uploaded_and_saved() {
     std::fs::remove_dir_all(&root).unwrap();
 }
 
+// RSL-11: the reseller list, detail and preview must expose this site's cost,
+// while another reseller continues to receive the shared agent price.
+#[tokio::test]
+async fn rsl11_site_agent_price_in_console_responses() {
+    let app = App::new().await;
+    let (_, token, reseller_id) = app.reseller("site-price@example.test", "0").await;
+    let (_, other_token, _) = app.reseller("shared-price@example.test", "0").await;
+    let (product_id, skus) = app
+        .product("site-price", "45.00", &[("45.00", "33.00")])
+        .await;
+    let url = format!("/api/v1/reseller/product-settings/{product_id}");
+    let admin_url = format!("/api/v1/admin/resellers/product-settings/{reseller_id}/{product_id}");
+    data(&app.admin_call(
+        "PUT",
+        &admin_url,
+        Some(json!({"settings": [{"sku_id": skus[0], "is_listed": true, "pricing_mode": "inherit", "agent_price_amount": "38.67"}]})),
+    ).await);
+
+    let list = app
+        .call(
+            "GET",
+            "/api/v1/reseller/product-settings",
+            None,
+            Some(&token),
+        )
+        .await;
+    let row = &data(&list)[0];
+    assert_eq!(row["skus"][0]["base_price_amount"], "38.67");
+    assert_eq!(row["skus"][0]["shared_agent_price_amount"], "45.00");
+    let detail = app.call("GET", &url, None, Some(&token)).await;
+    assert_eq!(data(&detail)["skus"][0]["base_price_amount"], "38.67");
+    let preview = app.call("POST", &format!("{url}/preview"), Some(json!({"settings": [{"sku_id": skus[0], "is_listed": true, "pricing_mode": "inherit"}]})), Some(&token)).await;
+    assert_eq!(data(&preview)["items"][1]["base_price_amount"], "38.67");
+
+    let other = app
+        .call(
+            "GET",
+            "/api/v1/reseller/product-settings",
+            None,
+            Some(&other_token),
+        )
+        .await;
+    assert_eq!(data(&other)[0]["skus"][0]["base_price_amount"], "45.00");
+}
+
 // RSL-07: price floor / cost / markup cap enforced on save; preview matches.
 #[tokio::test]
 async fn rsl07_product_settings_pricing() {
