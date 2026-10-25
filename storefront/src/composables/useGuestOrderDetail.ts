@@ -6,6 +6,7 @@ import type { Order } from '@/api/types'
 import { downloadBlob } from '@/utils/format'
 import { hasDeliveredOrder, orderExportText } from '@/utils/exportOrder'
 import { toast } from '@/composables/useToast'
+import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import { clearGuestOrderAuth, loadGuestOrderAuth, saveGuestOrderAuth } from '@/utils/guestOrderAuth'
 import { resolveGuestOrderDetailViewState } from '@/utils/guestOrderDetailState'
 import { useOrderDisplayHelpers } from './useOrderDisplayHelpers'
@@ -15,6 +16,7 @@ export function useGuestOrderDetail() {
   const route = useRoute()
   const router = useRouter()
   const { t, locale } = useI18n()
+  const { confirm } = useConfirmDialog()
   const loading = ref(true)
   const order = ref<Order | null>(null)
   const hasManualPayment = ref(false)
@@ -22,6 +24,7 @@ export function useGuestOrderDetail() {
   const auth = ref<GuestCredentials>({ email: '', order_password: '' })
   const fulfillmentDownloading = ref(false)
   const exportDownloading = ref(false)
+  const refundSubmitting = ref(false)
   const helpers = useOrderDisplayHelpers(order)
   const orderNo = () => String(route.params.order_no || '').trim()
 
@@ -73,6 +76,27 @@ export function useGuestOrderDetail() {
     authError.value = t('guestOrderDetail.authRequired')
   }
 
+  const requestRefund = async () => {
+    if (!order.value || refundSubmitting.value) return
+    const accepted = await confirm({
+      title: t('orderDetail.requestRefund'),
+      message: t('orderDetail.refundConfirm'),
+      confirmText: t('common.confirm'),
+      cancelText: t('common.cancel'),
+    })
+    if (!accepted) return
+    refundSubmitting.value = true
+    try {
+      const response = await guestOrderAPI.requestRefund(order.value.order_no, { ...auth.value })
+      toast.success(t(response.data.status === 'succeeded' ? 'orderDetail.refundSucceeded' : 'orderDetail.refundPending'))
+      await loadOrder()
+    } catch {
+      toast.error(t('orderDetail.refundFailed'))
+    } finally {
+      refundSubmitting.value = false
+    }
+  }
+
   const handleDownloadFulfillment = async (no: string) => {
     if (fulfillmentDownloading.value) return
     fulfillmentDownloading.value = true
@@ -112,5 +136,5 @@ export function useGuestOrderDetail() {
     void loadOrder()
   })
 
-  return { loading, order, hasManualPayment, auth, authError, viewState, handleAuthSubmit, clearAuth, fulfillmentDownloading, handleDownloadFulfillment, exportDownloading, exportOrder, helpers }
+  return { loading, order, hasManualPayment, auth, authError, viewState, handleAuthSubmit, clearAuth, refundSubmitting, requestRefund, fulfillmentDownloading, handleDownloadFulfillment, exportDownloading, exportOrder, helpers }
 }

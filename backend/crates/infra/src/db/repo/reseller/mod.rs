@@ -198,6 +198,8 @@ pub(crate) fn withdraw_model(m: withdraws::Model) -> WithdrawRequest {
         currency: m.currency,
         channel: m.channel,
         account: m.account,
+        payee_name: m.payee_name,
+        qr_code_url: m.qr_code_url,
         status: WithdrawStatus::from_db(&m.status),
         reject_reason: m.reject_reason,
         processed_by: m.processed_by,

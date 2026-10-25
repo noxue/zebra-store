@@ -227,6 +227,8 @@ pub struct WithdrawDraft {
     pub currency: String,
     pub channel: String,
     pub account: String,
+    pub payee_name: String,
+    pub qr_code_url: String,
 }
 
 /// Validates withdrawal input (amount > 0, currency, channel and account required).
@@ -235,6 +237,18 @@ pub fn withdraw_draft(
     currency: &str,
     channel: &str,
     account: &str,
+) -> Result<WithdrawDraft> {
+    withdraw_draft_with_payout(amount, currency, channel, account, "", "")
+}
+
+/// Validates optional payout details while keeping older withdrawal clients valid.
+pub fn withdraw_draft_with_payout(
+    amount: Decimal,
+    currency: &str,
+    channel: &str,
+    account: &str,
+    payee_name: &str,
+    qr_code_url: &str,
 ) -> Result<WithdrawDraft> {
     let amount = round2(amount);
     if amount <= Decimal::ZERO {
@@ -248,11 +262,23 @@ pub fn withdraw_draft(
     if channel.is_empty() || account.is_empty() {
         return Err(Error::bad_request(keys::WITHDRAW_AMOUNT_INVALID));
     }
+    let (payee_name, qr_code_url) = (payee_name.trim(), qr_code_url.trim());
+    if payee_name.chars().count() > 100
+        || qr_code_url.len() > 512
+        || (!qr_code_url.is_empty()
+            && (!qr_code_url.starts_with("/uploads/reseller/")
+                || qr_code_url.contains("..")
+                || qr_code_url.contains(['?', '#'])))
+    {
+        return Err(Error::bad_request(keys::WITHDRAW_PAYOUT_INVALID));
+    }
     Ok(WithdrawDraft {
         amount: Amount::new(amount),
         currency: currency.to_owned(),
         channel: channel.to_owned(),
         account: account.to_owned(),
+        payee_name: payee_name.to_owned(),
+        qr_code_url: qr_code_url.to_owned(),
     })
 }
 

@@ -63,8 +63,12 @@ pub fn builtin_roles() -> &'static [RoleSeed] {
 /// whatever its roles (live QA I-14: a custom role without `GET:/admin/authz/me`
 /// could not even finish logging in). The set equals the self-service part of the
 /// built-in `readonly_auditor` role.
-pub const SELF_SERVICE_ROUTES: [(&str, &str); 8] = [
+pub const SELF_SERVICE_ROUTES: [(&str, &str); 12] = [
     ("GET", "/admin/authz/me"),
+    ("GET", "/admin/api-key"),
+    ("POST", "/admin/api-key"),
+    ("PUT", "/admin/api-key"),
+    ("DELETE", "/admin/api-key"),
     ("GET", "/admin/compliance/status"),
     ("GET", "/admin/2fa/status"),
     ("PUT", "/admin/password"),

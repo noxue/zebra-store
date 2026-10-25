@@ -94,7 +94,10 @@ impl CardSecretService {
             .await
             .map_err(|e| e.or_internal("error.product_fetch_failed"))?
             .ok_or_else(|| Error::not_found(product_keys::NOT_FOUND))?;
-        let is_auto = product.fulfillment_type == FulfillmentType::Auto;
+        let is_auto = matches!(
+            product.fulfillment_type,
+            FulfillmentType::Auto | FulfillmentType::Upstream
+        );
         let skus = self.products.list_skus(product_id, false).await?;
         let requested = if sku_id > 0 {
             self.products.get_sku(sku_id).await?
@@ -332,7 +335,10 @@ impl CardSecretService {
             .get(product_id, SkuScope::Active)
             .await?
             .ok_or_else(|| Error::not_found(keys::NOT_FOUND))?;
-        if product.fulfillment_type != FulfillmentType::Auto {
+        if !matches!(
+            product.fulfillment_type,
+            FulfillmentType::Auto | FulfillmentType::Upstream
+        ) {
             return Err(invalid());
         }
         if sku_id > 0 {

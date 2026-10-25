@@ -347,3 +347,48 @@ async fn recharge_callback_credits_once() {
     assert_eq!(app.epay_callback(payment_id, "20.00").await, "success");
     assert_eq!(app.balance(uid).await, "20.00");
 }
+
+/// PAY-21/PAY-45: real order detail explains stored gateway failures without leaking payload.
+#[tokio::test]
+async fn order_detail_distinguishes_closed_trade_from_merchant_restriction() {
+    use sea_orm::{ActiveModelTrait, EntityTrait, IntoActiveModel, Set};
+    use zs_infra::db::entity::payments;
+    let app = OrderApp::new().await;
+    let (_, _, parent, _) = paid_manual_order(&app, "10.00", 1).await;
+    let row = payments::Entity::find()
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let payment_id = row.id;
+    for (payload, expected) in [
+        (
+            json!({"bank_code":"TRADE_CLOSED", "bank_message":"交易已关闭", "secret":"do-not-expose"}),
+            "closed_unknown",
+        ),
+        (json!({"bank_message":"商户被封控"}), "merchant_restricted"),
+        (json!({"bank_message":"用户取消支付"}), "user_canceled"),
+        (json!({"bank_message":"支付超时"}), "expired_unpaid"),
+    ] {
+        let mut row = payments::Entity::find_by_id(payment_id)
+            .one(&app.db)
+            .await
+            .unwrap()
+            .unwrap()
+            .into_active_model();
+        row.provider_type = Set("huifu".into());
+        row.status = Set("failed".into());
+        row.provider_payload = Set(Some(payload));
+        row.update(&app.db).await.unwrap();
+        let detail = app
+            .admin_call("GET", &format!("/api/v1/admin/orders/{parent}"), None)
+            .await;
+        assert_eq!(detail["status_code"], 0, "{detail}");
+        assert_eq!(
+            detail["data"]["payments"][0]["diagnosis"]["kind"], expected,
+            "{detail}"
+        );
+        assert_eq!(detail["data"]["payments"][0]["provider_payload"], json!({}));
+        assert!(!detail.to_string().contains("do-not-expose"));
+    }
+}

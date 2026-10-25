@@ -18,6 +18,8 @@ pub struct Model {
     pub spec_values_json: Option<Json>,
     #[sea_orm(column_type = "Decimal(Some((20, 2)))")]
     pub price_amount: Decimal,
+    #[sea_orm(column_type = "Decimal(Some((20, 2)))", nullable)]
+    pub agent_price_amount: Option<Decimal>,
     #[sea_orm(column_type = "Decimal(Some((20, 2)))")]
     pub cost_price_amount: Decimal,
     #[sea_orm(default_value = 0)]

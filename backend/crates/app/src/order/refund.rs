@@ -9,7 +9,9 @@ use serde_json::Map;
 use zs_domain::order::model::{Order, OrderItem, RefundRecord, keys};
 use zs_domain::order::ports::{RefundDone, RefundFilter, RefundRequest};
 use zs_domain::order::refund::{parse_refund_amount, plan_refund};
-use zs_domain::payment::gateway::{GatewayRefundInput, GatewayRefundResult};
+use zs_domain::payment::gateway::{
+    GatewayRefundInput, GatewayRefundResult, supports_refund_amount,
+};
 use zs_domain::payment::model::AdminPaymentFilter;
 use zs_domain::payment::refund::{
     GatewayRefundAttempt, GatewayRefundAttemptUpdate, NewGatewayRefundAttempt,
@@ -46,7 +48,269 @@ pub struct OriginalRefundResult {
     pub completed: Option<RefundDone>,
 }
 
+/// Twice the payment transport's 15-second timeout; an in-flight submit must not
+/// be interpreted as a failed refund by a concurrent query.
+const REFUND_SUBMISSION_GRACE_SECONDS: i64 = 30;
+
 impl OrderService {
+    pub async fn latest_refund_attempt(
+        &self,
+        order_id: Id,
+    ) -> Result<Option<GatewayRefundAttempt>> {
+        Ok(self
+            .deps
+            .store
+            .gateway_refund_attempts(order_id)
+            .await?
+            .into_iter()
+            .next())
+    }
+    pub async fn public_refund_state(&self, order_id: Id) -> Result<&'static str> {
+        let attempt = self
+            .deps
+            .store
+            .gateway_refund_attempts(order_id)
+            .await?
+            .into_iter()
+            .next();
+        Ok(
+            match attempt.as_ref().map(|attempt| attempt.status.as_str()) {
+                Some(gateway_refund_status::PREPARING) => "checking",
+                Some(gateway_refund_status::PENDING) => "processing",
+                Some(gateway_refund_status::MANUAL_PREPARING) => "checking",
+                Some(gateway_refund_status::MANUAL_LOCKING) => "checking",
+                Some(gateway_refund_status::MANUAL_AWAITING) => "awaiting_support",
+                Some(gateway_refund_status::SUCCEEDED)
+                    if attempt.as_ref().is_some_and(|a| a.card_confirmed) =>
+                {
+                    "succeeded"
+                }
+                Some(gateway_refund_status::SUCCEEDED) => "syncing",
+                Some(gateway_refund_status::FAILED) => "needs_review",
+                _ => "none",
+            },
+        )
+    }
+
+    /// Reconciles durable provider attempts after process restarts or transient API failures.
+    pub async fn reconcile_gateway_refunds(&self) -> Result<()> {
+        for attempt in self.deps.store.unfinished_gateway_refund_attempts().await? {
+            let result = if matches!(
+                attempt.status.as_str(),
+                gateway_refund_status::MANUAL_PREPARING | gateway_refund_status::MANUAL_LOCKING
+            ) {
+                self.prepare_manual_refund(
+                    attempt.order_id,
+                    &attempt.amount.to_string(),
+                    &attempt.remark,
+                    attempt.payment_fee_refunded,
+                )
+                .await
+                .map(|_| ())
+            } else if attempt.status == gateway_refund_status::SUCCEEDED {
+                let order = self
+                    .deps
+                    .repo
+                    .get(attempt.order_id)
+                    .await?
+                    .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
+                self.confirm_and_mark(&order, &attempt).await
+            } else {
+                self.original_refund(
+                    attempt.order_id,
+                    &attempt.amount.to_string(),
+                    &attempt.remark,
+                    attempt.payment_fee_refunded,
+                    "",
+                )
+                .await
+                .map(|_| ())
+            };
+            if let Err(error) = result {
+                tracing::warn!(%error, attempt_id = attempt.id, "gateway_refund_reconciliation_failed");
+            }
+        }
+        Ok(())
+    }
+
+    async fn ensure_non_gateway_refund_safe(&self, order_id: Id) -> Result<()> {
+        let order = self
+            .deps
+            .repo
+            .get(order_id)
+            .await?
+            .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
+        let targets: Vec<&Order> = if order.children.is_empty() {
+            vec![&order]
+        } else {
+            order.children.iter().collect()
+        };
+        for target in targets {
+            if target
+                .fulfillment
+                .as_ref()
+                .is_some_and(|fulfillment| fulfillment.logistics.contains_key("card_converter_id"))
+            {
+                return Err(Error::bad_request(
+                    "error.card_converter_refund_review_required",
+                ));
+            }
+            if let Some(integration) = &self.deps.integration
+                && integration.requires_converter(target).await?
+            {
+                return Err(Error::bad_request(
+                    "error.card_converter_refund_review_required",
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// Buyer-facing availability for a full refund to the successful payment method.
+    pub async fn buyer_refund_mode(&self, order: &Order) -> Result<&'static str> {
+        if order.paid_at.is_none() || order.total_amount <= order.refunded_amount {
+            return Ok("none");
+        }
+        if order.refunded_amount != zs_shared::money::Amount::ZERO
+            || order.wallet_paid_amount != zs_shared::money::Amount::ZERO
+            || order.online_paid_amount != order.total_amount
+            || plan_refund(
+                order,
+                order.total_amount,
+                self.order_setting().await.max_refund_days,
+                self.deps.clock.now(),
+            )
+            .is_err()
+        {
+            return Ok("contact_support");
+        }
+        let targets: Vec<&Order> = if order.children.is_empty() {
+            vec![order]
+        } else {
+            order.children.iter().collect()
+        };
+        for target in targets {
+            if let Some(fulfillment) = &target.fulfillment {
+                if self.deps.integration.is_none() {
+                    return Ok("contact_support");
+                }
+                if fulfillment.status != "delivered"
+                    || !fulfillment
+                        .logistics
+                        .get("card_converter_id")
+                        .and_then(serde_json::Value::as_i64)
+                        .is_some_and(|id| id > 0)
+                {
+                    return Ok("contact_support");
+                }
+            }
+        }
+        let (payments, _) = self
+            .deps
+            .payment_records
+            .list_admin(&AdminPaymentFilter {
+                page: PageRequest {
+                    page: 1,
+                    page_size: 100,
+                },
+                order_id: order.id,
+                status: PaymentStatus::Success.as_str().into(),
+                skip_count: true,
+                ..AdminPaymentFilter::default()
+            })
+            .await?;
+        let Some(payment) = payments.into_iter().find(|payment| {
+            payment.status == PaymentStatus::Success && payment.amount == order.total_amount
+        }) else {
+            return Ok("contact_support");
+        };
+        let Some(channel) = self.deps.payment_channels.get(payment.channel_id).await? else {
+            return Ok("contact_support");
+        };
+        Ok(
+            if self
+                .deps
+                .registry
+                .lookup(&channel.provider_type, &channel.channel_type)
+                .is_some_and(|gateway| gateway.capabilities().refund)
+            {
+                "automatic"
+            } else {
+                "contact_support"
+            },
+        )
+    }
+
+    pub async fn buyer_original_refund(&self, order: &Order) -> Result<OriginalRefundResult> {
+        if self.buyer_refund_mode(order).await? != "automatic" {
+            return Err(Error::bad_request("error.payment_provider_not_supported"));
+        }
+        self.original_refund(
+            order.id,
+            &order.total_amount.to_string(),
+            "buyer_requested_refund",
+            false,
+            "",
+        )
+        .await
+    }
+
+    async fn prepare_card_refund(&self, order: &Order, refund_no: &str) -> Result<()> {
+        let Some(integration) = &self.deps.integration else {
+            return Err(Error::bad_request(
+                "error.card_converter_refund_review_required",
+            ));
+        };
+        if order.children.is_empty() {
+            integration.prepare_refund(order, refund_no).await?;
+        } else {
+            for child in &order.children {
+                integration.prepare_refund(child, refund_no).await?;
+            }
+        }
+        Ok(())
+    }
+
+    async fn confirm_card_refund(&self, order: &Order, refund_no: &str) -> Result<()> {
+        let Some(integration) = &self.deps.integration else {
+            return Err(Error::bad_request(
+                "error.card_converter_refund_review_required",
+            ));
+        };
+        if order.children.is_empty() {
+            integration.confirm_refund(order, refund_no).await?;
+        } else {
+            for child in &order.children {
+                integration.confirm_refund(child, refund_no).await?;
+            }
+        }
+        Ok(())
+    }
+
+    async fn confirm_and_mark(&self, order: &Order, attempt: &GatewayRefundAttempt) -> Result<()> {
+        self.confirm_card_refund(order, &attempt.refund_no).await?;
+        self.deps
+            .store
+            .mark_gateway_refund_card_confirmed(attempt.id)
+            .await
+    }
+
+    async fn cancel_card_refund(&self, order: &Order, refund_no: &str) -> Result<()> {
+        let Some(integration) = &self.deps.integration else {
+            return Err(Error::bad_request(
+                "error.card_converter_refund_review_required",
+            ));
+        };
+        if order.children.is_empty() {
+            integration.cancel_refund(order, refund_no).await?;
+        } else {
+            for child in &order.children {
+                integration.cancel_refund(child, refund_no).await?;
+            }
+        }
+        Ok(())
+    }
+
     /// Requests an original-route refund through the successful payment's provider. The local
     /// refund is applied only when the provider already reports a final success.
     pub async fn original_refund(
@@ -76,6 +340,15 @@ impl OrderService {
             .into_iter()
             .find(|payment| payment.status == PaymentStatus::Success)
             .ok_or_else(|| Error::bad_request("error.payment_not_found"))?;
+        let current_order = self
+            .deps
+            .repo
+            .get(order_id)
+            .await?
+            .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
+        if payment.order_id != order_id || payment.currency != current_order.currency {
+            return Err(Error::bad_request("error.payment_not_found"));
+        }
         let channel = self
             .deps
             .payment_channels
@@ -87,12 +360,29 @@ impl OrderService {
             .registry
             .lookup(&channel.provider_type, &channel.channel_type)
             .ok_or_else(|| Error::bad_request("error.payment_provider_not_supported"))?;
+        let capabilities = gateway.capabilities();
+        if !supports_refund_amount(capabilities, payment.amount, amount) {
+            return Err(Error::bad_request("error.payment_provider_not_supported"));
+        }
         let previous_attempts = self.deps.store.gateway_refund_attempts(order_id).await?;
         let previous_attempt = previous_attempts
             .into_iter()
             .find(|attempt| attempt.payment_id == payment.id);
+        if previous_attempt.as_ref().is_some_and(|attempt| {
+            matches!(
+                attempt.status.as_str(),
+                gateway_refund_status::MANUAL_PREPARING
+                    | gateway_refund_status::MANUAL_LOCKING
+                    | gateway_refund_status::MANUAL_AWAITING
+            )
+        }) {
+            return Err(Error::bad_request("error.gateway_refund_pending"));
+        }
         if let Some(attempt) = previous_attempt.as_ref()
-            && attempt.status == gateway_refund_status::PENDING
+            && matches!(
+                attempt.status.as_str(),
+                gateway_refund_status::PREPARING | gateway_refund_status::PENDING
+            )
             && (attempt.amount != amount
                 || attempt.payment_fee_refunded != fee_refunded
                 || attempt.remark != remark)
@@ -111,16 +401,25 @@ impl OrderService {
                 payload: attempt.payload.clone(),
             };
             let completed = Some(self.apply_gateway_refund(attempt, &result).await?);
+            let order = self
+                .deps
+                .repo
+                .get(order_id)
+                .await?
+                .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
+            self.confirm_and_mark(&order, attempt).await?;
             return Ok(OriginalRefundResult {
                 gateway: result,
                 attempt: attempt.clone(),
                 completed,
             });
         }
-        if previous_attempt
-            .as_ref()
-            .is_none_or(|attempt| attempt.status != gateway_refund_status::PENDING)
-        {
+        if previous_attempt.as_ref().is_none_or(|attempt| {
+            !matches!(
+                attempt.status.as_str(),
+                gateway_refund_status::PREPARING | gateway_refund_status::PENDING
+            )
+        }) {
             self.preflight_gateway_refund(order_id, amount).await?;
         }
         let now = self.deps.clock.now();
@@ -143,6 +442,7 @@ impl OrderService {
                 remark: remark.to_owned(),
                 payment_fee_refunded: fee_refunded,
                 now,
+                initial_status: gateway_refund_status::PREPARING.to_owned(),
             })
             .await?;
         let attempt = reservation.attempt;
@@ -154,6 +454,13 @@ impl OrderService {
                 payload: attempt.payload.clone(),
             };
             let completed = Some(self.apply_gateway_refund(&attempt, &result).await?);
+            let order = self
+                .deps
+                .repo
+                .get(order_id)
+                .await?
+                .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
+            self.confirm_and_mark(&order, &attempt).await?;
             return Ok(OriginalRefundResult {
                 gateway: result,
                 attempt,
@@ -161,7 +468,42 @@ impl OrderService {
             });
         }
 
-        let gateway_result = if reservation.created {
+        let should_submit = if attempt.status == gateway_refund_status::PREPARING {
+            let order = self
+                .deps
+                .repo
+                .get(order_id)
+                .await?
+                .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
+            if let Err(error) = self.prepare_card_refund(&order, &attempt.refund_no).await {
+                if self
+                    .cancel_card_refund(&order, &attempt.refund_no)
+                    .await
+                    .is_ok()
+                {
+                    self.deps
+                        .store
+                        .update_gateway_refund_attempt(
+                            attempt.id,
+                            &GatewayRefundAttemptUpdate {
+                                status: gateway_refund_status::FAILED.to_owned(),
+                                payload: Map::new(),
+                                error: error.to_string(),
+                                now: self.deps.clock.now(),
+                            },
+                        )
+                        .await?;
+                }
+                return Err(error);
+            }
+            self.deps
+                .store
+                .claim_gateway_refund_submission(attempt.id, self.deps.clock.now())
+                .await?
+        } else {
+            false
+        };
+        let gateway_result = if should_submit {
             gateway
                 .refund_payment(
                     &channel.config_json,
@@ -184,6 +526,28 @@ impl OrderService {
             {
                 return Err(Error::bad_request("error.gateway_refund_pending"));
             }
+            let current = self
+                .deps
+                .store
+                .gateway_refund_attempt(attempt.id)
+                .await?
+                .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
+            if matches!(
+                current.status.as_str(),
+                gateway_refund_status::PREPARING | gateway_refund_status::PENDING
+            ) && self.deps.clock.now()
+                < current.updated_at + chrono::Duration::seconds(REFUND_SUBMISSION_GRACE_SECONDS)
+            {
+                return Ok(OriginalRefundResult {
+                    gateway: GatewayRefundResult {
+                        provider_ref: current.provider_ref.clone(),
+                        status: Some(PaymentStatus::Pending),
+                        payload: current.payload.clone(),
+                    },
+                    attempt: current,
+                    completed: None,
+                });
+            }
             gateway
                 .query_refund(&channel.config_json, &attempt.provider_ref)
                 .await
@@ -192,13 +556,30 @@ impl OrderService {
 
         let gateway_status = gateway_result.status.unwrap_or(PaymentStatus::Pending);
         let completed = if gateway_status == PaymentStatus::Success {
-            Some(self.apply_gateway_refund(&attempt, &gateway_result).await?)
+            let completed = self.apply_gateway_refund(&attempt, &gateway_result).await?;
+            let order = self
+                .deps
+                .repo
+                .get(order_id)
+                .await?
+                .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
+            self.confirm_and_mark(&order, &attempt).await?;
+            Some(completed)
         } else {
             let status = if gateway_status == PaymentStatus::Failed {
                 gateway_refund_status::FAILED
             } else {
                 gateway_refund_status::PENDING
             };
+            if gateway_status == PaymentStatus::Failed {
+                let order = self
+                    .deps
+                    .repo
+                    .get(order_id)
+                    .await?
+                    .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
+                self.cancel_card_refund(&order, &attempt.refund_no).await?;
+            }
             let updated = self
                 .deps
                 .store
@@ -249,6 +630,37 @@ impl OrderService {
             setting.max_refund_days,
             self.deps.clock.now(),
         )?;
+        let delivered = order.fulfillment.is_some()
+            || order
+                .children
+                .iter()
+                .any(|child| child.fulfillment.is_some());
+        if delivered
+            && (amount != order.total_amount
+                || order.refunded_amount != zs_shared::money::Amount::ZERO)
+        {
+            return Err(Error::bad_request(
+                "error.card_converter_refund_review_required",
+            ));
+        }
+        let targets: Vec<&Order> = if order.children.is_empty() {
+            vec![&order]
+        } else {
+            order.children.iter().collect()
+        };
+        for target in targets {
+            if let Some(fulfillment) = &target.fulfillment
+                && !fulfillment
+                    .logistics
+                    .get("card_converter_id")
+                    .and_then(serde_json::Value::as_i64)
+                    .is_some_and(|id| id > 0)
+            {
+                return Err(Error::bad_request(
+                    "error.card_converter_refund_review_required",
+                ));
+            }
+        }
         if let Some(parent_id) = order.parent_id
             && let Some(parent) = self.deps.repo.get(parent_id).await?
             && amount > parent.total_amount - parent.refunded_amount
@@ -346,6 +758,25 @@ impl OrderService {
         amount: &str,
         remark: &str,
     ) -> Result<RefundDone> {
+        self.ensure_non_gateway_refund_safe(order_id).await?;
+        let order = self
+            .deps
+            .repo
+            .get(order_id)
+            .await?
+            .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
+        let payment_order = match order.parent_id.filter(|id| *id > 0) {
+            Some(id) => self
+                .deps
+                .repo
+                .get(id)
+                .await?
+                .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?,
+            None => order,
+        };
+        if payment_order.online_paid_amount.is_positive() {
+            return Err(Error::bad_request("error.gateway_refund_pending"));
+        }
         self.apply_refund(order_id, amount, remark, true, false, None)
             .await
     }
@@ -358,8 +789,214 @@ impl OrderService {
         remark: &str,
         fee_refunded: bool,
     ) -> Result<RefundDone> {
+        self.ensure_non_gateway_refund_safe(order_id).await?;
+        let order = self
+            .deps
+            .repo
+            .get(order_id)
+            .await?
+            .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
+        let payment_order = match order.parent_id.filter(|id| *id > 0) {
+            Some(id) => self
+                .deps
+                .repo
+                .get(id)
+                .await?
+                .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?,
+            None => order,
+        };
+        if payment_order.online_paid_amount.is_positive() {
+            return Err(Error::bad_request("error.gateway_refund_pending"));
+        }
         self.apply_refund(order_id, amount, remark, false, fee_refunded, None)
             .await
+    }
+
+    /// Lock delivered cards before support transfers money outside the payment gateway.
+    /// This records no completed refund until `confirm_manual_refund` is called.
+    pub async fn prepare_manual_refund(
+        &self,
+        order_id: Id,
+        raw_amount: &str,
+        remark: &str,
+        fee_refunded: bool,
+    ) -> Result<GatewayRefundAttempt> {
+        let amount = parse_refund_amount(raw_amount)?;
+        self.preflight_gateway_refund(order_id, amount).await?;
+        let order = self
+            .deps
+            .repo
+            .get(order_id)
+            .await?
+            .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
+        let (payments, _) = self
+            .deps
+            .payment_records
+            .list_admin(&AdminPaymentFilter {
+                page: PageRequest {
+                    page: 1,
+                    page_size: 100,
+                },
+                order_id,
+                status: PaymentStatus::Success.as_str().into(),
+                skip_count: true,
+                ..AdminPaymentFilter::default()
+            })
+            .await?;
+        let payment = payments
+            .into_iter()
+            .find(|payment| payment.status == PaymentStatus::Success)
+            .ok_or_else(|| Error::bad_request("error.payment_not_found"))?;
+        if payment.order_id != order_id || payment.currency != order.currency {
+            return Err(Error::bad_request("error.payment_not_found"));
+        }
+        if amount > payment.amount || order.wallet_paid_amount != zs_shared::money::Amount::ZERO {
+            return Err(Error::bad_request("error.payment_provider_not_supported"));
+        }
+        let channel = self
+            .deps
+            .payment_channels
+            .get(payment.channel_id)
+            .await?
+            .ok_or_else(|| Error::bad_request("error.payment_channel_not_found"))?;
+        if self
+            .deps
+            .registry
+            .lookup(&channel.provider_type, &channel.channel_type)
+            .is_some_and(|gateway| {
+                supports_refund_amount(gateway.capabilities(), payment.amount, amount)
+            })
+        {
+            return Err(Error::bad_request("error.payment_provider_not_supported"));
+        }
+        let now = self.deps.clock.now();
+        let refund_no = format!("MR{}{}", order_id, now.timestamp_millis());
+        let reservation = self
+            .deps
+            .store
+            .reserve_gateway_refund(&NewGatewayRefundAttempt {
+                order_id,
+                payment_id: payment.id,
+                channel_id: payment.channel_id,
+                request_date: String::new(),
+                refund_no: refund_no.clone(),
+                provider_ref: String::new(),
+                amount,
+                remark: remark.to_owned(),
+                payment_fee_refunded: fee_refunded,
+                now,
+                initial_status: gateway_refund_status::MANUAL_PREPARING.to_owned(),
+            })
+            .await?;
+        let attempt = reservation.attempt;
+        if attempt.amount != amount
+            || attempt.remark != remark
+            || attempt.payment_fee_refunded != fee_refunded
+        {
+            return Err(Error::bad_request("error.gateway_refund_pending"));
+        }
+        if attempt.status == gateway_refund_status::MANUAL_AWAITING {
+            return Ok(attempt);
+        }
+        if !matches!(
+            attempt.status.as_str(),
+            gateway_refund_status::MANUAL_PREPARING | gateway_refund_status::MANUAL_LOCKING
+        ) {
+            return Err(Error::bad_request("error.gateway_refund_pending"));
+        }
+        if !self
+            .deps
+            .store
+            .claim_manual_refund_preparation(attempt.id, self.deps.clock.now())
+            .await?
+        {
+            return Ok(attempt);
+        }
+        if let Err(error) = self.prepare_card_refund(&order, &attempt.refund_no).await {
+            if self
+                .cancel_card_refund(&order, &attempt.refund_no)
+                .await
+                .is_ok()
+            {
+                self.deps
+                    .store
+                    .update_gateway_refund_attempt(
+                        attempt.id,
+                        &GatewayRefundAttemptUpdate {
+                            status: gateway_refund_status::FAILED.to_owned(),
+                            payload: Map::new(),
+                            error: error.to_string(),
+                            now: self.deps.clock.now(),
+                        },
+                    )
+                    .await?;
+            }
+            return Err(error);
+        }
+        self.deps
+            .store
+            .update_gateway_refund_attempt(
+                attempt.id,
+                &GatewayRefundAttemptUpdate {
+                    status: gateway_refund_status::MANUAL_AWAITING.to_owned(),
+                    payload: Map::new(),
+                    error: String::new(),
+                    now: self.deps.clock.now(),
+                },
+            )
+            .await
+    }
+
+    /// Staff supplies the external original-route transfer reference after confirming payment.
+    pub async fn confirm_manual_refund(
+        &self,
+        order_id: Id,
+        attempt_id: Id,
+        transfer_ref: &str,
+    ) -> Result<RefundDone> {
+        let transfer_ref = transfer_ref.trim();
+        if transfer_ref.is_empty() {
+            return Err(Error::invalid());
+        }
+        let attempt = self
+            .deps
+            .store
+            .gateway_refund_attempt(attempt_id)
+            .await?
+            .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
+        if attempt.order_id != order_id
+            || !matches!(
+                attempt.status.as_str(),
+                gateway_refund_status::MANUAL_AWAITING | gateway_refund_status::SUCCEEDED
+            )
+        {
+            return Err(Error::bad_request("error.gateway_refund_pending"));
+        }
+        if attempt.status == gateway_refund_status::SUCCEEDED
+            && attempt.provider_ref != transfer_ref
+        {
+            return Err(Error::bad_request("error.gateway_refund_pending"));
+        }
+        let mut payload = Map::new();
+        payload.insert("manual_transfer_ref".into(), transfer_ref.into());
+        let done = self
+            .apply_refund(
+                order_id,
+                &attempt.amount.to_string(),
+                &attempt.remark,
+                false,
+                attempt.payment_fee_refunded,
+                Some((attempt.id, transfer_ref.to_owned(), payload)),
+            )
+            .await?;
+        let order = self
+            .deps
+            .repo
+            .get(order_id)
+            .await?
+            .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
+        self.confirm_and_mark(&order, &attempt).await?;
+        Ok(done)
     }
 
     /// `PATCH /admin/order-refunds/:id/payment-fee` (RFD-01): returns the full admin row.

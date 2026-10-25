@@ -154,7 +154,7 @@ Conventions shared by list pages:
   - fulfillment_type `manual|auto`. This field and several others are locked when the product `is_mapped` (upstream).
   - manual_stock_total.
   - **manual_form_schema** builder (list of fields): key, type (`text|textarea|phone|email|number|select|radio|checkbox`), required, label[lang], placeholder[lang], regex, max_len, min, max, options_text.
-  - **SKUs** (list): sku_code, spec_values[lang], price_amount, cost_price_amount, manual_stock_total (−1 means unlimited), sort_order, is_active.
+  - **SKUs** (list): sku_code, spec_values[lang], price_amount, optional agent_price_amount (blank inherits price_amount for reseller pricing/profit), cost_price_amount, manual_stock_total (−1 means unlimited), sort_order, is_active.
   - price_amount and cost_price_amount (hidden or hinted when SKUs exist), sort_order.
   - images (MediaPicker, multiple, scene `product`), description[lang] (textarea), content[lang] (RichEditor), instructions[lang] (RichEditor), tags (chips).
   - payment_channel_ids (chip multi-select from `getPaymentChannels`), is_affiliate_enabled, is_active.
@@ -163,7 +163,7 @@ Conventions shared by list pages:
 ### Categories (`Categories.vue`)
 - A tree list (parent/child), fetched with `getCategories()`.
 - **Columns:** id, icon, name, slug, sort, status (toggle via `patchCategoryActive`), actions (edit, delete).
-- **Dialog fields:** name[lang], slug, parent_id (0 = root; locked when the category has children), icon (MediaPicker, scene `category`), sort_order. Supports `?category_id=` deep link.
+- **Dialog fields:** name[lang], slug, parent_id (0 = root; locked when the category has children), icon (MediaPicker, scene `category`), sort_order. Editing also includes an `is_active` switch, initialized from the saved status; saving updates the details via `updateCategory` and any status change via `patchCategoryActive`. Disabling hides the category and its products from the storefront, including products in child categories. Supports `?category_id=` deep link.
 
 ### WholesalePrices (`WholesalePrices.vue`)
 - Product list with a search box and a wholesale filter (all/enabled/disabled).
@@ -213,7 +213,9 @@ Conventions shared by list pages:
   - Sections: amounts, discounts (coupon/promotion/member/wholesale), items, child orders with their items and fulfillment, fulfillment (download via `orders/:id/fulfillment/download` blob), procurement (`getProcurementOrders{local order}`), payments table (id, channel, status, feeRate, amount, createdAt).
   - Refund card with two tabs:
     - **wallet:** amount, remark → `orders/:id/refund-to-wallet`;
-    - **manual:** amount, reason, paymentFeeRefunded → `orders/:id/manual-refund {amount, remark, payment_fee_refunded}`.
+    - **manual:** amount, reason, paymentFeeRefunded → `orders/:id/manual-refund/prepare` first; after support verifies an original-route transfer, submit `{attempt_id,transfer_ref}` to `orders/:id/manual-refund/confirm`. The pending attempt keeps cards locked and creates no completed refund record;
+    - **original:** amount, remark → `orders/:id/original-refund`, sharing the buyer refund state machine and gateway capability checks.
+    - Order detail includes `refund_attempt` (latest attempt) so a prepared manual refund remains confirmable after page reload; `manual_awaiting` displays an external refund reference field. Reusing a completed reference on another attempt is rejected.
 - **Fulfillment modal:** a list of delivery key/value entries plus a note → `POST fulfillments` (payload: order_id, payload/delivery_data).
 
 ### OrderRefunds (`OrderRefunds.vue`)
@@ -225,7 +227,7 @@ Conventions shared by list pages:
 Settings key `order_risk_control_config`:
 - `enabled`
 - `common.ip_blacklist` (textarea, one per line)
-- `guest{enabled, max_pending_orders_per_ip, max_pending_quantity_per_ip_product, max_quantity_per_product_per_order, payment_expire_minutes, rate_limit{enabled, window_seconds, max_requests, block_seconds}}`
+- `guest{enabled, max_pending_orders_per_ip, max_pending_quantity_per_ip_product, max_quantity_per_product_per_order, payment_expire_minutes, rate_limit{enabled, window_seconds, max_requests, block_seconds}}` (recommended IP pending limit: 1; only enable IP limits after the trusted proxy chain yields distinct real client addresses)
 - `member{enabled, max_pending_orders_per_user, max_pending_orders_per_ip, max_quantity_per_product_per_order, rate_limit{…}}`
 - An "apply recommended guest policy" button.
 
@@ -376,6 +378,7 @@ Settings key `order_risk_control_config`:
   - Columns: id, reseller, siteName, logo, favicon, updatedAt, action (edit, reset → `site-configs/:rid/reset`).
   - Editor (tabbed, localized) fields:
     - site_name, logo, favicon;
+    - storefront_template, template_mode, theme colour overrides (six optional hex values; blank inherits the main site);
     - announcement {enabled, type info|success|warning, title[lang], content[lang]};
     - support {telegram, whatsapp, email, support_url};
     - seo {title, keywords, description [lang], default_og_image};
@@ -446,7 +449,7 @@ Settings key `order_risk_control_config`:
 
 1. **basic:**
    - `registration_config` {registration_enabled, email_verification_enabled, email_domain_allowlist_enabled, allowed_email_domains[]}.
-   - `order_config` {payment_expire_minutes 1–10080, max_refund_days 0–3650}.
+   - `order_config` {payment_expire_minutes 1–10080, max_refund_days 0–3650, reserve_stock_on_payment boolean}. Payment-time reservation leaves unpaid orders unreserved; a paid order that loses the stock race moves to manual handling.
    - `site_config.brand` {site_name, site_url, site_icon, site_logo (MediaPicker dialog), site_description[lang]}; currency (30 ISO codes); seo {title, keywords, description [lang]}; contact {telegram, whatsapp}; footer_links [{name, url}] (max count enforced); scripts [{name, position head|body_end, enabled, code}].
 2. **template:** storefront_template `classic|vault|aurora|atelier|noir` and template_mode `card|list` (visual radio cards). Theme section offers eight quick palettes, three core colours, optional page/card/text colours, and independent switches for the home hero, footer quick links, and repository link (all visible by default). Selecting a template applies its palette, default light/dark mode, and matching effects; the colours can then be edited.
 3. **navigation** (`SettingsNavigationTab`, key `nav_config`): builtin {about, blog, notice} and custom items [{title[lang], link_type internal|external, url, target _self|_blank, icon preset, sort_order, enabled}].
@@ -623,3 +626,13 @@ UI strings live in an inline `textMap` inside the file, not in i18n. Four sectio
 - `GET admin/ads/render/:slot`, `POST admin/ads/impression`
 
 Full TypeScript request and response shapes for every entity are in `api/types.ts` (1,219 lines) and in the interfaces at the top of `api/admin.ts`. Port them directly.
+
+### Order payment reason
+The order detail payments table includes a localized payment reason and safe gateway code. Merchant restrictions/configuration problems, explicit buyer cancellation, timeout without confirmed payment, awaiting confirmation, superseded links and unknown failures are distinct. A generic closed Huifu trade is displayed as cause unknown and does not assign responsibility to the buyer or merchant. Raw provider responses are not displayed.
+
+### Personal API key (Security settings)
+- Every logged-in administrator can view own key metadata and generate/rotate/delete their personal automation key from Security settings, irrespective of assigned role. These self-service routes are in the built-in roles and permission catalog.
+- Plaintext key appears only after generation/rotation and stays in component memory until leaving the page. Copy is explicit; keys are never saved in browser storage. Rotation/deletion requires confirmation explaining that derived tokens are revoked.
+- Shows `POST /api/v1/admin/api-key/token`; subsequent calls use the returned Bearer token and existing RBAC.
+
+Card-secret inventory/import product pickers include both `auto` and `upstream` products. Select the SKU of a mapped supplier product and import cards normally; no `p1` batch note is required for local-stock-first delivery. The import/inventory pages explain that only any shortfall is procured from the supplier.

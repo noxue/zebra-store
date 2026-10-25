@@ -27,7 +27,10 @@ use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 use zs_domain::queue::kinds;
-use zs_infra::db::entity::{order_items, orders, payments, procurement_orders, products};
+use zs_infra::db::entity::{
+    fulfillments, gateway_refund_attempts, order_items, orders, payments, procurement_orders,
+    product_skus, products,
+};
 use zs_infra::payment::http::{HttpResponse, MockTransport};
 
 const EMAIL: &str = "Buyer@Example.com";
@@ -53,6 +56,102 @@ async fn create_and_pay(app: &OrderApp, product: i64, sku: i64, qty: i32, channe
         .await;
     assert_eq!(res["status_code"], 0, "create-and-pay failed: {res}");
     res["data"].clone()
+}
+
+/// ORD-03 / DLV-03: the configured mode leaves unpaid orders unreserved, then allocates
+/// available cards on the first successful payment. A later paid buyer stays visible for
+/// manual resolution when those cards have sold out; the gateway success is never lost.
+#[tokio::test]
+async fn deferred_stock_reservation_is_atomic_with_payment() {
+    let app = OrderApp::new().await;
+    app.set_setting(
+        "order_config",
+        json!({"payment_expire_minutes": 15, "max_refund_days": 30, "reserve_stock_on_payment": true}),
+    )
+    .await;
+    let (product, sku) = app.product("card", json!({"price_amount": "10.00"})).await;
+    app.secrets(product, sku, 1).await;
+    let channel = app.epay_channel().await;
+    let first = create_and_pay(&app, product, sku, 1, channel).await;
+    let second = create_and_pay(&app, product, sku, 1, channel).await;
+    assert_eq!(app.secrets_with(product, "available").await, 1);
+    assert_eq!(app.secrets_with(product, "reserved").await, 0);
+
+    let first_payment = first["payment_id"].as_i64().unwrap();
+    let second_payment = second["payment_id"].as_i64().unwrap();
+    assert_eq!(app.epay_callback(first_payment, "10.00").await, "success");
+    assert_eq!(app.secrets_with(product, "reserved").await, 1);
+    assert_eq!(app.epay_callback(second_payment, "10.00").await, "success");
+    assert_eq!(app.payment(second_payment).await.status, "success");
+    assert_eq!(
+        app.payment(second_payment).await.exception_code,
+        "stock_insufficient"
+    );
+    let second_order = app.order_by_no(second["order_no"].as_str().unwrap()).await;
+    assert_eq!(second_order.status, "fulfilling");
+    assert_eq!(app.secrets_with(product, "reserved").await, 1);
+}
+
+/// ORD-03: a payment-time manual sale must never consume stock held by an older unpaid order.
+#[tokio::test]
+async fn deferred_manual_stock_does_not_consume_other_orders_lock() {
+    let app = OrderApp::new().await;
+    let (product, sku) = app
+        .product(
+            "manual",
+            json!({"price_amount": "10.00", "fulfillment_type": "manual", "manual_stock_total": 2}),
+        )
+        .await;
+    let channel = app.epay_channel().await;
+    let old = create_and_pay(&app, product, sku, 1, channel).await;
+    app.set_setting(
+        "order_config",
+        json!({"payment_expire_minutes": 15, "max_refund_days": 30, "reserve_stock_on_payment": true}),
+    )
+    .await;
+    let deferred = create_and_pay(&app, product, sku, 1, channel).await;
+    let stock = product_skus::Entity::find_by_id(sku)
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        (stock.manual_stock_total, stock.manual_stock_locked),
+        (1, 1)
+    );
+    let deferred_payment = deferred["payment_id"].as_i64().unwrap();
+    assert_eq!(
+        app.epay_callback(deferred_payment, "10.00").await,
+        "success"
+    );
+    let stock = product_skus::Entity::find_by_id(sku)
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        (
+            stock.manual_stock_total,
+            stock.manual_stock_locked,
+            stock.manual_stock_sold
+        ),
+        (0, 1, 1)
+    );
+    let old_payment = old["payment_id"].as_i64().unwrap();
+    assert_eq!(app.epay_callback(old_payment, "10.00").await, "success");
+    let stock = product_skus::Entity::find_by_id(sku)
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        (
+            stock.manual_stock_total,
+            stock.manual_stock_locked,
+            stock.manual_stock_sold
+        ),
+        (0, 0, 2)
+    );
 }
 
 /// ORD-02 / DLV-05 / DLV-09 / PAY-04: the full guest flow.
@@ -121,6 +220,27 @@ async fn guest_checkout_callback_auto_delivery_and_download() {
     let parent = app.order_by_no(&order_no).await;
     assert_eq!(parent.status, "paid");
     assert_eq!(app.payment(payment_id).await.status, "success");
+    let detail = app
+        .call(
+            "GET",
+            &format!("/api/v1/guest/orders/{order_no}"),
+            None,
+            &guest(),
+        )
+        .await;
+    assert_eq!(detail["data"]["refund_mode"], "contact_support");
+    let unsupported = app
+        .call(
+            "POST",
+            &format!("/api/v1/guest/orders/{order_no}/refund"),
+            None,
+            &guest(),
+        )
+        .await;
+    assert_ne!(
+        unsupported["status_code"], 0,
+        "unsupported channel must not submit a refund"
+    );
     let children = app.children(parent.id).await;
     assert_eq!(children.len(), 1);
     assert_eq!(children[0].status, "paid");
@@ -526,7 +646,7 @@ async fn huifu_pending_original_refund_is_queried_and_applied_once() {
             "POST",
             "/api/v1/guest/orders/create-and-pay",
             Some(json!({
-                "email": "huifu-refund@example.com",
+                "email": EMAIL,
                 "order_password": PASSWORD,
                 "items": [{"product_id": product, "sku_id": sku, "quantity": 1}],
                 "channel_id": channel,
@@ -556,36 +676,170 @@ async fn huifu_pending_original_refund_is_queried_and_applied_once() {
     let mut order = order.into_active_model();
     order.status = Set("paid".into());
     order.paid_at = Set(Some(paid_at));
+    order.online_paid_amount = Set(order_common::dec("0.01"));
     order.update(&app.db).await.unwrap();
 
-    let request = json!({"amount": "0.01", "remark": "refund retry"});
+    // A delivered card without exchange provenance cannot be locked by the
+    // converter. It must never reach the gateway refund submission.
+    let child = orders::Entity::find()
+        .filter(orders::Column::ParentId.eq(order_id))
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let now = chrono::Utc::now();
+    let delivery = fulfillments::ActiveModel {
+        order_id: Set(child.id),
+        type_: Set("auto".into()),
+        status: Set("delivered".into()),
+        payload: Set("PRECONVERTED-CARD".into()),
+        logistics_json: Set(None),
+        delivered_by: Set(None),
+        delivered_at: Set(Some(now)),
+        created_at: Set(now),
+        updated_at: Set(now),
+        deleted_at: Set(None),
+        ..Default::default()
+    }
+    .insert(&app.db)
+    .await
+    .unwrap();
+    let no_provenance = app
+        .call(
+            "GET",
+            &format!(
+                "/api/v1/guest/orders/{}",
+                created["data"]["order_no"].as_str().unwrap()
+            ),
+            None,
+            &guest(),
+        )
+        .await;
+    assert_eq!(no_provenance["data"]["refund_mode"], "contact_support");
+    let refused = app
+        .admin_call(
+            "POST",
+            &format!("/api/v1/admin/orders/{order_id}/original-refund"),
+            Some(json!({"amount":"0.01","remark":"buyer_requested_refund"})),
+        )
+        .await;
+    assert_ne!(refused["status_code"], 0, "{refused}");
+    assert_eq!(
+        gateway_refund_attempts::Entity::find()
+            .filter(gateway_refund_attempts::Column::OrderId.eq(order_id))
+            .count(&app.db)
+            .await
+            .unwrap(),
+        0
+    );
+    fulfillments::Entity::delete_by_id(delivery.id)
+        .exec(&app.db)
+        .await
+        .unwrap();
+
+    let detail = app
+        .call(
+            "GET",
+            &format!(
+                "/api/v1/guest/orders/{}",
+                created["data"]["order_no"].as_str().unwrap()
+            ),
+            None,
+            &guest(),
+        )
+        .await;
+    assert_eq!(detail["data"]["refund_mode"], "automatic");
+    let denied = app
+        .call(
+            "POST",
+            &format!(
+                "/api/v1/guest/orders/{}/refund",
+                created["data"]["order_no"].as_str().unwrap()
+            ),
+            None,
+            &Auth::Guest(EMAIL.into(), "wrong-password".into()),
+        )
+        .await;
+    assert_ne!(denied["status_code"], 0);
+    let request = json!({"amount": "0.01", "remark": "buyer_requested_refund"});
     let first = app
+        .call(
+            "POST",
+            &format!(
+                "/api/v1/guest/orders/{}/refund",
+                created["data"]["order_no"].as_str().unwrap()
+            ),
+            None,
+            &guest(),
+        )
+        .await;
+    assert_eq!(first["status_code"], 0, "{first}");
+    assert_eq!(first["data"]["status"], "pending");
+    let guest_path = format!(
+        "/api/v1/guest/orders/{}/refund",
+        created["data"]["order_no"].as_str().unwrap()
+    );
+    let admin_path = format!("/api/v1/admin/orders/{order_id}/original-refund");
+    let buyer_auth = guest();
+    let (buyer_retry, admin_retry) = tokio::join!(
+        app.call("POST", &guest_path, None, &buyer_auth),
+        app.admin_call("POST", &admin_path, Some(request.clone()))
+    );
+    assert_eq!(buyer_retry["status_code"], 0, "{buyer_retry}");
+    assert_eq!(admin_retry["status_code"], 0, "{admin_retry}");
+    assert_eq!(refund_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(query_calls.load(Ordering::SeqCst), 0);
+    let attempt_id = gateway_refund_attempts::Entity::find()
+        .filter(gateway_refund_attempts::Column::OrderId.eq(order_id))
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap()
+        .id;
+    gateway_refund_attempts::Entity::update_many()
+        .col_expr(
+            gateway_refund_attempts::Column::CreatedAt,
+            sea_orm::sea_query::Expr::value(chrono::Utc::now() - chrono::Duration::seconds(31)),
+        )
+        .col_expr(
+            gateway_refund_attempts::Column::UpdatedAt,
+            sea_orm::sea_query::Expr::value(chrono::Utc::now() - chrono::Duration::seconds(31)),
+        )
+        .filter(gateway_refund_attempts::Column::Id.eq(attempt_id))
+        .exec(&app.db)
+        .await
+        .unwrap();
+    app.services
+        .order
+        .service
+        .reconcile_gateway_refunds()
+        .await
+        .unwrap();
+
+    let second = app
         .admin_call(
             "POST",
             &format!("/api/v1/admin/orders/{order_id}/original-refund"),
             Some(request.clone()),
         )
         .await;
-    assert_eq!(first["status_code"], 0, "{first}");
-    assert_eq!(first["data"]["attempt"]["status"], "pending");
-    assert_eq!(first["data"]["order"], Value::Null);
-
-    let second = app
-        .admin_call(
-            "POST",
-            &format!("/api/v1/admin/orders/{order_id}/original-refund"),
-            Some(request),
-        )
-        .await;
     assert_eq!(second["status_code"], 0, "{second}");
     assert_eq!(second["data"]["attempt"]["status"], "succeeded");
     assert_eq!(second["data"]["order"]["refunded_amount"], "0.01");
+    assert!(
+        gateway_refund_attempts::Entity::find_by_id(attempt_id)
+            .one(&app.db)
+            .await
+            .unwrap()
+            .unwrap()
+            .card_confirmed
+    );
 
     let replay = app
         .admin_call(
             "POST",
             &format!("/api/v1/admin/orders/{order_id}/original-refund"),
-            Some(json!({"amount": "0.01", "remark": "refund retry"})),
+            Some(request),
         )
         .await;
     assert_eq!(
@@ -823,6 +1077,7 @@ async fn local_card_converter_retry_does_not_consume_stock_twice() {
         .await
         .unwrap();
     assert_eq!(manual.payload, "SYSTEM-MANUAL-RAW-CARD");
+    assert_eq!(manual.logistics["card_converter_id"], converter_id);
     assert_eq!(mock.exchanges.load(Ordering::SeqCst), 3);
 }
 

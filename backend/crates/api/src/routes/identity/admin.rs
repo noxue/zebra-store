@@ -160,7 +160,7 @@ async fn verify_2fa(
 }
 
 /// 429 when `key` has used up its failed attempts.
-fn blocked(limiter: &RateLimiter, key: &str) -> Result<(), ApiError> {
+pub(super) fn blocked(limiter: &RateLimiter, key: &str) -> Result<(), ApiError> {
     limiter.blocked(key).map_err(|wait| {
         ApiError::with_http_status(
             Error::too_many(MSG_LOGIN_TOO_MANY).arg(wait),
@@ -170,7 +170,7 @@ fn blocked(limiter: &RateLimiter, key: &str) -> Result<(), ApiError> {
 }
 
 /// Counts a rejected attempt (not server errors) and resets the counter on success.
-fn counted<T>(
+pub(super) fn counted<T>(
     limiter: &RateLimiter,
     key: &str,
     outcome: zs_domain::Result<T>,

@@ -5,6 +5,8 @@ describe('risk control config', () => {
   it('empty config keeps recommended defaults', () => {
     expect(parseRiskControlConfig({})).toEqual(defaultRiskControlForm())
     expect(parseRiskControlConfig(null)).toEqual(defaultRiskControlForm())
+    expect(defaultRiskControlForm().guest.max_pending_orders_per_ip).toBe(1)
+    expect(defaultRiskControlForm().guest.max_pending_quantity_per_ip_product).toBe(1)
   })
 
   it('parses nested v2 config with fallbacks', () => {

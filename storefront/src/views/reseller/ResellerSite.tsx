@@ -1,14 +1,14 @@
 import { computed, defineComponent, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { LucideIcon } from 'lucide-vue-next'
-import { CircleCheck, Compass, ExternalLink, LifeBuoy, Lock, Megaphone, Plus, RotateCcw, Save, Store, Trash2 } from 'lucide-vue-next'
+import { CircleCheck, Compass, ExternalLink, LifeBuoy, Lock, Megaphone, Palette, Plus, RotateCcw, Save, Store, Trash2 } from 'lucide-vue-next'
 import { useResellerSiteConfig, type SiteSection } from '@/composables/reseller/useResellerSiteConfig'
 import { RichContent } from '@/components/common/RichContent'
 import { ResellerAlert, ResellerPageHeader, ResellerPageState } from '@/components/reseller/ConsoleParts'
 import { LocalizedInput, ResellerImageField, ResellerLocaleTabs } from '@/components/reseller/ResellerFormParts'
 import { Alert, Badge, Button, Card, Field, Input, Select, Switch, cn } from '@/components/ui'
 
-const sectionIcons: Record<SiteSection, LucideIcon> = { brand: Store, support: LifeBuoy, content: Megaphone, navigation: Compass }
+const sectionIcons: Record<SiteSection, LucideIcon> = { brand: Store, appearance: Palette, support: LifeBuoy, content: Megaphone, navigation: Compass }
 
 export default defineComponent({
   name: 'ResellerSite',
@@ -17,7 +17,9 @@ export default defineComponent({
     const s = useResellerSiteConfig()
     onMounted(() => void s.load())
     const k = (key: string) => t(`personalCenter.reseller.siteConfig.${key}`)
-    const sections: SiteSection[] = ['brand', 'support', 'content', 'navigation']
+    const sections: SiteSection[] = ['brand', 'appearance', 'support', 'content', 'navigation']
+    const templateOptions = ['classic', 'vault', 'aurora', 'atelier', 'noir'].map((value) => ({ value, label: value[0].toUpperCase() + value.slice(1) }))
+    const colorKeys = ['primary_color', 'secondary_color', 'accent_color', 'background_color', 'surface_color', 'text_color'] as const
     const announcementTypes = computed(() => ['info', 'success', 'warning'].map((v) => ({ value: v, label: k(`announcementTypes.${v}`) })))
     const supportFields = [
       { key: 'telegram' as const, label: 'fields.telegram', placeholder: 'https://telegram.me/example' },
@@ -57,6 +59,28 @@ export default defineComponent({
         <Field label={k('fields.favicon')} hint={k('imageHint')}>
           <ResellerImageField v-model={s.form.favicon} disabled={disabled.value} />
         </Field>
+      </div>
+    )
+
+    const appearanceSection = () => (
+      <div class="space-y-5">
+        <p class="text-sm text-muted">{k('appearance.inheritHint')}</p>
+        <div class="grid gap-5 md:grid-cols-2">
+          <Field label={k('appearance.template')}>
+            <Select v-model={s.form.storefront_template} options={[{ value: '', label: k('appearance.inherit') }, ...templateOptions]} disabled={disabled.value} />
+          </Field>
+          <Field label={k('appearance.layout')}>
+            <Select v-model={s.form.template_mode} options={[{ value: '', label: k('appearance.inherit') }, { value: 'card', label: k('appearance.card') }, { value: 'list', label: k('appearance.list') }]} disabled={disabled.value} />
+          </Field>
+          {colorKeys.map((key) => (
+            <Field key={key} label={k(`appearance.${key}`)}>
+              <div class="flex items-center gap-2">
+                <span class="size-7 shrink-0 rounded-full border border-line" style={{ backgroundColor: /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(s.form.theme[key]) ? s.form.theme[key] : 'transparent' }} />
+                <Input v-model={s.form.theme[key]} placeholder={k('appearance.colorPlaceholder')} disabled={disabled.value} maxlength={7} />
+              </div>
+            </Field>
+          ))}
+        </div>
       </div>
     )
 
@@ -184,6 +208,8 @@ export default defineComponent({
 
     const renderSection = () => {
       switch (s.activeSection.value) {
+        case 'appearance':
+          return appearanceSection()
         case 'support':
           return supportSection()
         case 'content':
@@ -248,8 +274,8 @@ export default defineComponent({
             )}
 
             <Card padding="none">
-              <div class="zs-scroll-x border-b border-line px-3 pt-3">
-                <div class="flex min-w-max gap-1">
+              <div class="border-b border-line px-3 pt-3">
+                <div class="flex flex-wrap gap-1">
                   {sections.map((sec) => {
                     const Icon = sectionIcons[sec]
                     const active = s.activeSection.value === sec

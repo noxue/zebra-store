@@ -47,6 +47,7 @@ pub mod keys {
     pub const WITHDRAW_AMOUNT_INVALID: &str = "error.reseller_withdraw_amount_invalid";
     pub const WITHDRAW_INSUFFICIENT: &str = "error.reseller_withdraw_insufficient";
     pub const WITHDRAW_CURRENCY_UNAVAILABLE: &str = "error.reseller_withdraw_currency_unavailable";
+    pub const WITHDRAW_PAYOUT_INVALID: &str = "error.reseller_withdraw_payout_invalid";
     pub const BALANCE_FROZEN: &str = "error.reseller_balance_frozen";
     pub const ORDER_NOT_FOUND: &str = "error.order_not_found";
 

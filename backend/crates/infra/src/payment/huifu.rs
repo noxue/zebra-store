@@ -7,7 +7,8 @@ use chrono::{FixedOffset, Offset, Utc};
 use huifu_pay::{
     ApiResponse, Client, Config as SdkConfig, Error as SdkError, HttpRequest as SdkRequest,
     HttpResponse as SdkResponse, PaymentQueryRequest, PreorderRequest, RefundQueryRequest,
-    RefundRequest, TradeBillQueryRequest, Transport,
+    RefundRequest, ScanpayRefundQueryRequest, ScanpayRefundRequest, TradeBillQueryRequest,
+    Transport,
 };
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
@@ -29,8 +30,6 @@ const DEFAULT_API: &str = huifu_pay::DEFAULT_BASE_URL;
 const LOCAL_SANDBOX_SKILL_SOURCE: &str = "hfps/1.3.1;sandbox/1.0.0";
 const DIRECT_PAY_PATH: &str = "/v2/trade/payment/jspay";
 const DIRECT_QUERY_PATH: &str = "/v2/trade/payment/scanpay/query";
-const DIRECT_REFUND_PATH: &str = "/v2/trade/payment/scanpay/refund";
-const DIRECT_REFUND_QUERY_PATH: &str = "/v2/trade/payment/scanpay/refundquery";
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -322,6 +321,7 @@ impl PaymentGateway for HuifuGateway {
     fn capabilities(&self) -> GatewayCapabilities {
         GatewayCapabilities {
             query: true,
+            refund: true,
             callback: true,
             trade_bills: true,
             ..GatewayCapabilities::default()
@@ -541,23 +541,18 @@ impl PaymentGateway for HuifuGateway {
             input.notify_url.clone()
         };
         let response = if config.collection_mode == CollectionMode::DirectQr {
-            let data = json!({
-                "req_date": date,
-                "req_seq_id": input.refund_no,
-                "huifu_id": config.huifu_id,
-                "ord_amt": input.amount.to_string(),
-                "org_req_date": org_date,
-                "org_req_seq_id": org_sequence,
-                "notify_url": notify_url,
-            });
-            self.direct_post(
-                &config,
-                DIRECT_REFUND_PATH,
-                data.as_object()
-                    .cloned()
-                    .ok_or_else(|| GatewayError::response("huifu refund request invalid"))?,
-            )
-            .await?
+            client
+                .refund_scanpay(&ScanpayRefundRequest {
+                    req_date: date.clone(),
+                    req_seq_id: input.refund_no.clone(),
+                    org_req_date: org_date.into(),
+                    org_req_seq_id: org_sequence.into(),
+                    ord_amt: input.amount.to_string(),
+                    notify_url,
+                    remark: input.remark.clone(),
+                })
+                .await
+                .map_err(map_error)?
         } else {
             client
                 .refund(&RefundRequest {
@@ -589,19 +584,13 @@ impl PaymentGateway for HuifuGateway {
         let (config, client) = self.client(raw)?;
         let (org_date, org_sequence) = split_locator(provider_ref)?;
         let response = if config.collection_mode == CollectionMode::DirectQr {
-            let data = json!({
-                "huifu_id": config.huifu_id,
-                "org_req_date": org_date,
-                "org_req_seq_id": org_sequence,
-            });
-            self.direct_post(
-                &config,
-                DIRECT_REFUND_QUERY_PATH,
-                data.as_object()
-                    .cloned()
-                    .ok_or_else(|| GatewayError::response("huifu refund query invalid"))?,
-            )
-            .await?
+            client
+                .query_scanpay_refund(&ScanpayRefundQueryRequest {
+                    org_req_date: org_date.into(),
+                    org_req_seq_id: org_sequence.into(),
+                })
+                .await
+                .map_err(map_error)?
         } else {
             client
                 .query_refund(&RefundQueryRequest {
@@ -805,6 +794,64 @@ mod tests {
             .expect("query direct QR");
         assert_eq!(queried.status, Some(PaymentStatus::Success));
         assert_eq!(queried.amount.to_string(), "0.01");
+    }
+
+    #[tokio::test]
+    async fn direct_scanpay_refund_and_query_use_sdk_signed_endpoints() {
+        let transport = MockTransport::new(|request| {
+            let body: Value =
+                serde_json::from_slice(&request.body).map_err(|error| error.to_string())?;
+            let data = &body["data"];
+            huifu_pay::verify_value(PUB_PEM, data, body["sign"].as_str().unwrap_or_default())
+                .map_err(|error| error.to_string())?;
+            let response = if request.url.ends_with(huifu_pay::SCANPAY_REFUND_PATH) {
+                assert_eq!(data["req_date"], "20261014");
+                assert_eq!(data["req_seq_id"], "REFUND-1");
+                assert_eq!(data["org_req_date"], "20261012");
+                assert_eq!(data["org_req_seq_id"], "PAY-1");
+                assert_eq!(data["ord_amt"], "0.01");
+                json!({"resp_code":"00000000","trans_stat":"S"})
+            } else if request.url.ends_with(huifu_pay::SCANPAY_REFUND_QUERY_PATH) {
+                assert_eq!(data["org_req_date"], "20261014");
+                assert_eq!(data["org_req_seq_id"], "REFUND-1");
+                json!({"resp_code":"00000000","trans_stat":"S","ord_amt":"0.01"})
+            } else {
+                return Err(format!("unexpected Huifu path: {}", request.url));
+            };
+            let sign =
+                huifu_pay::sign_value(PRIV_PEM, &response).map_err(|error| error.to_string())?;
+            Ok(HttpResponse::new(
+                200,
+                json!({"data":response,"sign":sign}).to_string(),
+            ))
+        });
+        let gateway = HuifuGateway::new(env_with(transport));
+        let config: ChannelConfig = serde_json::from_value(json!({
+            "collection_mode":"direct_qr", "sys_id":"SYS-1", "product_id":"PROD-1",
+            "huifu_id":"HU-1", "merchant_private_key":PRIV_PEM,
+            "huifu_public_key":PUB_PEM, "notify_url":"https://shop.example.com/notify"
+        }))
+        .expect("test config");
+        let result = gateway
+            .refund_payment(
+                &config,
+                &GatewayRefundInput {
+                    provider_ref: "20261012:PAY-1".into(),
+                    request_date: "20261014".into(),
+                    refund_no: "REFUND-1".into(),
+                    amount: Amount::new("0.01".parse().expect("amount")),
+                    ..GatewayRefundInput::default()
+                },
+            )
+            .await
+            .expect("refund");
+        assert_eq!(result.status, Some(PaymentStatus::Success));
+        let queried = gateway
+            .query_refund(&config, &result.provider_ref)
+            .await
+            .expect("query");
+        assert_eq!(queried.status, Some(PaymentStatus::Success));
+        assert_eq!(queried.payload["ord_amt"], "0.01");
     }
 
     #[tokio::test]

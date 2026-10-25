@@ -332,6 +332,18 @@ export default defineComponent({
           </Badge>
         ),
       },
+      {
+        key: 'diagnosis',
+        title: t('admin.payments.diagnosisTitle'),
+        render: (p) => (
+          <div class="max-w-72 text-xs">
+            <div class={p.diagnosis?.kind.startsWith('merchant_') ? 'text-danger-text' : 'text-muted'}>
+              {t(`admin.payments.diagnosis.${p.diagnosis?.kind || 'unknown'}`)}
+            </div>
+            {p.diagnosis?.gateway_code && <div class="mt-1 font-mono text-muted">{p.diagnosis.gateway_code}</div>}
+          </div>
+        ),
+      },
       { key: 'feeRate', title: t('admin.payments.table.feeRate'), class: 'text-xs text-muted', render: (p) => formatFeeRate(p) },
       { key: 'amount', title: t('admin.payments.table.amount'), class: 'font-mono text-xs text-fg', render: (p) => formatMoney(p.amount, p.currency) },
       { key: 'createdAt', title: t('admin.payments.table.createdAt'), class: 'text-xs text-muted whitespace-nowrap', render: (p) => formatDate(p.created_at) },
@@ -340,13 +352,22 @@ export default defineComponent({
     const renderRefundCard = (o: AdminOrder) => {
       const days = props.maxRefundDays
       if (!shouldShowRefundCard(o, days)) return null
-      const walletAvailable = !!o.user_id
+      if (o.refund_state && ['checking', 'processing', 'syncing'].includes(o.refund_state)) {
+        return <Section title={t('admin.orders.refundCardTitle')}>
+          <Alert tone="warning">{t('admin.orders.refundState.' + o.refund_state)}</Alert>
+        </Section>
+      }
+      const onlineAvailable = o.refund_mode === 'automatic'
+      const manualAwaiting = o.refund_attempt?.status === 'manual_awaiting'
+      const walletAvailable = !!o.user_id && Number(o.online_paid_amount || 0) === 0
+      const originalActive = onlineAvailable && d.refundTab.value === 'original'
       const walletActive = walletAvailable && d.refundTab.value === 'wallet'
       const canWallet = canRefundToWallet(o, days)
       const canManual = canManualRefund(o, days)
       const tabItems = [
+        ...(onlineAvailable ? [{ key: 'original', label: t('admin.orders.refundTabOriginal') }] : []),
         ...(walletAvailable ? [{ key: 'wallet', label: t('admin.orders.refundTabWallet') }] : []),
-        { key: 'manual', label: t('admin.orders.refundTabManual') },
+        ...(!onlineAvailable ? [{ key: 'manual', label: t('admin.orders.refundTabManual') }] : []),
       ]
       const grid = 'grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto]'
       return (
@@ -355,9 +376,17 @@ export default defineComponent({
             {t('admin.orders.refundableAmount')}：<span class="font-mono text-fg">{formatMoney(refundableAmountValue(o).toFixed(2), o.currency)}</span>
           </div>
           <div class="mb-4">
-            <Tabs modelValue={walletActive ? 'wallet' : 'manual'} items={tabItems} onUpdate:modelValue={(v) => (d.refundTab.value = v === 'wallet' ? 'wallet' : 'manual')} />
+            <Tabs modelValue={originalActive ? 'original' : walletActive ? 'wallet' : 'manual'} items={tabItems} onUpdate:modelValue={(v) => (d.refundTab.value = v === 'original' ? 'original' : v === 'wallet' ? 'wallet' : 'manual')} />
           </div>
-          {walletActive ? (
+          {originalActive ? (
+            <form class={grid} onSubmit={(e: Event) => { e.preventDefault(); void d.submitOriginal() }}>
+              <Input v-model={d.original.amount} placeholder={t('admin.orders.refundAmountPlaceholder')} disabled={d.original.submitting || !canManual} />
+              <Input v-model={d.original.remark} placeholder={t('admin.orders.refundRemarkPlaceholder')} disabled={d.original.submitting || !canManual} />
+              <Button type="submit" variant="primary" loading={d.original.submitting} disabled={!canManual}>
+                {d.original.submitting ? t('admin.orders.refunding') : t('admin.orders.originalRefundSubmit')}
+              </Button>
+            </form>
+          ) : walletActive ? (
             <form
               class={grid}
               onSubmit={(e: Event) => {
@@ -369,6 +398,14 @@ export default defineComponent({
               <Input v-model={d.wallet.remark} placeholder={t('admin.orders.refundRemarkPlaceholder')} disabled={d.wallet.submitting || !canWallet} />
               <Button type="submit" variant="primary" loading={d.wallet.submitting} disabled={!canWallet}>
                 {d.wallet.submitting ? t('admin.orders.refunding') : t('admin.orders.refundSubmit')}
+              </Button>
+            </form>
+          ) : manualAwaiting ? (
+            <form class={grid} onSubmit={(e: Event) => { e.preventDefault(); void d.confirmManual() }}>
+              <div class="text-sm text-fg">{t('admin.orders.manualRefundAwaiting')}</div>
+              <Input v-model={d.manual.transferRef} placeholder={t('admin.orders.manualTransferRef')} disabled={d.manual.submitting} />
+              <Button type="submit" variant="primary" loading={d.manual.submitting} disabled={d.manual.submitting}>
+                {t('admin.orders.manualRefundConfirmTransfer')}
               </Button>
             </form>
           ) : (
@@ -397,6 +434,8 @@ export default defineComponent({
             </form>
           )}
           {((walletActive && !canWallet) || (!walletActive && !canManual)) && <div class="mt-3 text-xs text-muted">{t('admin.orders.refundNoRemaining')}</div>}
+          {originalActive && d.original.error && <div class="mt-3"><Alert tone="danger">{d.original.error}</Alert></div>}
+          {originalActive && d.original.success && <div class="mt-3"><Alert tone="success">{d.original.success}</Alert></div>}
           {walletActive && d.wallet.error && (
             <div class="mt-3">
               <Alert tone="danger">{d.wallet.error}</Alert>
@@ -407,12 +446,12 @@ export default defineComponent({
               <Alert tone="success">{d.wallet.success}</Alert>
             </div>
           )}
-          {!walletActive && d.manual.error && (
+          {!originalActive && !walletActive && d.manual.error && (
             <div class="mt-3">
               <Alert tone="danger">{d.manual.error}</Alert>
             </div>
           )}
-          {!walletActive && d.manual.success && (
+          {!originalActive && !walletActive && d.manual.success && (
             <div class="mt-3">
               <Alert tone="success">{d.manual.success}</Alert>
             </div>
@@ -658,6 +697,12 @@ export default defineComponent({
 
           {/* payments */}
           <Section title={t('admin.orders.detailPayments')}>
+            {(o.expires_at || o.canceled_at) && (
+              <div class="mb-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted">
+                {o.expires_at && <span>{t('admin.payments.orderDeadline')}：{formatDate(o.expires_at)}</span>}
+                {o.canceled_at && <span>{t('admin.payments.orderClosedAt')}：{formatDate(o.canceled_at)}</span>}
+              </div>
+            )}
             {hasPositiveAmount(o.wallet_paid_amount) && !o.payments?.length && (
               <div class="mb-3">
                 <Alert tone="warning">{t('admin.orders.detailWalletOnlyNoOnlinePayments')}</Alert>

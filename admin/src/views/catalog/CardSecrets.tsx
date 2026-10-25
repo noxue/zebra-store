@@ -224,7 +224,9 @@ export default defineComponent({
 
           {!pk.productId.value && renderGuide()}
 
-          <ProductSkuPicker picker={pk} hint={c.productHint.value} onProductChange={() => void c.onProductChange()} onSkuChange={() => void c.onSkuChange()}>
+          <p class="rounded-zs border border-line bg-primary-soft p-4 text-sm text-muted">{t('admin.cardSecrets.localFirstHint')}</p>
+
+        <ProductSkuPicker picker={pk} hint={c.productHint.value} onProductChange={() => void c.onProductChange()} onSkuChange={() => void c.onSkuChange()}>
             {{
               extra: () => (
                 <Button block disabled={c.refreshing.value} onClick={() => void c.refreshCurrent()}>

@@ -634,6 +634,8 @@
         "withdrawAmountRequired": "請輸入提現金額",
         "withdrawChannelRequired": "請輸入提現渠道",
         "withdrawAccountRequired": "請輸入提現帳號",
+        "withdrawPayeeRequired": "請輸入收款人姓名",
+        "withdrawQrRequired": "請上傳收款二維碼",
         "withdrawFailed": "提現申請提交失敗，請稍後重試"
       }
     },
@@ -725,7 +727,9 @@
           "content": "內容",
           "contentDescription": "公告與 SEO",
           "navigation": "導航",
-          "navigationDescription": "頁腳與導覽"
+          "navigationDescription": "頁腳與導覽",
+          "appearance": "外觀",
+          "appearanceDescription": "範本與配色"
         },
         "nav": {
           "blog": "部落格",
@@ -800,6 +804,21 @@
           "footerLinks": "頁腳連結",
           "linkName": "連結名稱",
           "navVisibility": "導航顯示"
+        },
+        "appearance": {
+          "inherit": "跟隨主站",
+          "inheritHint": "留空的項目繼承主站設定；選擇範本後使用該範本的預設配色，填寫顏色可單獨覆蓋。",
+          "template": "商店範本",
+          "layout": "商品佈局",
+          "card": "卡片",
+          "list": "列表",
+          "colorPlaceholder": "留空則使用預設顏色",
+          "primary_color": "主色",
+          "secondary_color": "輔助色",
+          "accent_color": "強調色",
+          "background_color": "背景色",
+          "surface_color": "卡片色",
+          "text_color": "文字色"
         }
       },
       "productSettings": {
@@ -1467,6 +1486,7 @@
     },
     "site": {
       "title": "店鋪設定",
+      "appearanceEntry": "模板與配色",
       "description": "配置分銷站名稱、公告、客服資訊、導航和基礎樣式。",
       "previewStore": "預覽站點",
       "cards": {
@@ -1533,7 +1553,17 @@
       "exceedAvailable": "超出目前可用餘額",
       "noCurrency": "暫無可提現幣種",
       "confirmTitle": "確認提現",
-      "confirmMessage": "確認對 {amount} {currency} 發起提現申請？"
+      "confirmMessage": "確認對 {amount} {currency} 發起提現申請？",
+      "channels": { "alipay": "支付寶", "wechat": "微信" },
+      "payeeName": "收款人姓名",
+      "payeeNamePlaceholder": "請輸入與收款帳號一致的姓名",
+      "qrCode": "收款二維碼",
+      "qrHint": "支付寶和微信提現需上傳收款二維碼",
+      "uploadQr": "上傳二維碼",
+      "removeQr": "移除二維碼",
+      "viewQr": "查看收款碼",
+      "qrImageOnly": "請選擇圖片檔案",
+      "qrUploadFailed": "二維碼上傳失敗"
     },
     "orders": {
       "title": "銷售訂單",
@@ -1648,6 +1678,21 @@
   },
   "orderDetail": {
     "title": "訂單詳情",
+    "refundNotice": "如果買錯或不再需要，可以申請退款；退款成功後，款項將原路返回。已使用的卡密需人工核查。",
+    "requestRefund": "申請原路退款",
+    "contactRefundSupport": "聯絡客服申請人工退款",
+    "refundConfirm": "確認申請全額原路退款？系統會先核查卡密是否未使用。",
+    "refundSucceeded": "退款已由支付渠道確認",
+    "refundPending": "退款處理中，請稍後查看訂單狀態",
+    "refundFailed": "暫時無法自動退款，請聯絡客服核查",
+    "refundState": {
+      "checking": "正在核查卡密和退款資格",
+      "processing": "支付渠道正在處理退款，請稍後查看",
+      "awaiting_support": "客服正在處理原路退款，卡密已鎖定",
+      "syncing": "支付渠道已確認退款，卡密狀態正在同步",
+      "succeeded": "退款已成功，款項原路返回",
+      "needs_review": "退款需要客服人工核查"
+    },
     "subtitle": "查看訂單狀態與交付資訊",
     "notFound": "訂單不存在或已被刪除",
     "payNow": "去支付",

@@ -64,3 +64,11 @@
 ## 个人资料
 
 个人中心 → **资料**：修改昵称和默认语言。
+
+## 个人 API Key
+
+在「个人中心 → 安全中心 → 个人 API Key」生成自己的自动化 Key。完整 Key 只显示一次，请立即复制保存。以后可以轮换或删除，旧 Key 及其签发的 Token 会立即失效。
+
+AI 或脚本请求 `POST /api/v1/auth/api-key/token`，以 JSON 发送 `{"api_key":"你的 Key"}`，从响应的 `data.token` 取得 Token。随后使用 `Authorization: Bearer <token>` 调用本人有权使用的接口。Token 到期时间见 `data.expires_at`，到期后可再次换取。
+
+此 Key 不需要申请供应商 API 资质，也不会授予管理员权限。请通过 HTTPS 使用并妥善保管；不要把 Key 放入网址、日志或公开代码。个人 API Key 是专门为自动化生成的凭证，换取 Token 时无需交互式输入两步验证码。

@@ -20,6 +20,7 @@ export function useOrderDetail() {
   const hasManualPayment = ref(false)
   const fulfillmentDownloading = ref(false)
   const exportDownloading = ref(false)
+  const refundSubmitting = ref(false)
   const helpers = useOrderDisplayHelpers(order)
   const orderNo = () => String(route.params.order_no || '').trim()
 
@@ -57,6 +58,27 @@ export function useOrderDetail() {
       await loadOrder()
     } catch {
       toast.error(t('orderDetail.cancelFailed'))
+    }
+  }
+
+  const requestRefund = async () => {
+    if (!order.value || refundSubmitting.value) return
+    const accepted = await confirm({
+      title: t('orderDetail.requestRefund'),
+      message: t('orderDetail.refundConfirm'),
+      confirmText: t('common.confirm'),
+      cancelText: t('common.cancel'),
+    })
+    if (!accepted) return
+    refundSubmitting.value = true
+    try {
+      const response = await userOrderAPI.requestRefund(order.value.order_no)
+      toast.success(t(response.data.status === 'succeeded' ? 'orderDetail.refundSucceeded' : 'orderDetail.refundPending'))
+      await loadOrder()
+    } catch {
+      toast.error(t('orderDetail.refundFailed'))
+    } finally {
+      refundSubmitting.value = false
     }
   }
 
@@ -98,5 +120,5 @@ export function useOrderDetail() {
     void loadOrder()
   })
 
-  return { loading, order, hasManualPayment, loadOrder, cancelOrder, fulfillmentDownloading, handleDownloadFulfillment, exportDownloading, exportOrder, helpers }
+  return { loading, order, hasManualPayment, loadOrder, cancelOrder, refundSubmitting, requestRefund, fulfillmentDownloading, handleDownloadFulfillment, exportDownloading, exportOrder, helpers }
 }

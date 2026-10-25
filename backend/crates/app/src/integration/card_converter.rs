@@ -9,7 +9,8 @@ use serde_json::{Map, Value};
 use std::str::FromStr;
 use zs_domain::integration::card_converter::{
     Binding, BindingDependencies, Converter, ConverterEvent, ConverterHttp, ConverterInput,
-    ConverterRepo, ExchangeItem, ExchangeRequest, ExchangeResponse, NewConverterEvent,
+    ConverterRefundRef, ConverterRefundRequest, ConverterRepo, ExchangeItem, ExchangeRequest,
+    ExchangeResponse, NewConverterEvent,
 };
 use zs_domain::integration::hooks::UpstreamDelivery;
 use zs_domain::notify::center::{NotifyEvent, events};
@@ -35,6 +36,136 @@ impl std::fmt::Debug for CardConverterService {
 }
 
 impl CardConverterService {
+    async fn refund_converter(&self, order: &Order) -> Result<Option<(Converter, Vec<String>)>> {
+        let Some(fulfillment) = order.fulfillment.as_ref() else {
+            return Ok(None);
+        };
+        if fulfillment.kind == zs_domain::order::model::fulfillment_type::MANUAL
+            && !fulfillment.logistics.contains_key("card_converter_id")
+        {
+            return Ok(None);
+        }
+        if fulfillment.status != "delivered"
+            || fulfillment.payload.trim().is_empty()
+            || order.items.len() != 1
+        {
+            return Err(Error::bad_request(
+                "error.card_converter_refund_review_required",
+            ));
+        }
+        let item = &order.items[0];
+        let recorded_converter = fulfillment
+            .logistics
+            .get("card_converter_id")
+            .and_then(Value::as_i64);
+        // A current product binding does not prove that this order's cards were
+        // exchanged by the converter. Preconverted/local stock has no exchange
+        // record under this order number and must be reviewed by support.
+        let converter_id = recorded_converter
+            .filter(|id| *id > 0)
+            .ok_or_else(|| Error::bad_request("error.card_converter_refund_review_required"))?;
+        let converter = self
+            .repo
+            .get(converter_id)
+            .await?
+            .ok_or_else(|| Error::bad_request("error.card_converter_refund_review_required"))?;
+        let cards: Vec<String> = fulfillment
+            .payload
+            .lines()
+            .map(str::trim)
+            .filter(|card| !card.is_empty())
+            .map(str::to_owned)
+            .collect();
+        if cards.len() != usize::try_from(item.quantity).unwrap_or(0) || cards.is_empty() {
+            return Err(Error::bad_request(
+                "error.card_converter_refund_review_required",
+            ));
+        }
+        Ok(Some((converter, cards)))
+    }
+
+    /// Returns true when the converter has durably locked delivered system cards.
+    pub async fn prepare_refund(&self, order: &Order, refund_no: &str) -> Result<bool> {
+        let Some((converter, cards)) = self.refund_converter(order).await? else {
+            return Ok(false);
+        };
+        let token = self
+            .cipher
+            .decrypt(&converter.token_enc)
+            .map_err(Error::internal)?;
+        let response = self
+            .http
+            .prepare_refund(
+                &converter.base_url,
+                &token,
+                &ConverterRefundRequest {
+                    order_no: order.order_no.clone(),
+                    refund_no: refund_no.to_owned(),
+                    cards,
+                },
+            )
+            .await?;
+        if response.status != "prepared" {
+            return Err(Error::bad_request(
+                "error.card_converter_refund_review_required",
+            ));
+        }
+        Ok(true)
+    }
+
+    pub async fn confirm_refund(&self, order: &Order, refund_no: &str) -> Result<()> {
+        let Some((converter, _)) = self.refund_converter(order).await? else {
+            return Ok(());
+        };
+        let token = self
+            .cipher
+            .decrypt(&converter.token_enc)
+            .map_err(Error::internal)?;
+        let result = self
+            .http
+            .confirm_refund(
+                &converter.base_url,
+                &token,
+                &ConverterRefundRef {
+                    order_no: order.order_no.clone(),
+                    refund_no: refund_no.to_owned(),
+                },
+            )
+            .await?;
+        if result.status != "confirmed" || result.reason != "payment_refund" {
+            return Err(Error::bad_request(
+                "error.card_converter_refund_review_required",
+            ));
+        }
+        Ok(())
+    }
+
+    pub async fn cancel_refund(&self, order: &Order, refund_no: &str) -> Result<()> {
+        let Some((converter, _)) = self.refund_converter(order).await? else {
+            return Ok(());
+        };
+        let token = self
+            .cipher
+            .decrypt(&converter.token_enc)
+            .map_err(Error::internal)?;
+        let result = self
+            .http
+            .cancel_refund(
+                &converter.base_url,
+                &token,
+                &ConverterRefundRef {
+                    order_no: order.order_no.clone(),
+                    refund_no: refund_no.to_owned(),
+                },
+            )
+            .await?;
+        if result.status != "cancelled" {
+            return Err(Error::bad_request(
+                "error.card_converter_refund_review_required",
+            ));
+        }
+        Ok(())
+    }
     pub async fn has_binding(&self, order: &Order) -> Result<bool> {
         if order.items.len() != 1 {
             return Ok(false);
@@ -461,6 +592,10 @@ impl CardConverterService {
             .join("\n");
         let mut converted = delivery.clone();
         converted.payload = payload;
+        converted.delivery_data.insert(
+            "card_converter_id".into(),
+            Value::from(binding.converter_id),
+        );
         Ok(converted)
     }
 }

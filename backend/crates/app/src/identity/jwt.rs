@@ -19,6 +19,8 @@ pub struct Registered {
     pub nbf: i64,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub jti: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub api_key_hash: String,
 }
 
 impl Registered {
@@ -28,6 +30,7 @@ impl Registered {
             iat: now.timestamp(),
             nbf: now.timestamp(),
             jti: String::new(),
+            api_key_hash: String::new(),
         }
     }
 }

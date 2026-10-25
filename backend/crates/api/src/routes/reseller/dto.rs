@@ -106,6 +106,9 @@ pub fn site_config(c: &SiteConfig) -> Value {
         "seo": c.seo,
         "footer_links": footer_items(&c.footer_links),
         "nav_config": c.nav_config,
+        "storefront_template": c.theme.get("storefront_template").and_then(Value::as_str).unwrap_or(""),
+        "template_mode": c.theme.get("template_mode").and_then(Value::as_str).unwrap_or(""),
+        "theme": c.theme,
         "updated_at": c.updated_at,
     })
 }
@@ -149,6 +152,9 @@ pub fn admin_site_config(
             "seo": c.seo,
             "footer_links": footer_items(&c.footer_links),
             "nav_config": c.nav_config,
+            "storefront_template": c.theme.get("storefront_template").and_then(Value::as_str).unwrap_or(""),
+            "template_mode": c.theme.get("template_mode").and_then(Value::as_str).unwrap_or(""),
+            "theme": c.theme,
             "created_at": c.created_at,
             "updated_at": c.updated_at,
         }),
@@ -163,6 +169,9 @@ pub fn admin_site_config(
             "seo": null,
             "footer_links": [],
             "nav_config": null,
+            "storefront_template": "",
+            "template_mode": "",
+            "theme": {},
             "created_at": ZERO_TIME,
             "updated_at": ZERO_TIME,
         }),
@@ -390,6 +399,10 @@ pub struct WithdrawResp {
     pub currency: String,
     pub channel: String,
     pub account: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub payee_name: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub qr_code_url: String,
     pub status: &'static str,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub reject_reason: String,
@@ -406,6 +419,8 @@ impl From<&WithdrawRequest> for WithdrawResp {
             currency: w.currency.clone(),
             channel: w.channel.clone(),
             account: w.account.clone(),
+            payee_name: w.payee_name.clone(),
+            qr_code_url: w.qr_code_url.clone(),
             status: w.status.as_str(),
             reject_reason: w.reject_reason.clone(),
             processed_at: w.processed_at,

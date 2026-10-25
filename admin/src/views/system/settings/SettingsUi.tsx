@@ -12,7 +12,7 @@ export const LangSwitcher = defineComponent({
     const { t } = useI18n()
     const labels: Record<LangCode, string> = { 'zh-CN': 'admin.common.lang.zhCN', 'zh-TW': 'admin.common.lang.zhTW', 'en-US': 'admin.common.lang.enUS' }
     return () => (
-      <div class="zs-glass flex max-w-full overflow-x-auto rounded-zs p-1" role="tablist">
+      <div class="zs-glass flex max-w-full flex-wrap rounded-zs p-1" role="tablist">
         {SUPPORTED_LANGS.map((code) => (
           <button
             key={code}

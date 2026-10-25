@@ -10,6 +10,7 @@ pub mod casbin_rule;
 pub mod integration_connection_states;
 pub mod integration_processed_events;
 pub mod jobs;
+pub mod personal_api_keys;
 pub mod procurement_deliveries;
 pub mod zs_catalog_snapshots;
 pub mod zs_change_log;

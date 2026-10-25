@@ -18,7 +18,7 @@ use zs_domain::order::model::{
 use zs_domain::order::ports::{NewOrder, Reservation, RiskGate};
 use zs_domain::order::pricing::{
     CouponContext, MemberContext, PricingInput, PricingLine, PricingResult, apply_reseller_prices,
-    child_profit, price_order,
+    child_profit, price_order, split_priced_line,
 };
 use zs_domain::order::risk::{RiskInput, RiskItem, RiskPrep};
 use zs_domain::order::view::{LineDisplay, Preview};
@@ -100,6 +100,7 @@ struct LineMeta {
     product: Product,
     sku: ProductSku,
     fulfillment: FulfillmentType,
+    local_quantity: i32,
     schema: JsonMap,
     submission: JsonMap,
 }
@@ -252,14 +253,19 @@ impl OrderService {
                 return Err(Error::bad_request(keys::PRODUCT_PURCHASE_NOT_ALLOWED));
             }
             let sku = resolve_sku(&product, item.sku_id)?;
-            let fulfillment = if product.fulfillment_type == FulfillmentType::Upstream
-                && self
-                    .deps
-                    .catalog
-                    .p1_import_available(product.id, sku.id)
-                    .await?
-                    >= u64::try_from(item.quantity).unwrap_or(0)
-            {
+            let local_quantity = if product.fulfillment_type == FulfillmentType::Upstream {
+                i32::try_from(
+                    self.deps
+                        .catalog
+                        .local_import_available(product.id, sku.id)
+                        .await?,
+                )
+                .unwrap_or(i32::MAX)
+                .min(item.quantity)
+            } else {
+                0
+            };
+            let fulfillment = if local_quantity == item.quantity {
                 FulfillmentType::Auto
             } else {
                 product.fulfillment_type
@@ -274,7 +280,7 @@ impl OrderService {
                 && let Some(integration) = &self.deps.integration
             {
                 integration
-                    .ensure_upstream_stock(sku.id, item.quantity)
+                    .ensure_upstream_stock(sku.id, item.quantity - local_quantity)
                     .await?;
             }
             let (schema, submission) = if !skip_manual_form
@@ -306,6 +312,7 @@ impl OrderService {
                 product,
                 sku,
                 fulfillment,
+                local_quantity,
                 schema,
                 submission,
             });
@@ -348,7 +355,7 @@ impl OrderService {
         })?;
         result.member_level_id = if reseller { None } else { member_level_id };
 
-        let (reseller_ctx, reseller_instructions) = if reseller {
+        let (mut reseller_ctx, reseller_instructions) = if reseller {
             let (context, instructions) = self
                 .reseller_pricing(req, &metas, &currency, &mut result)
                 .await?;
@@ -356,9 +363,44 @@ impl OrderService {
         } else {
             (None, HashMap::new())
         };
+        // Split only after full-quantity pricing, preserving discounts and reseller snapshots.
+        let mut split_lines = Vec::new();
+        let mut split_meta = Vec::new();
+        let mut reseller_items = Vec::new();
+        for (idx, (line, meta)) in result.lines.iter().zip(metas).enumerate() {
+            if let Some((local, remote)) = split_priced_line(line, meta.local_quantity) {
+                let mut local_meta = meta.clone();
+                local_meta.fulfillment = FulfillmentType::Auto;
+                let mut remote_meta = meta;
+                remote_meta.local_quantity = 0;
+                if let Some(item) = reseller_ctx.as_ref().and_then(|ctx| ctx.items.get(idx)) {
+                    let mut first = item.clone();
+                    let mut second = item.clone();
+                    first.quantity = local.quantity;
+                    second.quantity = remote.quantity;
+                    let ratio = rust_decimal::Decimal::from(local.quantity)
+                        / rust_decimal::Decimal::from(line.quantity);
+                    macro_rules! split_amount { ($($field:ident),+) => { $(first.$field = Amount::new(item.$field * ratio).decimal(); second.$field = item.$field - first.$field;)+ }; }
+                    split_amount!(base_total_amount, reseller_total_amount, profit_amount);
+                    reseller_items.extend([first, second]);
+                }
+                split_lines.extend([local, remote]);
+                split_meta.extend([local_meta, remote_meta]);
+            } else {
+                if let Some(item) = reseller_ctx.as_ref().and_then(|ctx| ctx.items.get(idx)) {
+                    reseller_items.push(item.clone());
+                }
+                split_lines.push(line.clone());
+                split_meta.push(meta);
+            }
+        }
+        result.lines = split_lines;
+        if let Some(ctx) = reseller_ctx.as_mut() {
+            ctx.items = reseller_items;
+        }
         Ok(Built {
             result,
-            lines: metas,
+            lines: split_meta,
             currency,
             member_level_id: if reseller { None } else { member_level_id },
             reseller: reseller_ctx,
@@ -408,7 +450,7 @@ impl OrderService {
                     product_id: meta.product.id,
                     sku_id: meta.sku.id,
                     quantity: line.quantity,
-                    base_unit: meta.sku.price_amount,
+                    base_unit: meta.sku.reseller_base_price(),
                     cost: meta.sku.cost_price_amount,
                 },
             )?);
@@ -533,6 +575,7 @@ impl OrderService {
             now,
         );
         let new = NewOrder {
+            reserve_stock_on_payment: setting.reserve_stock_on_payment,
             risk: prep.map(|prep| RiskGate {
                 prep,
                 input: risk_input,
@@ -696,15 +739,6 @@ impl OrderService {
                 updated_at: now,
             });
             reservations.push(match meta.fulfillment {
-                FulfillmentType::Auto
-                    if meta.product.fulfillment_type == FulfillmentType::Upstream =>
-                {
-                    Reservation::P1Secrets {
-                        product_id: meta.product.id,
-                        sku_id: meta.sku.id,
-                        quantity: u64::try_from(line.quantity).unwrap_or(0),
-                    }
-                }
                 FulfillmentType::Auto => Reservation::Secrets {
                     product_id: meta.product.id,
                     sku_id: meta.sku.id,
@@ -725,6 +759,7 @@ impl OrderService {
         NewOrder {
             order: parent,
             reservations,
+            reserve_stock_on_payment: false,
             coupon: r.applied_coupon.as_ref().map(|c| (c.id, r.discount_amount)),
             reseller: built.reseller.clone(),
             risk: None,

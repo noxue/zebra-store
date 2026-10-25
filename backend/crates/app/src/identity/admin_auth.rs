@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use zs_domain::identity::admin::{
     Admin, AdminLoginLog, AdminLoginLogRepo, AdminRepo, NewAdmin, events,
 };
+use zs_domain::identity::api_key::{ApiKeyRealm, PersonalApiKeyRepo};
 use zs_domain::identity::password::PasswordPolicy;
 use zs_domain::identity::totp;
 use zs_domain::{Error, Id, Result};
@@ -88,6 +89,7 @@ pub struct AdminAuthService {
     repo: Arc<dyn AdminRepo>,
     logs: Arc<dyn AdminLoginLogRepo>,
     clock: Arc<dyn Clock>,
+    api_keys: Option<Arc<dyn PersonalApiKeyRepo>>,
     signer: Signer,
     challenge_signer: Signer,
     ttl: Duration,
@@ -113,11 +115,17 @@ impl AdminAuthService {
             repo,
             logs,
             clock,
+            api_keys: None,
             signer: Signer::new(jwt_secret),
             challenge_signer: jwt::challenge_signer(jwt_secret),
             ttl: Duration::hours(expire_hours.max(1)),
             policy,
         }
+    }
+
+    pub fn with_api_keys(mut self, repo: Arc<dyn PersonalApiKeyRepo>) -> Self {
+        self.api_keys = Some(repo);
+        self
     }
 
     pub fn repo(&self) -> &Arc<dyn AdminRepo> {
@@ -272,6 +280,13 @@ impl AdminAuthService {
         if !admin.accepts_token(claims.token_version, claims.reg.iat) {
             return Err(Error::unauthorized("error.token_revoked"));
         }
+        super::api_key::validate_binding(
+            self.api_keys.as_ref(),
+            ApiKeyRealm::Admin,
+            admin.id,
+            &claims.reg.api_key_hash,
+        )
+        .await?;
         Ok(AdminPrincipal {
             id: admin.id,
             username: claims.username,
@@ -355,6 +370,14 @@ impl AdminAuthService {
     }
 
     fn issue_token(&self, admin: &Admin) -> Result<(String, DateTime<Utc>)> {
+        self.issue_api_token(admin, "")
+    }
+
+    pub fn issue_api_token(
+        &self,
+        admin: &Admin,
+        key_hash: &str,
+    ) -> Result<(String, DateTime<Utc>)> {
         let now = self.clock.now();
         let claims = AdminClaims {
             admin_id: admin.id,
@@ -363,6 +386,8 @@ impl AdminAuthService {
             typ: jwt::TYP_ACCESS.into(),
             reg: Registered::new(now, self.ttl),
         };
+        let mut claims = claims;
+        claims.reg.api_key_hash = key_hash.to_owned();
         Ok((self.signer.sign(&claims)?, now + self.ttl))
     }
 

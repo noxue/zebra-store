@@ -587,6 +587,8 @@
         "withdrawAmountRequired": "请输入提现金额",
         "withdrawChannelRequired": "请输入提现渠道",
         "withdrawAccountRequired": "请输入提现账号",
+        "withdrawPayeeRequired": "请输入收款人姓名",
+        "withdrawQrRequired": "请上传收款二维码",
         "withdrawFailed": "提现申请提交失败，请稍后重试"
       }
     },
@@ -678,7 +680,9 @@
           "content": "内容",
           "contentDescription": "公告与 SEO",
           "navigation": "导航",
-          "navigationDescription": "页脚与导航"
+          "navigationDescription": "页脚与导航",
+          "appearance": "外观",
+          "appearanceDescription": "模板与配色"
         },
         "nav": {
           "blog": "博客",
@@ -753,6 +757,21 @@
           "footerLinks": "页脚链接",
           "linkName": "链接名称",
           "navVisibility": "导航显示"
+        },
+        "appearance": {
+          "inherit": "跟随主站",
+          "inheritHint": "留空的项目继承主站设置；选择模板后使用该模板的默认配色，填写颜色可单独覆盖。",
+          "template": "店铺模板",
+          "layout": "商品布局",
+          "card": "卡片",
+          "list": "列表",
+          "colorPlaceholder": "留空则使用默认颜色",
+          "primary_color": "主色",
+          "secondary_color": "辅助色",
+          "accent_color": "强调色",
+          "background_color": "背景色",
+          "surface_color": "卡片色",
+          "text_color": "文字色"
         }
       },
       "productSettings": {
@@ -1420,6 +1439,7 @@
     },
     "site": {
       "title": "店铺设置",
+      "appearanceEntry": "模板与配色",
       "description": "配置分销站名称、公告、客服信息、导航和基础样式。",
       "previewStore": "预览站点",
       "cards": {
@@ -1486,7 +1506,17 @@
       "exceedAvailable": "超出当前可用余额",
       "noCurrency": "暂无可提现币种",
       "confirmTitle": "确认提现",
-      "confirmMessage": "确认对 {amount} {currency} 发起提现申请？"
+      "confirmMessage": "确认对 {amount} {currency} 发起提现申请？",
+      "channels": { "alipay": "支付宝", "wechat": "微信" },
+      "payeeName": "收款人姓名",
+      "payeeNamePlaceholder": "请输入与收款账号一致的姓名",
+      "qrCode": "收款二维码",
+      "qrHint": "支付宝和微信提现需上传收款二维码",
+      "uploadQr": "上传二维码",
+      "removeQr": "移除二维码",
+      "viewQr": "查看收款码",
+      "qrImageOnly": "请选择图片文件",
+      "qrUploadFailed": "二维码上传失败"
     },
     "orders": {
       "title": "销售订单",
@@ -1601,6 +1631,21 @@
   },
   "orderDetail": {
     "title": "订单详情",
+    "refundNotice": "如果买错或不再需要，可以申请退款；退款成功后，款项将原路返回。已使用的卡密需人工核查。",
+    "requestRefund": "申请原路退款",
+    "contactRefundSupport": "联系客服申请人工退款",
+    "refundConfirm": "确认申请全额原路退款？系统会先核查卡密是否未使用。",
+    "refundSucceeded": "退款已由支付渠道确认",
+    "refundPending": "退款处理中，请稍后查看订单状态",
+    "refundFailed": "暂时无法自动退款，请联系客服核查",
+    "refundState": {
+      "checking": "正在核查卡密和退款资格",
+      "processing": "支付渠道正在处理退款，请稍后查看",
+      "awaiting_support": "客服正在处理原路退款，卡密已锁定",
+      "syncing": "支付渠道已确认退款，卡密状态正在同步",
+      "succeeded": "退款已成功，款项原路返回",
+      "needs_review": "退款需要客服人工核查"
+    },
     "subtitle": "查看订单状态与交付信息",
     "notFound": "订单不存在或已被删除",
     "payNow": "去支付",

@@ -469,6 +469,10 @@ struct WithdrawRequestBody {
     currency: String,
     channel: String,
     account: String,
+    #[serde(default)]
+    payee_name: String,
+    #[serde(default)]
+    qr_code_url: String,
 }
 
 impl BindRules for WithdrawRequestBody {
@@ -496,12 +500,14 @@ async fn apply_withdraw(
         .svc
         .reseller
         .finance
-        .apply_withdraw(
+        .apply_withdraw_with_payout(
             uid,
             amount.decimal(),
             &req.currency,
             &req.channel,
             &req.account,
+            &req.payee_name,
+            &req.qr_code_url,
         )
         .await
         .map_err(|e| finance(e, "error.save_failed"))?;

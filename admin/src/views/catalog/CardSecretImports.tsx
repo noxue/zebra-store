@@ -37,6 +37,8 @@ export default defineComponent({
           }}
         </PageHeader>
 
+        <p class="rounded-zs border border-line bg-primary-soft p-4 text-sm text-muted">{t('admin.cardSecrets.localFirstHint')}</p>
+
         <ProductSkuPicker
           picker={pk}
           title={t('admin.cardSecretImports.selectionTitle')}

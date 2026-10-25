@@ -651,7 +651,7 @@ async fn put_site_config(
                 "reseller_id": rid,
                 "config_id": saved.id,
                 "site_name": saved.site_name,
-                "changed_fields": ["site_name", "logo", "favicon", "announcement", "support", "seo", "footer_links", "nav_config"],
+                "changed_fields": ["site_name", "logo", "favicon", "announcement", "support", "seo", "footer_links", "nav_config", "storefront_template", "template_mode", "theme"],
                 "source": "admin",
             }),
         )

@@ -69,6 +69,14 @@ pub enum FailureRefund {
 /// order group from its payment / status-change workflows).
 #[async_trait]
 pub trait IntegrationOrderEvents: Send + Sync {
+    /// Locks delivered converter cards before money can be refunded.
+    async fn prepare_refund(&self, order: &Order, refund_no: &str) -> Result<bool>;
+
+    /// Permanently marks prepared cards as invalidated by payment refund.
+    async fn confirm_refund(&self, order: &Order, refund_no: &str) -> Result<()>;
+
+    async fn cancel_refund(&self, order: &Order, refund_no: &str) -> Result<()>;
+
     /// Whether any item in this order has a converter binding.
     async fn requires_converter(&self, order: &Order) -> Result<bool> {
         let _ = order;

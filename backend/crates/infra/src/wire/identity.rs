@@ -71,6 +71,8 @@ pub fn build(ctx: &WireCtx) -> IdentityServices {
     let db = &ctx.db;
     let admin_repo = Arc::new(SeaAdminRepo::new(db.clone()));
     let user_repo: Arc<dyn UserRepo> = Arc::new(SeaUserRepo::new(db.clone()));
+    let api_key_repo =
+        Arc::new(crate::db::repo::identity::api_key::SeaPersonalApiKeyRepo::new(db.clone()));
     let policy = password_policy(ctx);
     let audit = AuditService::new(
         Arc::new(SeaAuthzAuditRepo::new(db.clone())),
@@ -84,7 +86,8 @@ pub fn build(ctx: &WireCtx) -> IdentityServices {
         &ctx.cfg.jwt.secret,
         ctx.cfg.jwt.expire_hours,
         policy,
-    );
+    )
+    .with_api_keys(api_key_repo.clone());
     let authz = AuthzService::new(Arc::new(SeaRuleRepo::new(db.clone())));
     let user_auth = UserAuthService::new(
         user_repo.clone(),
@@ -92,7 +95,8 @@ pub fn build(ctx: &WireCtx) -> IdentityServices {
         &ctx.cfg.user_jwt.secret,
         ctx.cfg.user_jwt.expire_hours,
         ctx.cfg.user_jwt.remember_me_expire_hours,
-    );
+    )
+    .with_api_keys(api_key_repo.clone());
     let admin_totp = TotpService::new(
         Arc::new(AdminAccounts(admin_repo.clone())),
         ctx.cipher.clone(),
@@ -166,6 +170,13 @@ pub fn build(ctx: &WireCtx) -> IdentityServices {
         block_seconds: i64::try_from(rl.block_seconds).unwrap_or(i64::MAX),
     };
     IdentityServices {
+        api_keys: zs_app::identity::api_key::PersonalApiKeyService::new(
+            api_key_repo,
+            Arc::new(crate::db::repo::identity::api_key::SystemApiKeyEntropy),
+            ctx.clock.clone(),
+            admin_auth.clone(),
+            user_auth.clone(),
+        ),
         admin_auth,
         admin_2fa,
         admin_accounts,

@@ -866,15 +866,19 @@ impl ProductService {
             .filter(|p| p.fulfillment_type == FulfillmentType::Upstream)
             .map(|p| p.id)
             .collect();
-        let p1_counts = self.d.secrets.p1_stock_counts(&upstream_ids).await?;
+        let local_counts = self.d.secrets.stock_counts(&upstream_ids).await?;
         for product in &mut products {
             if product.fulfillment_type != FulfillmentType::Upstream {
                 continue;
             }
             for sku in &mut product.skus {
-                sku.auto_stock_available = p1_counts
+                sku.auto_stock_available = local_counts
                     .iter()
-                    .find(|row| row.product_id == product.id && row.sku_id == sku.id)
+                    .find(|row| {
+                        row.product_id == product.id
+                            && row.sku_id == sku.id
+                            && row.status == "available"
+                    })
                     .map_or(0, |row| row.total);
             }
         }

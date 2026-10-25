@@ -376,6 +376,10 @@ pub struct WithdrawRequest {
     pub currency: String,
     pub channel: String,
     pub account: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub payee_name: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub qr_code_url: String,
     pub status: WithdrawStatus,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub reject_reason: String,

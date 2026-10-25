@@ -4,6 +4,7 @@ import { KeyRound, RefreshCcw, ShieldCheck, ShieldOff, ShieldPlus } from 'lucide
 import { Badge, Button, Card, Checkbox, FormField, Input, Loader, PageHeader } from '@/components/ui'
 import { formatDate } from '@/utils/format'
 import { useSecurity } from './security/useSecurity'
+import { PersonalApiKeyCard } from '@/components/PersonalApiKeyCard'
 import { Setup2FAModal } from './security/Setup2FAModal'
 import { RecoveryCodesModal } from './security/RecoveryCodesModal'
 
@@ -160,6 +161,7 @@ export default defineComponent({
         <PageHeader title={t('admin.settings.security.title')} subtitle={t('admin.settings.security.subtitle')} />
         {passwordCard()}
         {twofaCard()}
+        <PersonalApiKeyCard />
         <Setup2FAModal v-model={s.setupOpen.value} onEnabled={s.onEnabled} />
         <RecoveryCodesModal v-model={s.recoveryOpen.value} codes={s.recoveryCodes.value} />
       </div>

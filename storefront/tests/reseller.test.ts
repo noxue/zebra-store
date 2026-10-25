@@ -192,6 +192,9 @@ describe('site config form', () => {
       id: 1,
       updated_at: '',
       site_name: ' Shop ',
+      storefront_template: 'noir',
+      template_mode: 'list',
+      theme: { primary_color: '#123abc', background_color: '#eeeeee' },
       footer_links: [{ name: { 'zh-CN': '链接', 'zh-TW': '', 'en-US': '' }, url: 'https://a' }],
       nav_config: { builtin: { blog: false }, custom_items: [] },
     })
@@ -200,6 +203,9 @@ describe('site config form', () => {
     form.footer_links.push({ name: { 'zh-CN': '', 'zh-TW': '', 'en-US': '' }, url: ' ' })
     const payload = siteConfigFormToPayload(form)
     expect(payload.site_name).toBe('Shop')
+    expect(payload.storefront_template).toBe('noir')
+    expect(payload.template_mode).toBe('list')
+    expect(payload.theme?.primary_color).toBe('#123abc')
     expect(payload.footer_links).toHaveLength(1)
   })
 })

@@ -3,6 +3,7 @@
 pub mod admin_2fa;
 pub mod admin_accounts;
 pub mod admin_auth;
+pub mod api_key;
 pub mod audit;
 pub mod authz;
 pub mod captcha;
@@ -37,6 +38,7 @@ pub struct LoginLimits {
 /// Services of the identity group.
 #[derive(Debug, Clone)]
 pub struct IdentityServices {
+    pub api_keys: api_key::PersonalApiKeyService,
     pub admin_auth: admin_auth::AdminAuthService,
     pub admin_2fa: admin_2fa::AdminTwoFactorService,
     pub admin_accounts: admin_accounts::AdminAccountService,

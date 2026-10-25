@@ -61,6 +61,9 @@ pub struct Model {
     pub client_ip: String,
     #[sea_orm(column_type = "String(StringLen::N(80))", indexed)]
     pub risk_ip: String,
+    /// Pending orders created in payment-time reservation mode keep their plan here.
+    #[sea_orm(column_type = "Json", nullable)]
+    pub deferred_reservation_json: Option<Json>,
     #[sea_orm(indexed, nullable)]
     pub expires_at: Option<DateTimeUtc>,
     #[sea_orm(indexed, nullable)]

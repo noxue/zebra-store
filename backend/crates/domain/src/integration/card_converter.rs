@@ -105,6 +105,28 @@ pub struct ExchangeResponse {
     pub items: Vec<ExchangeResultItem>,
 }
 
+/// One refund operation against a previously converted order. The selected cards must be
+/// exactly the system cards whose value is being returned to the buyer.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConverterRefundRequest {
+    pub order_no: String,
+    pub refund_no: String,
+    pub cards: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConverterRefundRef {
+    pub order_no: String,
+    pub refund_no: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConverterRefundStatus {
+    pub status: String,
+    #[serde(default)]
+    pub reason: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ConverterEvent {
     pub id: Id,
@@ -181,4 +203,29 @@ pub trait ConverterHttp: Send + Sync {
         token: &str,
         request: &ExchangeRequest,
     ) -> Result<ExchangeResponse>;
+
+    async fn prepare_refund(
+        &self,
+        base_url: &str,
+        token: &str,
+        request: &ConverterRefundRequest,
+    ) -> Result<ConverterRefundStatus>;
+    async fn confirm_refund(
+        &self,
+        base_url: &str,
+        token: &str,
+        reference: &ConverterRefundRef,
+    ) -> Result<ConverterRefundStatus>;
+    async fn cancel_refund(
+        &self,
+        base_url: &str,
+        token: &str,
+        reference: &ConverterRefundRef,
+    ) -> Result<ConverterRefundStatus>;
+    async fn refund_status(
+        &self,
+        base_url: &str,
+        token: &str,
+        reference: &ConverterRefundRef,
+    ) -> Result<ConverterRefundStatus>;
 }

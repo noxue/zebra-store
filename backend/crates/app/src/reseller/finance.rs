@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use rust_decimal::Decimal;
-use zs_domain::reseller::accounting::withdraw_draft;
+use zs_domain::reseller::accounting::withdraw_draft_with_payout;
 use zs_domain::reseller::ports::{FinanceFilter, LedgerRepo, ProfileRepo, WithdrawAction};
 use zs_domain::reseller::rules::{require_settleable, withdraw_availability};
 use zs_domain::reseller::{BalanceAccount, LedgerEntry, Profile, WithdrawRequest, not_found};
@@ -130,9 +130,35 @@ impl FinanceService {
         channel: &str,
         account: &str,
     ) -> Result<WithdrawRequest> {
+        self.apply_withdraw_with_payout(user_id, amount, currency, channel, account, "", "")
+            .await
+    }
+
+    /// Requests a withdrawal with optional payee name and uploaded QR code.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "keeps the existing withdrawal arguments and adds the two payout fields"
+    )]
+    pub async fn apply_withdraw_with_payout(
+        &self,
+        user_id: Id,
+        amount: Decimal,
+        currency: &str,
+        channel: &str,
+        account: &str,
+        payee_name: &str,
+        qr_code_url: &str,
+    ) -> Result<WithdrawRequest> {
         let profile = profile_of_user(self.profiles.as_ref(), user_id).await?;
         require_settleable(&profile)?;
-        let draft = withdraw_draft(amount, currency, channel, account)?;
+        let draft = withdraw_draft_with_payout(
+            amount,
+            currency,
+            channel,
+            account,
+            payee_name,
+            qr_code_url,
+        )?;
         self.ledger
             .apply_withdraw(profile.id, &draft, self.clock.now())
             .await

@@ -113,6 +113,7 @@ pub trait PaymentRepo: Send + Sync {
 /// An admin payment row (`AdminPaymentItem`): payment with gateway secrets/links removed.
 #[derive(Debug, Clone, Serialize)]
 pub struct AdminPayment {
+    pub diagnosis: super::diagnosis::PaymentDiagnosis,
     #[serde(flatten)]
     pub payment: Payment,
     pub channel_name: String,
@@ -136,6 +137,7 @@ fn is_zero(v: &Id) -> bool {
 pub fn admin_payment(payment: &Payment, channel_name: &str, refs: &PaymentRefs) -> AdminPayment {
     let recharge = refs.recharges.get(&payment.id).cloned().unwrap_or_default();
     AdminPayment {
+        diagnosis: super::diagnosis::diagnose(payment),
         display_channel_type: payment.display_channel_type(),
         payment: Payment {
             provider_payload: Map::new(),

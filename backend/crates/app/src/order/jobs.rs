@@ -51,6 +51,16 @@ impl JobHandler for TimeoutCancelJob {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct RefundReconcileJob(pub OrderService);
+
+#[async_trait]
+impl JobHandler for RefundReconcileJob {
+    async fn handle(&self, _payload: Value) -> Result<()> {
+        self.0.reconcile_gateway_refunds().await
+    }
+}
+
 /// `order:status_email`.
 #[derive(Debug, Clone)]
 pub struct StatusEmailJob(pub OrderService);

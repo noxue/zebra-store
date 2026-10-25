@@ -129,7 +129,9 @@ impl OrderStore for SeaOrderStore {
                             .await
                             .dom()?;
                         release_secrets_in(&txn, order.id, now).await?;
-                        ops::release_manual_stock(&txn, &order.items).await?;
+                        if !ops::has_deferred_reservation(&txn, &order).await? {
+                            ops::release_manual_stock(&txn, &order.items).await?;
+                        }
                         wallet::release_order_balance(
                             &txn,
                             &mut order,
@@ -314,12 +316,45 @@ impl OrderStore for SeaOrderStore {
             .await)
     }
 
+    async fn claim_gateway_refund_submission(
+        &self,
+        attempt_id: Id,
+        now: DateTime<Utc>,
+    ) -> Result<bool> {
+        in_txn!(self, |txn| refund::claim_gateway_refund_submission_in(
+            &txn, attempt_id, now
+        )
+        .await)
+    }
+
     async fn gateway_refund_attempt(&self, id: Id) -> Result<Option<GatewayRefundAttempt>> {
         refund::get_gateway_refund_attempt_in(&self.db, id).await
     }
 
+    async fn claim_manual_refund_preparation(
+        &self,
+        attempt_id: Id,
+        now: DateTime<Utc>,
+    ) -> Result<bool> {
+        in_txn!(self, |txn| refund::claim_manual_refund_preparation_in(
+            &txn, attempt_id, now
+        )
+        .await)
+    }
+
     async fn gateway_refund_attempts(&self, order_id: Id) -> Result<Vec<GatewayRefundAttempt>> {
         refund::list_gateway_refund_attempts_in(&self.db, order_id).await
+    }
+
+    async fn unfinished_gateway_refund_attempts(&self) -> Result<Vec<GatewayRefundAttempt>> {
+        refund::unfinished_gateway_refund_attempts_in(&self.db).await
+    }
+
+    async fn mark_gateway_refund_card_confirmed(&self, attempt_id: Id) -> Result<()> {
+        in_txn!(self, |txn| refund::mark_gateway_refund_card_confirmed_in(
+            &txn, attempt_id
+        )
+        .await)
     }
 
     async fn update_gateway_refund_attempt(

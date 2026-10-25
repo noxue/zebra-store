@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;
-use serde_json::Map;
+use serde_json::{Map, Value};
 use zs_domain::order::model::{Order, OrderStatus, keys};
 use zs_domain::order::ports::{BeginOutcome, BeginPayment};
 use zs_domain::payment::callback::{CallbackInput, apply_create_result};
@@ -393,7 +393,27 @@ impl OrderService {
             let created =
                 tokio::time::timeout(GATEWAY_TIMEOUT, gateway.create_payment(&config, &input))
                     .await
-                    .map_err(|_| GatewayError::request("gateway timeout"))??;
+                    .map_err(|_| GatewayError::request("gateway timeout"))
+                    .and_then(|result| result);
+            let created = match created {
+                Ok(created) => created,
+                Err(error) => {
+                    payment.provider_payload.insert(
+                        "creation_failure_kind".into(),
+                        Value::String(
+                            zs_domain::payment::diagnosis::creation_failure(&error)
+                                .as_str()
+                                .into(),
+                        ),
+                    );
+                    payment.updated_at = clock.now();
+                    // Keep initiated here: fail_started performs the existing wallet rollback.
+                    if let Err(save_error) = store.save_started(&payment).await {
+                        tracing::error!(%save_error, payment_id = payment.id, "payment_failure_reason_save_failed");
+                    }
+                    return Err(error);
+                }
+            };
             apply_create_result(&mut payment, &created, &provider_order_no, clock.now());
             store
                 .save_started(&payment)

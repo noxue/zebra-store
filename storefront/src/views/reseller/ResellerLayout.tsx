@@ -1,8 +1,8 @@
-import { computed, defineComponent, onMounted, ref } from 'vue'
+import { computed, defineComponent, onMounted, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import type { LucideIcon } from 'lucide-vue-next'
-import { ArrowLeft, Banknote, ClipboardCheck, FileText, Globe, LayoutGrid, LogOut, Settings, ShoppingBag, Tag, Upload, UserRound } from 'lucide-vue-next'
+import { ArrowLeft, Banknote, ClipboardCheck, FileText, Globe, LayoutGrid, LogOut, Menu, Settings, ShoppingBag, Tag, Upload, UserRound } from 'lucide-vue-next'
 import { provideResellerProfile } from '@/composables/reseller/useResellerProfile'
 import { usePageTitle } from '@/composables/usePageTitle'
 import { useUserAuthStore } from '@/stores/userAuth'
@@ -10,7 +10,7 @@ import { LanguageSwitcher } from '@/components/layout/LanguageSwitcher'
 import { SiteLogo } from '@/components/layout/SiteLogo'
 import { ThemeToggle } from '@/components/layout/ThemeToggle'
 import { ResellerInactiveCard, ResellerPageState } from '@/components/reseller/ConsoleParts'
-import { Button, cn } from '@/components/ui'
+import { Button, Sheet, cn } from '@/components/ui'
 import { canRenderResellerConsoleModule } from '@/utils/reseller/console'
 
 interface NavDef {
@@ -85,7 +85,7 @@ const groupDefs: Array<{ key: string; title: string; items: NavDef[] }> = [
   },
 ]
 
-/** Reseller console shell: glass topbar, grouped sidebar (desktop), scrollable chips (mobile). */
+/** Reseller console shell with a mobile navigation drawer. */
 export default defineComponent({
   name: 'ResellerLayout',
   setup() {
@@ -99,6 +99,8 @@ export default defineComponent({
     }
     const profile = provideResellerProfile()
     const ready = ref(false)
+    const menuOpen = ref(false)
+    watch(() => route.path, () => (menuOpen.value = false))
 
     const isActive = (path: string) => (path === '/reseller' ? route.path === path : route.path === path || route.path.startsWith(`${path}/`))
     const current = computed(() => groupDefs.flatMap((g) => g.items).find((i) => isActive(i.to)))
@@ -111,7 +113,7 @@ export default defineComponent({
       ready.value = true
     })
 
-    const navLink = (item: NavDef, compact = false) => {
+    const navLink = (item: NavDef) => {
       const Icon = item.icon
       const active = isActive(item.to)
       return (
@@ -120,11 +122,11 @@ export default defineComponent({
           to={item.to}
           class={cn(
             'relative flex items-center gap-2.5 rounded-full font-bold transition',
-            compact ? 'h-9 shrink-0 px-3.5 text-xs' : 'px-4 py-2.5 text-sm',
+            'px-4 py-2.5 text-sm',
             active ? 'zs-gradient-bg text-on-primary shadow-zs' : 'text-muted hover:bg-primary-soft hover:text-primary-text',
           )}
         >
-          <Icon class={compact ? 'size-4' : 'size-[18px]'} />
+          <Icon class="size-[18px]" />
           <span class="truncate">{t(item.label)}</span>
         </RouterLink>
       )
@@ -135,6 +137,10 @@ export default defineComponent({
         <header class="sticky top-0 z-40 px-2 pt-2 sm:px-4">
           <div class="zs-glass mx-auto flex h-14 max-w-7xl items-center justify-between gap-3 rounded-full px-3 shadow-zs sm:px-5">
             <div class="flex min-w-0 items-center gap-3">
+              <Button variant="ghost" size="sm" class="lg:hidden" aria-label={t('zs.menu')} onClick={() => (menuOpen.value = true)}>
+                <Menu class="size-5" />
+                <span class="text-xs">{t('zs.menu')}</span>
+              </Button>
               <SiteLogo compact />
               <span class="hidden rounded-full bg-primary-soft px-3 py-1 text-xs font-bold text-primary-text sm:inline">{t('zsReseller.consoleBadge')}</span>
               <span class="zs-title truncate text-base text-fg">{title.value}</span>
@@ -161,10 +167,18 @@ export default defineComponent({
               )}
             </div>
           </div>
-          <nav class="zs-scroll-x mx-auto mt-2 flex max-w-7xl gap-1.5 px-1 lg:hidden" aria-label={t('zsReseller.menu')}>
-            {groupDefs.flatMap((g) => g.items).map((item) => navLink(item, true))}
-          </nav>
         </header>
+
+        <Sheet modelValue={menuOpen.value} onUpdate:modelValue={(value: boolean) => (menuOpen.value = value)} title={t('zsReseller.menu')}>
+          <nav class="space-y-5" aria-label={t('zsReseller.menu')}>
+            {groupDefs.map((group) => (
+              <div key={group.key}>
+                <p class="px-4 pb-1.5 text-[11px] font-bold tracking-[0.14em] text-muted">{t(group.title)}</p>
+                <div class="space-y-1" onClick={() => (menuOpen.value = false)}>{group.items.map((item) => navLink(item))}</div>
+              </div>
+            ))}
+          </nav>
+        </Sheet>
 
         <div class="mx-auto flex w-full max-w-7xl flex-1 gap-6 px-3 py-5 sm:px-4 lg:py-6">
           <aside class="hidden w-60 shrink-0 lg:block">

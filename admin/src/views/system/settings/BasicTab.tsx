@@ -106,6 +106,13 @@ export default defineComponent({
           </Card>
 
           <Card title={t('admin.settings.order.title')} description={t('admin.settings.order.subtitle')}>
+            <div class="mb-5">
+              <ToggleRow
+                v-model={m.order.reserve_stock_on_payment}
+                label={t('admin.settings.order.reserveStockOnPayment')}
+                description={t('admin.settings.order.reserveStockOnPaymentTip')}
+              />
+            </div>
             <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
               <FormField label={t('admin.settings.order.paymentExpireMinutes')} hint={t('admin.settings.order.paymentExpireMinutesTip')}>
                 <Input type="number" min={1} max={10080} v-model={m.order.payment_expire_minutes} placeholder={t('admin.settings.order.paymentExpireMinutesPlaceholder')} />

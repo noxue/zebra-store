@@ -72,6 +72,7 @@ export interface SKUFormItem {
   sku_code: string
   spec_values: Record<string, string>
   price_amount: number | ''
+  agent_price_amount: number | ''
   cost_price_amount: number | ''
   manual_stock_total: number | ''
   is_active: boolean
@@ -97,7 +98,7 @@ export const STOCK_DISPLAY_MODES = ['exact', 'status', 'range', 'hidden'] as con
 export const isTextLikeField = (type: string) => type === 'text' || type === 'textarea' || type === 'phone' || type === 'email'
 export const isOptionField = (type: string) => type === 'select' || type === 'radio' || type === 'checkbox'
 
-export const createSKUFormItem = (raw?: Partial<Omit<AdminProductSKU, 'price_amount' | 'cost_price_amount'>> & { price_amount?: unknown; cost_price_amount?: unknown }): SKUFormItem => ({
+export const createSKUFormItem = (raw?: Partial<Omit<AdminProductSKU, 'price_amount' | 'agent_price_amount' | 'cost_price_amount'>> & { price_amount?: unknown; agent_price_amount?: unknown; cost_price_amount?: unknown }): SKUFormItem => ({
   id: Number(raw?.id || 0),
   sku_code: String(raw?.sku_code || '').trim(),
   spec_values: {
@@ -109,6 +110,7 @@ export const createSKUFormItem = (raw?: Partial<Omit<AdminProductSKU, 'price_amo
     }, {}),
   },
   price_amount: Number(raw?.price_amount || 0),
+  agent_price_amount: raw?.agent_price_amount == null || raw.agent_price_amount === '' ? '' : Number(raw.agent_price_amount),
   cost_price_amount: Number(raw?.cost_price_amount || 0),
   manual_stock_total: toSafeStockTotal(raw?.manual_stock_total),
   is_active: raw?.is_active ?? true,
@@ -253,6 +255,7 @@ export interface NormalizedSKU {
   sku_code: string
   spec_values: Record<string, string>
   price_amount: number
+  agent_price_amount: number | null
   cost_price_amount: number
   manual_stock_total: number
   is_active: boolean
@@ -276,11 +279,16 @@ export const normalizeSKUsForSubmit = (skus: SKUFormItem[], fulfillmentType: str
     if (item.price_amount === '' || !Number.isFinite(priceAmount) || priceAmount <= 0) {
       throw new Error(t('admin.products.errors.skuPriceInvalid', { index: index + 1 }))
     }
+    const agentPrice = item.agent_price_amount === '' ? null : Number(item.agent_price_amount)
+    if (agentPrice !== null && (!Number.isFinite(agentPrice) || agentPrice <= 0)) {
+      throw new Error(t('admin.products.errors.skuAgentPriceInvalid', { index: index + 1 }))
+    }
     return {
       id: item.id > 0 ? item.id : undefined,
       sku_code: skuCode,
       spec_values: normalizeSpecValues(item.spec_values),
       price_amount: priceAmount,
+      agent_price_amount: agentPrice,
       cost_price_amount: Number(item.cost_price_amount) || 0,
       manual_stock_total: fulfillmentType === 'manual' ? toSafeStockTotal(item.manual_stock_total) : 0,
       is_active: Boolean(item.is_active),

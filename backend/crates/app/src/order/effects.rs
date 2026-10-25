@@ -210,11 +210,12 @@ impl OrderService {
 
     /// Everything that follows the first successful payment of an order.
     pub async fn after_order_paid(&self, order: &Order, payment: Option<&Payment>) {
+        let stock_shortage = payment.is_some_and(|p| p.exception_code == "stock_insufficient");
         if let Err(error) = self.deps.affiliate.order_paid(order.id).await {
             tracing::warn!(%error, order_id = order.id, "affiliate_handle_order_paid_failed");
         }
         // Fully auto-delivered orders get the "completed" mail right after (NTF-01).
-        if !is_fully_auto(order) {
+        if stock_shortage || !is_fully_auto(order) {
             self.enqueue_status_email(order.id, OrderStatus::Paid, None)
                 .await;
         }
@@ -233,18 +234,22 @@ impl OrderService {
             tracing::warn!(%error, order_id = order.id, "member_level_order_paid_failed");
         }
         if order.children.is_empty() {
-            if order.status == OrderStatus::Fulfilling && has_manual_items(&order.items) {
+            if order.status == OrderStatus::Fulfilling
+                && (stock_shortage || has_manual_items(&order.items))
+            {
                 self.manual_pending(order, None).await;
             }
-            if should_auto_fulfill(&order.items) {
+            if order.status == OrderStatus::Paid && should_auto_fulfill(&order.items) {
                 self.enqueue_auto_fulfill(order.id).await;
             }
         } else {
             for child in &order.children {
-                if child.status == OrderStatus::Fulfilling && has_manual_items(&child.items) {
+                if child.status == OrderStatus::Fulfilling
+                    && (stock_shortage || has_manual_items(&child.items))
+                {
                     self.manual_pending(child, Some(order)).await;
                 }
-                if should_auto_fulfill(&child.items) {
+                if child.status == OrderStatus::Paid && should_auto_fulfill(&child.items) {
                     self.enqueue_auto_fulfill(child.id).await;
                 }
             }

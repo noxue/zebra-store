@@ -7,6 +7,7 @@ import { useAppStore } from '@/stores/app'
 import { GoogleBindButton } from './GoogleBindButton'
 import { LoginHistorySection } from './LoginHistorySection'
 import { PanelAlertBox, PanelHeading } from './PanelParts'
+import { PersonalApiKeyCard } from '@/components/PersonalApiKeyCard'
 import { TwoFactorSection } from './TwoFactorSection'
 
 /** Security center: bindings, email, password, 2FA, login history. */
@@ -261,6 +262,7 @@ export const SecurityPanel = defineComponent({
           )}
 
           <TwoFactorSection />
+          <PersonalApiKeyCard />
         </div>
       )
     }

@@ -733,6 +733,45 @@ mod tests {
         }
     }
 
+    // RSL-07 / RSL-09: the same optional base drives preview, storefront and order profit.
+    #[test]
+    fn agent_price_is_reseller_base_everywhere() {
+        use crate::catalog::product::testkit::{product as catalog_product, sku as catalog_sku};
+        use crate::catalog::storefront::priced_product;
+
+        let mut row = catalog_sku(1, "DEFAULT", true);
+        row.price_amount = amt("40");
+        row.cost_price_amount = amt("30");
+        row.agent_price_amount = Some(amt("35"));
+        let mut catalog = catalog_product(vec![row.clone()]);
+        catalog.price_amount = amt("40");
+        let priced = priced_product(&catalog);
+        let profile = prof("10", "0");
+        let preview = preview(&profile, &priced, &[]).unwrap();
+        assert_eq!(preview[1].base_price, d("35"));
+        assert_eq!(preview[1].effective_price, d("38.50"));
+        let display = display_prices(&profile, &priced, &[]);
+        assert_eq!(display.sku_prices[&1], amt("38.50"));
+        let order = price_order_line(
+            &profile,
+            &SettingIndex::default(),
+            &OrderLine {
+                product_id: catalog.id,
+                sku_id: row.id,
+                quantity: 2,
+                base_unit: row.reseller_base_price(),
+                cost: row.cost_price_amount,
+            },
+        )
+        .unwrap();
+        assert_eq!(order.base_unit_amount, d("35"));
+        assert_eq!(order.reseller_unit_amount, d("38.50"));
+        assert_eq!(order.profit_amount, d("7"));
+
+        row.agent_price_amount = None;
+        assert_eq!(row.reseller_base_price(), amt("40"));
+    }
+
     #[test]
     fn pricing_modes() {
         let p = prof("0", "0");

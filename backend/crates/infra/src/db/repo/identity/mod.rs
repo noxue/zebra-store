@@ -1,6 +1,7 @@
 //! Identity repositories.
 
 pub mod admin;
+pub mod api_key;
 pub mod audit;
 pub mod login_log;
 pub mod member_level;

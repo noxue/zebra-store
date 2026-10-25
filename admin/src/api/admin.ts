@@ -35,6 +35,7 @@ import type {
   AdminLoginRequest,
   AdminLoginResponse,
   AdminManualRefundPayload,
+  AdminOriginalRefundResponse,
   AdminMemberLevel,
   AdminMemberLevelPrice,
   AdminNotificationLog,
@@ -239,6 +240,9 @@ export const adminAPI = {
   downloadFulfillment: (orderId: Id) => api.getBlob(`/admin/orders/${orderId}/fulfillment/download`),
   refundOrderToWallet: (id: Id, data: AdminRefundToWalletPayload) => api.post<JsonObject>(`/admin/orders/${id}/refund-to-wallet`, data),
   manualRefundOrder: (id: Id, data: AdminManualRefundPayload) => api.post<JsonObject>(`/admin/orders/${id}/manual-refund`, data),
+  prepareManualRefundOrder: (id: Id, data: AdminManualRefundPayload) => api.post<{ attempt: { id: number; status: string } }>(`/admin/orders/${id}/manual-refund/prepare`, data),
+  confirmManualRefundOrder: (id: Id, data: { attempt_id: number; transfer_ref: string }) => api.post<JsonObject>(`/admin/orders/${id}/manual-refund/confirm`, data),
+  originalRefundOrder: (id: Id, data: AdminManualRefundPayload) => api.post<AdminOriginalRefundResponse>(`/admin/orders/${id}/original-refund`, data),
   getOrderRefunds: (params?: QueryParams) => api.get<AdminOrderRefund[]>('/admin/order-refunds', { params }),
   getOrderRefund: (id: Id) => api.get<AdminOrderRefund>(`/admin/order-refunds/${id}`),
   updateOrderRefundPaymentFee: (id: Id, data: AdminUpdateRefundPaymentFeePayload) =>

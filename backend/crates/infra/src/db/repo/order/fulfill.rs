@@ -14,10 +14,11 @@ use zs_domain::order::model::{
     Fulfillment, JsonMap, OrderStatus, fulfillment_status, fulfillment_type, item_key, keys,
 };
 use zs_domain::order::ports::UpstreamDelivered;
+use zs_domain::payment::refund::status as gateway_refund_status;
 use zs_domain::{Error, Id, Result};
 
 use super::{map, ops};
-use crate::db::entity::{card_secrets, fulfillments, orders};
+use crate::db::entity::{card_secrets, fulfillments, gateway_refund_attempts, orders};
 use crate::db::repo::catalog::ordering::mark_secrets_used_in;
 use crate::db::repo::support::{DbResultExt, to_json};
 
@@ -30,6 +31,33 @@ async fn ensure_no_fulfillment<C: ConnectionTrait>(conn: &C, order_id: Id) -> Re
         .dom()?;
     if existing.is_some() {
         return Err(Error::bad_request(keys::FULFILLMENT_EXISTS));
+    }
+    Ok(())
+}
+
+async fn ensure_no_refund_in_progress<C: ConnectionTrait>(
+    conn: &C,
+    order_id: Id,
+    parent_id: Option<Id>,
+) -> Result<()> {
+    let mut ids = vec![order_id];
+    if let Some(parent_id) = parent_id {
+        ids.push(parent_id);
+    }
+    let active = gateway_refund_attempts::Entity::find()
+        .filter(gateway_refund_attempts::Column::OrderId.is_in(ids))
+        .filter(gateway_refund_attempts::Column::Status.is_in([
+            gateway_refund_status::PREPARING,
+            gateway_refund_status::PENDING,
+            gateway_refund_status::MANUAL_PREPARING,
+            gateway_refund_status::MANUAL_LOCKING,
+            gateway_refund_status::MANUAL_AWAITING,
+        ]))
+        .one(conn)
+        .await
+        .dom()?;
+    if active.is_some() {
+        return Err(Error::bad_request(keys::ORDER_STATUS_INVALID));
     }
     Ok(())
 }
@@ -65,6 +93,7 @@ pub(crate) async fn auto_in<C: ConnectionTrait>(
     let order = map::load_locked(conn, order_id)
         .await?
         .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
+    ensure_no_refund_in_progress(conn, order_id, order.parent_id).await?;
     if order.parent_id.is_none() && !order.children.is_empty() {
         return Err(Error::bad_request(keys::FULFILLMENT_INVALID));
     }
@@ -178,6 +207,7 @@ pub(crate) async fn prepare_auto_in<C: ConnectionTrait>(
     let order = map::load_locked(conn, order_id)
         .await?
         .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
+    ensure_no_refund_in_progress(conn, order_id, order.parent_id).await?;
     if order.parent_id.is_none() && !order.children.is_empty() {
         return Err(Error::bad_request(keys::FULFILLMENT_INVALID));
     }
@@ -335,6 +365,7 @@ pub(crate) async fn finalize_auto_in<C: ConnectionTrait>(
     let order = map::load_locked(conn, order_id)
         .await?
         .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
+    ensure_no_refund_in_progress(conn, order_id, order.parent_id).await?;
     if order.status != OrderStatus::Fulfilling {
         return Err(Error::bad_request(keys::ORDER_STATUS_INVALID));
     }
@@ -379,6 +410,7 @@ pub(crate) async fn manual_in<C: ConnectionTrait>(
     let order = map::load_locked(conn, order_id)
         .await?
         .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
+    ensure_no_refund_in_progress(conn, order_id, order.parent_id).await?;
     if order.parent_id.is_none() && !order.children.is_empty() {
         return Err(Error::bad_request(keys::FULFILLMENT_INVALID));
     }
@@ -445,6 +477,7 @@ pub(crate) async fn upstream_in<C: ConnectionTrait>(
     let order = map::load_locked(conn, order_id)
         .await?
         .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
+    ensure_no_refund_in_progress(conn, order_id, order.parent_id).await?;
     let existing = fulfillments::Entity::find()
         .filter(fulfillments::Column::OrderId.eq(order_id))
         .lock_exclusive()

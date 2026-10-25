@@ -6,6 +6,7 @@ import type {
   GuestCreateAndPayPayload,
   GuestOrderPreviewPayload,
   Order,
+  OriginalRefundResponse,
   OrderListParams,
   OrderPreview,
   OrderPreviewPayload,
@@ -44,6 +45,7 @@ export const userOrderAPI = {
   list: (params?: OrderListParams) => userApi.get<Order[]>('/orders', { params }),
   stats: (params?: OrderListParams) => userApi.get<StatusStats>('/orders/stats', { params }),
   detail: (orderNo: string, options?: RequestOptions) => userApi.get<Order>(`/orders/${encodeURIComponent(orderNo)}`, options),
+  requestRefund: (orderNo: string) => userApi.post<OriginalRefundResponse>(`/orders/${encodeURIComponent(orderNo)}/refund`, {}),
   cancel: (orderNo: string) => userApi.post<Order | null>(`/orders/${encodeURIComponent(orderNo)}/cancel`),
   downloadFulfillment: (orderNo: string) => userApi.blob(`/orders/${encodeURIComponent(orderNo)}/fulfillment/download`),
 }
@@ -56,6 +58,8 @@ export const guestOrderAPI = {
     userApi.get<Order[]>('/guest/orders', guestOptions(auth, { params })),
   detail: (orderNo: string, auth: GuestCredentials, options?: RequestOptions) =>
     userApi.get<Order>(`/guest/orders/${encodeURIComponent(orderNo)}`, guestOptions(auth, options)),
+  requestRefund: (orderNo: string, auth: GuestCredentials) =>
+    userApi.post<OriginalRefundResponse>(`/guest/orders/${encodeURIComponent(orderNo)}/refund`, {}, guestOptions(auth)),
   downloadFulfillment: (orderNo: string, auth: GuestCredentials) =>
     userApi.blob(`/guest/orders/${encodeURIComponent(orderNo)}/fulfillment/download`, guestOptions(auth)),
   createPayment: (auth: GuestCredentials, data: CreatePaymentPayload) =>

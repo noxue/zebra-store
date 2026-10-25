@@ -54,6 +54,7 @@ export interface AdminProductSKU {
   sku_code: string
   spec_values: Record<string, string>
   price_amount: Money
+  agent_price_amount: Money | null
   cost_price_amount: Money
   manual_stock_total: number
   manual_stock_locked: number
@@ -177,6 +178,9 @@ export interface AdminFulfillment {
 export interface AdminOrder {
   id: number
   order_no: string
+  refund_mode?: 'none' | 'automatic' | 'contact_support'
+  refund_state?: 'none' | 'checking' | 'processing' | 'awaiting_support' | 'syncing' | 'succeeded' | 'needs_review'
+  refund_attempt?: { id: number; status: string; amount: Money; remark: string; payment_fee_refunded: boolean } | null
   parent_id?: number
   user_id?: number
   guest_email?: string
@@ -473,6 +477,7 @@ export interface AdminGatewaySecurityTestResult {
 
 // --- Payment ---
 export interface AdminPayment {
+  diagnosis?: { kind: string; gateway_code: string }
   id: number
   payment_no: string
   order_id: number
@@ -1026,6 +1031,9 @@ export interface AdminResellerLocalizedText {
 
 export interface AdminResellerSiteConfigPayload {
   site_name?: string
+  storefront_template?: string
+  template_mode?: string
+  theme?: Partial<Record<'primary_color' | 'secondary_color' | 'accent_color' | 'background_color' | 'surface_color' | 'text_color', string>>
   logo?: string
   favicon?: string
   announcement?: {
@@ -1062,6 +1070,9 @@ export interface AdminResellerSiteConfigPayload {
 
 export interface AdminResellerSiteConfig extends Required<Pick<AdminResellerSiteConfigPayload, 'announcement' | 'support' | 'seo' | 'nav_config'>> {
   id: number
+  storefront_template?: string
+  template_mode?: string
+  theme?: AdminResellerSiteConfigPayload['theme']
   reseller_id: number
   site_name: string
   logo: string
@@ -1298,6 +1309,8 @@ export interface AdminResellerWithdraw {
   currency: string
   channel: string
   account: string
+  payee_name?: string
+  qr_code_url?: string
   status: string
   reject_reason?: string
   processed_by?: number
@@ -1576,6 +1589,10 @@ export interface AdminManualRefundPayload {
   payment_fee_refunded?: boolean
 }
 
+export interface AdminOriginalRefundResponse {
+  attempt: { status: 'preparing' | 'pending' | 'succeeded' | 'failed'; id: number }
+}
+
 export interface AdminUpdateRefundPaymentFeePayload {
   payment_fee_refunded: boolean
 }
@@ -1824,3 +1841,14 @@ export interface BatchResult {
 
 /** Generic JSON object used for settings payloads whose shape lives in the view composable. */
 export type JsonObject = Record<string, unknown>
+
+/** Metadata only: the server never returns the stored key hash. */
+export interface PersonalApiKeyStatus {
+  realm: 'admin' | 'user'
+  owner_id: number
+  prefix: string
+  created_at: string
+  updated_at: string
+}
+export interface IssuedPersonalApiKey { api_key: string; prefix: string }
+export interface PersonalApiKeySession { token: string; expires_at: string }

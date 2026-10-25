@@ -157,6 +157,9 @@ describe('site config form', () => {
       id: 1,
       reseller_id: 2,
       site_name: ' Shop ',
+      storefront_template: 'noir',
+      template_mode: 'list',
+      theme: { primary_color: '#aabbcc' },
       logo: '',
       favicon: '',
       announcement: { enabled: true, type: '', title: { 'zh-CN': 'Hi' } },
@@ -183,6 +186,9 @@ describe('site config form', () => {
     })
     const payload = buildSiteConfigPayload(form)
     expect(payload.site_name).toBe('Shop')
+    expect(payload.storefront_template).toBe('noir')
+    expect(payload.template_mode).toBe('list')
+    expect(payload.theme?.primary_color).toBe('#aabbcc')
     expect(payload.announcement?.type).toBe('info')
     expect(payload.support?.email).toBe('a@b.c')
     expect(payload.footer_links).toHaveLength(1)

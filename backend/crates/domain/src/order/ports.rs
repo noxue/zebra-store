@@ -162,7 +162,7 @@ pub trait OrderRepo: Send + Sync {
 }
 
 /// Stock reservation of a new child order.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Reservation {
     None,
     /// Reserve `quantity` available card secrets (`sku_id` 0 = any SKU).
@@ -199,6 +199,8 @@ pub struct NewOrder {
     pub order: Order,
     /// Aligned with `order.children`.
     pub reservations: Vec<Reservation>,
+    /// Snapshot of the store setting so later changes never alter pending orders.
+    pub reserve_stock_on_payment: bool,
     /// Coupon usage to claim (PRC-01).
     pub coupon: Option<(Id, Amount)>,
     pub reseller: Option<OrderPricingContext>,
@@ -347,8 +349,20 @@ pub trait OrderStore: Send + Sync {
         &self,
         input: &NewGatewayRefundAttempt,
     ) -> Result<ReservedGatewayRefund>;
+    async fn claim_gateway_refund_submission(
+        &self,
+        attempt_id: Id,
+        now: DateTime<Utc>,
+    ) -> Result<bool>;
+    async fn claim_manual_refund_preparation(
+        &self,
+        attempt_id: Id,
+        now: DateTime<Utc>,
+    ) -> Result<bool>;
     async fn gateway_refund_attempt(&self, id: Id) -> Result<Option<GatewayRefundAttempt>>;
     async fn gateway_refund_attempts(&self, order_id: Id) -> Result<Vec<GatewayRefundAttempt>>;
+    async fn unfinished_gateway_refund_attempts(&self) -> Result<Vec<GatewayRefundAttempt>>;
+    async fn mark_gateway_refund_card_confirmed(&self, attempt_id: Id) -> Result<()>;
     async fn update_gateway_refund_attempt(
         &self,
         id: Id,

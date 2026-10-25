@@ -430,6 +430,7 @@ mod tests {
             sku_code: format!("S{id}"),
             spec_values: JsonMap::new(),
             price_amount: price.parse().unwrap(),
+            agent_price_amount: None,
             cost_price_amount: Amount::ZERO,
             manual_stock_total: 5,
             manual_stock_locked: 4,

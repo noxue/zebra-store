@@ -16,9 +16,10 @@ export interface CategoryForm {
   slug: string
   icon: string
   sort_order: number
+  is_active: boolean
 }
 
-const emptyForm = (): CategoryForm => ({ id: 0, parent_id: 0, name: toLocalizedForm(null), slug: '', icon: '', sort_order: 0 })
+const emptyForm = (): CategoryForm => ({ id: 0, parent_id: 0, name: toLocalizedForm(null), slug: '', icon: '', sort_order: 0, is_active: true })
 
 /** Page logic for 商品分类 (tree list + create/edit dialog). */
 export function useCategories() {
@@ -78,6 +79,7 @@ export function useCategories() {
       slug: c.slug,
       icon: c.icon || '',
       sort_order: c.sort_order,
+      is_active: c.is_active,
     })
     modal.openEdit(c.id)
   }
@@ -93,9 +95,13 @@ export function useCategories() {
   const submit = () => {
     if (!validate({ slug: form.slug, name: form.name['zh-CN'] })) return
     void modal.handleSubmit(async () => {
-      const payload = { ...form, name: { ...form.name }, sort_order: Number(form.sort_order) || 0 }
-      if (modal.isEditing.value) await adminAPI.updateCategory(form.id, payload)
-      else await adminAPI.createCategory(payload)
+      const { is_active, ...fields } = form
+      const payload = { ...fields, name: { ...form.name }, sort_order: Number(form.sort_order) || 0 }
+      if (modal.isEditing.value) {
+        const updated = await adminAPI.updateCategory(form.id, payload)
+        // Status has a dedicated endpoint; PUT only saves the category details.
+        if (updated.data.is_active !== is_active) await adminAPI.patchCategoryActive(form.id, is_active)
+      } else await adminAPI.createCategory(payload)
       notifySuccess(t('admin.common.operationSuccess'))
     })
   }

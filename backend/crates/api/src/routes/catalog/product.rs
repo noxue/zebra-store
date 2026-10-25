@@ -151,6 +151,7 @@ struct SkuRequest {
     spec_values: Option<JsonMap>,
     #[serde(default)]
     price_amount: Amount,
+    agent_price_amount: Option<Amount>,
     #[serde(default)]
     cost_price_amount: Amount,
     #[serde(default)]
@@ -280,6 +281,7 @@ impl ProductRequest {
                     sku_code: s.sku_code,
                     spec_values: s.spec_values,
                     price_amount: s.price_amount,
+                    agent_price_amount: s.agent_price_amount,
                     cost_price_amount: s.cost_price_amount,
                     manual_stock_total: s.manual_stock_total,
                     is_active: s.is_active,

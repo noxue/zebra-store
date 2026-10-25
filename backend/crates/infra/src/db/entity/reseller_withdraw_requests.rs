@@ -17,6 +17,10 @@ pub struct Model {
     pub channel: String,
     #[sea_orm(column_type = "String(StringLen::N(255))")]
     pub account: String,
+    #[sea_orm(column_type = "String(StringLen::N(100))", default_value = "")]
+    pub payee_name: String,
+    #[sea_orm(column_type = "String(StringLen::N(512))", default_value = "")]
+    pub qr_code_url: String,
     #[sea_orm(column_type = "String(StringLen::N(32))", indexed)]
     pub status: String,
     #[sea_orm(column_type = "Text")]

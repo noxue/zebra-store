@@ -238,6 +238,7 @@ impl PayApp {
             reseller_profit_amount: Decimal::ZERO,
             client_ip: String::new(),
             risk_ip: String::new(),
+            deferred_reservation_json: None,
             expires_at: None,
             paid_at: None,
             canceled_at: None,

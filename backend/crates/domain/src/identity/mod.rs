@@ -1,6 +1,7 @@
 //! Administrators, users and authentication rules.
 
 pub mod admin;
+pub mod api_key;
 pub mod audit;
 pub mod captcha;
 pub mod compliance;

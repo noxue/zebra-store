@@ -2,6 +2,7 @@
 //! compliance and audit logs.
 
 mod admin;
+mod api_key;
 mod authz;
 mod oauth;
 mod user;
@@ -23,10 +24,14 @@ use crate::response::ApiError;
 pub fn routes() -> RouteSet {
     RouteSet {
         public: user::public(),
-        auth: user::auth().merge(oauth::auth()),
-        user: user::me().merge(oauth::me()),
-        admin_open: admin::open(),
-        admin: admin::authenticated().merge(authz::routes()),
+        auth: user::auth()
+            .merge(oauth::auth())
+            .merge(api_key::user_open()),
+        user: user::me().merge(oauth::me()).merge(api_key::user()),
+        admin_open: admin::open().merge(api_key::admin_open()),
+        admin: admin::authenticated()
+            .merge(authz::routes())
+            .merge(api_key::admin()),
         ..RouteSet::default()
     }
 }

@@ -32,6 +32,9 @@ export const isResellerSiteSeoConfigured = (
 /** Full form model with every nested object present. */
 export interface ResellerSiteConfigForm {
   site_name: string
+  storefront_template: string
+  template_mode: string
+  theme: Record<'primary_color' | 'secondary_color' | 'accent_color' | 'background_color' | 'surface_color' | 'text_color', string>
   logo: string
   favicon: string
   announcement: { enabled: boolean; type: string; title: ResellerLocalizedText; content: ResellerLocalizedText }
@@ -43,6 +46,9 @@ export interface ResellerSiteConfigForm {
 
 export const createBlankSiteConfigForm = (): ResellerSiteConfigForm => ({
   site_name: '',
+  storefront_template: '',
+  template_mode: '',
+  theme: { primary_color: '', secondary_color: '', accent_color: '', background_color: '', surface_color: '', text_color: '' },
   logo: '',
   favicon: '',
   announcement: { enabled: false, type: 'info', title: blankLocalizedText(), content: blankLocalizedText() },
@@ -56,6 +62,9 @@ export const siteConfigToForm = (config?: ResellerSiteConfigData | null): Resell
   const next = createBlankSiteConfigForm()
   if (!config) return next
   next.site_name = config.site_name || ''
+  next.storefront_template = config.storefront_template || ''
+  next.template_mode = config.template_mode || ''
+  for (const key of Object.keys(next.theme) as Array<keyof typeof next.theme>) next.theme[key] = config.theme?.[key] || ''
   next.logo = config.logo || ''
   next.favicon = config.favicon || ''
   next.announcement = {
@@ -86,6 +95,9 @@ export const siteConfigToForm = (config?: ResellerSiteConfigData | null): Resell
 
 export const siteConfigFormToPayload = (form: ResellerSiteConfigForm): ResellerSiteConfigPayload => ({
   site_name: form.site_name.trim(),
+  storefront_template: form.storefront_template,
+  template_mode: form.template_mode,
+  theme: Object.fromEntries(Object.entries(form.theme).map(([key, color]) => [key, color.trim()])),
   logo: form.logo.trim(),
   favicon: form.favicon.trim(),
   announcement: { ...form.announcement },

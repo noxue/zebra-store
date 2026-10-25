@@ -244,7 +244,7 @@ mod tests {
         let v = normalize(keys::ORDER_CONFIG, &json!({"payment_expire_minutes": "30"}));
         assert_eq!(
             v,
-            json!({"payment_expire_minutes": 30, "max_refund_days": 30})
+            json!({"payment_expire_minutes": 30, "max_refund_days": 30, "reserve_stock_on_payment": false})
         );
         let v = normalize("custom_key", &json!({"a": [1, 2]}));
         assert_eq!(v, json!({"a": [1, 2]}));

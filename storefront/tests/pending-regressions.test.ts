@@ -214,13 +214,15 @@ it('FE-04 preserves withdrawal success and clears the form when every subsequent
   vi.spyOn(resellerAPI, 'balanceAccounts').mockRejectedValue(new Error('offline'))
   vi.spyOn(resellerAPI, 'withdraws').mockRejectedValue(new Error('offline'))
   const page = harness(useResellerWithdraws)
-  Object.assign(page.form, { amount: '1.00', currency: 'CNY', channel: 'alipay', account: 'test' })
+  Object.assign(page.form, { amount: '1.00', currency: 'CNY', channel: 'alipay', account: 'test', payee_name: '测试收款人', qr_code_url: '/uploads/test-payee.png' })
   const submitting = page.submit()
   useConfirmDialog().handleConfirm()
   await submitting
   expect(apply).toHaveBeenCalledOnce()
   expect(page.alert.value?.tone).toBe('success')
   expect(page.form.amount).toBe('')
+  expect(page.form.payee_name).toBe('')
+  expect(page.form.qr_code_url).toBe('')
   expect(page.submittingWithdraw.value).toBe(false)
 })
 

@@ -61,9 +61,9 @@ impl Default for OrderRiskSetting {
             common: RiskCommonPolicy::default(),
             guest: RiskGuestPolicy {
                 enabled: true,
-                max_pending_orders_per_ip: 2,
+                max_pending_orders_per_ip: 1,
                 max_quantity_per_product_per_order: 1,
-                max_pending_quantity_per_ip_product: 2,
+                max_pending_quantity_per_ip_product: 1,
                 payment_expire_minutes: 10,
                 rate_limit: OrderRateLimit {
                     enabled: true,
@@ -290,7 +290,7 @@ mod tests {
             OrderRiskSetting::default(),
         );
         assert!(s.enabled);
-        assert_eq!(s.guest.max_pending_orders_per_ip, 2);
+        assert_eq!(s.guest.max_pending_orders_per_ip, 1);
         assert_eq!(s.guest.rate_limit.window_seconds, 60);
         assert_eq!(s.guest.max_quantity_per_product_per_order, 1);
         assert_eq!(s.common.ip_blacklist, vec!["1.2.3.4", "10.0.0.0/8"]);

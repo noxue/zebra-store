@@ -30,6 +30,8 @@ pub enum StockMove {
     /// Order paid: consume the lock (or the missing part from `total` for legacy
     /// unreserved orders), `sold += q`.
     Consume,
+    /// A payment-time order sells only free stock, without touching another order's lock.
+    ConsumeAvailable,
 }
 
 /// Catalog operations needed to place, pay and deliver orders.
@@ -41,6 +43,11 @@ pub trait CatalogOrdering: Send + Sync {
     /// Available P1 import cards for a mapped product/SKU with a converter binding.
     /// Only batches explicitly marked `p1` qualify for local delivery.
     async fn p1_import_available(&self, product_id: Id, sku_id: Id) -> Result<u64>;
+
+    /// Available locally imported cards for an upstream-mapped SKU, without provider restrictions.
+    async fn local_import_available(&self, product_id: Id, sku_id: Id) -> Result<u64> {
+        self.p1_import_available(product_id, sku_id).await
+    }
 
     /// Applies a manual stock movement. Reserve/Consume fail with
     /// `error.manual_stock_insufficient` when the conditional update matches no row;

@@ -11,7 +11,7 @@ import { notifySuccess } from '@/utils/notify'
 import { blankLocalizedText, type ResellerLocale } from '@/utils/resellerSiteConfig'
 import { buildSiteConfigPayload, createBlankSiteConfigForm, queryString, siteConfigToForm, type ResellerSiteConfigForm } from './resellerUtils'
 
-export type SiteConfigTab = 'brand' | 'announcement' | 'support' | 'seo' | 'footer' | 'nav'
+export type SiteConfigTab = 'brand' | 'appearance' | 'announcement' | 'support' | 'seo' | 'footer' | 'nav'
 
 export function useResellerSiteConfigs() {
   const t = i18n.global.t

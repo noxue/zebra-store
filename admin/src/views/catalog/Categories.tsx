@@ -2,7 +2,7 @@ import { defineComponent, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Plus } from 'lucide-vue-next'
-import { Badge, Button, DataTable, Dialog, FormField, IdCell, Input, LocalizedInput, PageHeader, Select, type DataTableColumn } from '@/components/ui'
+import { Badge, Button, DataTable, Dialog, FormField, IdCell, Input, LocalizedInput, PageHeader, Select, Switch, type DataTableColumn } from '@/components/ui'
 import { MediaPicker } from '@/components/MediaPicker'
 import { getLocalizedText } from '@/utils/format'
 import { getImageUrl } from '@/utils/image'
@@ -135,6 +135,11 @@ export default defineComponent({
                 <FormField label={t('admin.categories.form.sortOrder')} hint={t('admin.categories.form.sortTip')}>
                   <Input type="number" v-model={p.form.sort_order} placeholder="0" />
                 </FormField>
+                {p.modal.isEditing.value && (
+                  <FormField label={t('admin.categories.table.status')} hint={t('admin.categories.form.activeTip')}>
+                    <Switch v-model={p.form.is_active} label={t('admin.categories.form.active')} disabled={p.modal.submitting.value} />
+                  </FormField>
+                )}
                 {p.modal.error.value && <p class="text-xs text-danger-text">{p.modal.error.value}</p>}
               </form>
             ),

@@ -62,7 +62,7 @@ The order-risk data fix-up runs before `resellerstore.Migrate`, so it will be in
   - Manual stock: manual_stock_total (-1 = unlimited), manual_stock_locked, manual_stock_sold
   - payment_channel_ids (JSON text; empty = any channel), is_affiliate_enabled, is_mapped, is_active, sort_order
   - Has many product_skus
-- **product_skus**: product_id + sku_code (unique together), spec_values (JSON), price_amount, cost_price_amount, the same three manual-stock fields, is_active, sort_order
+- **product_skus**: product_id + sku_code (unique together), spec_values (JSON), price_amount, nullable agent_price_amount (reseller base; null inherits price_amount), cost_price_amount, the same three manual-stock fields, is_active, sort_order
 - **product_mappings**: connection_id, local_product_id (unique), upstream_product_id, upstream_fulfillment_type, upstream_status, is_active, last_synced_at
 - **sku_mappings**: product_mapping_id, local_sku_id, upstream_sku_id, upstream_price, upstream_stock, upstream_is_active, stock_synced_at
 
@@ -171,7 +171,7 @@ A parent order's status is recalculated from its children (`CalcParentStatus`).
   - reseller_id, domain (unique among live rows), type (`subdomain`/`custom`)
   - verification_token, verification_status (`pending`, `verified`, `failed`)
   - status (`pending_review`, `active`, `disabled`), is_primary, verified_at
-- **reseller_site_configs**: reseller_id (unique), site_name, logo, favicon, and JSON fields announcement, support, seo, footer_links, nav_config, theme
+- **reseller_site_configs**: reseller_id (unique), site_name, logo, favicon, and JSON fields announcement, support, seo, footer_links, nav_config, theme. `theme` stores optional `storefront_template`, `template_mode`, and six validated hex colour overrides; the public config exposes the first two as top-level fields and merges colours into the main theme. Empty overrides inherit the main configuration.
 - **reseller_product_settings**
   - reseller_id + product_id + sku_id (unique), is_listed
   - pricing_mode: `inherit`, `markup_percent`, `fixed_markup` or `fixed_price`
@@ -267,6 +267,7 @@ Wiring is in `internal/app/httpserver/router.go`, `routes_storefront.go`, `route
 | POST | `/guest/orders/preview` | Price preview |
 | GET | `/guest/orders` | List guest orders |
 | GET | `/guest/orders/:order_no` | Order detail |
+| POST | `/guest/orders/:order_no/refund` | Guest-authenticated full original-route refund; only for supported gateway and eligible unused delivery |
 | GET | `/guest/orders/:order_no/fulfillment/download` | Download delivered content |
 | GET | `/guest/payments/latest` | Latest payment (read limit) |
 | POST | `/guest/orders` | Create order (write limit, captcha scene `guest_create_order`) |
@@ -326,6 +327,7 @@ Wiring is in `internal/app/httpserver/router.go`, `routes_storefront.go`, `route
 | POST | `/orders/create-and-pay` | Create and pay (`channel_id`, `use_balance`) |
 | POST | `/order/payment-channels` | Allowed channels (`amount`, `order_no`, `items`) |
 | GET | `/orders`, `/orders/stats`, `/orders/:order_no` | List, stats, detail |
+| POST | `/orders/:order_no/refund` | Owner-authenticated full original-route refund; same durable flow as admin |
 | GET | `/orders/:order_no/fulfillment/download` | Download delivered content |
 | POST | `/orders/:order_no/cancel` | Cancel |
 | POST | `/payments` | Start payment (`order_no`, `channel_id`, `use_balance`) |
@@ -367,7 +369,7 @@ Wiring is in `internal/app/httpserver/router.go`, `routes_storefront.go`, `route
 | GET | `/reseller/profile` | Profile snapshot |
 | POST | `/reseller/apply` | Apply to become a reseller |
 | GET / POST | `/reseller/domains` | List / submit custom domain |
-| GET / PUT | `/reseller/site-config` | Branding of the reseller site |
+| GET / PUT | `/reseller/site-config` | Branding, storefront template, layout and colour overrides of the reseller site |
 | POST | `/reseller/upload` | Upload image |
 | GET | `/reseller/product-settings`, `/reseller/product-settings/:product_id` | Pricing settings |
 | POST | `/reseller/product-settings/:product_id/preview` | Preview pricing |
@@ -519,7 +521,10 @@ All four paths can be replaced by admin-set custom paths (settings key `callback
 | GET | `/orders/:id` | Detail |
 | PATCH | `/orders/:id` | Change status (`{status}`) |
 | POST | `/orders/:id/refund-to-wallet` | Refund to wallet (`amount`, `remark`) |
-| POST | `/orders/:id/manual-refund` | Record a manual refund (`amount`, `remark`, `payment_fee_refunded`) |
+| POST | `/orders/:id/manual-refund` | Legacy wallet-only administrative record (`amount`, `remark`, `payment_fee_refunded`); online-paid orders must use the two-step flow |
+| POST | `/orders/:id/manual-refund/prepare` | Unsupported automatic channel: validate payment and amount, reserve a durable manual attempt, lock converter cards; returns `attempt` in `manual_awaiting` with no completed refund record |
+| POST | `/orders/:id/manual-refund/confirm` | After support returns funds to the original method, submit `{attempt_id,transfer_ref}`; idempotently record one refund, invalidate converter cards and release safe upstream binding; failed card confirmation is retried |
+| POST | `/orders/:id/original-refund` | Admin original-route refund; submits only when the gateway supports the amount, and uses the durable refund attempt and card barrier |
 | GET | `/order-refunds`, `/order-refunds/:id` | Refund records |
 | PATCH | `/order-refunds/:id/payment-fee` | Set fee-refunded flag |
 | GET | `/orders/:id/fulfillment/download` | Download delivered content |
@@ -716,6 +721,7 @@ All four paths can be replaced by admin-set custom paths (settings key `callback
    - for `manual` items with limited stock, reserve SKU stock;
    - record coupon usage (with row locks and limit checks);
    - save the reseller snapshot.
+   - When `order_config.reserve_stock_on_payment` is enabled, save each child's reservation plan instead of occupying cards or limited manual stock. On a successful payment, allocate the saved plan in the settlement transaction. If stock has sold out, keep the successful payment, set `exception_code=stock_insufficient`, and leave the order in `fulfilling` for manual resolution. A pending order keeps the mode it was created with, even when the setting changes.
 8. Schedule the timeout-cancel job to run after the payment window; if scheduling fails, roll the order back. The window comes from `order_config.payment_expire_minutes`, default 15.
 
 **Payment** (`modules/payment/application/*`):
@@ -948,3 +954,26 @@ A constant `upstream:sync_products` exists but no handler or schedule is registe
 - Signing: `internal/upstream/signer.go`; encryption `internal/crypto/aes.go`; money `internal/shared/money/amount.go`; order numbers `internal/shared/serial`
 - Jobs: `internal/app/jobs/service.go`, `internal/queue/{tasks,client}.go`
 - Public config: `internal/modules/settings/transport/http/public/handler.go`; site settings `internal/modules/settings/application/site_normalize.go`
+
+### Admin payment diagnosis
+Admin payment projections (including order detail `payments[]`) add `diagnosis: {kind, gateway_code}`. Kinds: `paid`, `merchant_restricted`, `merchant_configuration`, `user_canceled`, `expired_unpaid`, `closed_unknown`, `failed_unknown`, `awaiting_payment`, `superseded`, `gateway_error`, `unknown`. The bounded gateway code and normalized category are safe projections; raw payload and provider messages remain private (PAY-45). Huifu merchant/cancel/timeout categories require explicit provider evidence. `TRADE_CLOSED` alone means `closed_unknown`, never buyer cancellation or merchant restriction. Timeout indicates no confirmed payment, not buyer fault. Creation exceptions retain only a safe `creation_failure_kind` category in the private payload. No changes to settlement or order statuses; historical stored responses are classified on read.
+
+### Personal automation API keys
+
+These credentials are separate from supplier API credentials. Every authenticated administrator and storefront user may opt in to one personal key. All business endpoints retain their existing Bearer authentication and RBAC checks.
+
+| Method | Admin | Storefront user | Result |
+|---|---|---|---|
+| GET | `/admin/api-key` | `/me/api-key` | Metadata `{realm,owner_id,prefix,created_at,updated_at}` or null; never a secret/hash |
+| POST | `/admin/api-key` | `/me/api-key` | Generate if absent; return `{api_key,prefix}` once |
+| PUT | `/admin/api-key` | `/me/api-key` | Rotate existing key; return new `{api_key,prefix}` once |
+| DELETE | `/admin/api-key` | `/me/api-key` | Delete own key, idempotent |
+| POST | `/admin/api-key/token` | `/auth/api-key/token` | No existing login required; body `{api_key}` → `{token,expires_at}` |
+
+All paths have the `/api/v1` prefix and standard response envelopes. Keys have 256 bits of randomness and realm prefixes `zsa_` / `zsu_`. Only SHA-256 hashes are persisted in `personal_api_keys`; management/exchange responses use `Cache-Control: no-store`. Keys must be sent in the JSON body over HTTPS, never query strings. Key generation requires an existing authenticated session (including its normal 2FA login); subsequent automation exchanges deliberately do not require interactive 2FA. Exchanges share the existing realm login failure rate limiter, keyed by IP without the secret.
+
+Tokens use the current account's identity and token version, ordinary non-remembered expiry, and the existing realm signer. A key-generation hash in the JWT binds automation tokens to the active personal key. Rotation/deletion immediately revokes old automation tokens while ordinary browser tokens remain valid. Account status/deletion, password/session revocation, and live RBAC checks continue to apply. Normal users cannot access administrator routes; restricted admins retain their current roles. No owner ID is accepted from the client for key management.
+
+### Supplier products with local stock first
+
+Upstream mappings retain `fulfillment_type=upstream`. Administrators may import local cards for their active SKUs without a converter binding or a special batch note. Checkout counts free local cards for the requested SKU, then checks only the missing quantity at the supplier. Prices and quantity discounts are calculated for the original combined quantity. If local inventory covers only part of a line, the priced line is split into an automatic local child and an upstream child; cent rounding, coupon allocations and reseller snapshots preserve the original totals. Local cards are reserved using the existing conditional transaction and released by cancellation/expiry. Fulfillment and procurement are independent, so local goods can be delivered while only the remainder is procured. Existing payment-time reservation settings still apply. Public inventory and stock filters include both sources; reserved, used and deleted cards never count as free local stock.

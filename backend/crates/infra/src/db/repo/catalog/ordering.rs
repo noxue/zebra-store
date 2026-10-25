@@ -71,6 +71,10 @@ macro_rules! manual_stock_update {
                     )),
                 )
                 .col_expr(t::Column::ManualStockSold, Expr::col(t::Column::ManualStockSold).add(q)),
+            StockMove::ConsumeAvailable => base
+                .filter(t::Column::ManualStockTotal.gte(q))
+                .col_expr(t::Column::ManualStockTotal, Expr::col(t::Column::ManualStockTotal).sub(q))
+                .col_expr(t::Column::ManualStockSold, Expr::col(t::Column::ManualStockSold).add(q)),
         };
         let affected = stmt.exec($conn).await.dom()?.rows_affected;
         let unlimited = if affected == 0 {
@@ -331,6 +335,17 @@ impl CatalogOrdering for SeaCatalogOrdering {
             cards = cards.filter(card_secrets::Column::SkuId.eq(sku_id));
         }
         Ok(cards.count(&self.db).await.dom()?)
+    }
+
+    async fn local_import_available(&self, product_id: Id, sku_id: Id) -> Result<u64> {
+        Ok(card_secrets::Entity::find()
+            .filter(card_secrets::Column::ProductId.eq(product_id))
+            .filter(card_secrets::Column::SkuId.eq(sku_id))
+            .filter(card_secrets::Column::Status.eq(SecretStatus::Available.as_str()))
+            .filter(card_secrets::Column::DeletedAt.is_null())
+            .count(&self.db)
+            .await
+            .dom()?)
     }
 
     async fn move_manual_stock(

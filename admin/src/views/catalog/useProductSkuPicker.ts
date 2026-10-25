@@ -15,7 +15,7 @@ export interface ProductSkuPickerOptions {
 
 /**
  * Auto-fulfilment product + SKU picker shared by the card-secret pages
- * (`getProducts{fulfillment_type:'auto', page_size:100, search}` + `getProduct` for SKUs).
+ * (auto/upstream products + `getProduct` for active SKUs).
  */
 export function useProductSkuPicker(opts: ProductSkuPickerOptions = {}) {
   const keyword = ref('')
@@ -90,9 +90,9 @@ export function useProductSkuPicker(opts: ProductSkuPickerOptions = {}) {
       let page = 1
       let totalPage = 1
       do {
-        const res = await adminAPI.getProducts({ page, page_size: 100, search: search || undefined, fulfillment_type: 'auto' })
+        const res = await adminAPI.getProducts({ page, page_size: 100, search: search || undefined })
         const list = Array.isArray(res.data) ? res.data : []
-        rows.push(...list.filter((item) => String(item?.fulfillment_type || '').trim() === 'auto'))
+        rows.push(...list.filter((item) => ['auto', 'upstream'].includes(String(item?.fulfillment_type || '').trim())))
         totalPage = Number(res.pagination?.total_page || 1)
         page += 1
       } while (page <= totalPage && page <= 20)

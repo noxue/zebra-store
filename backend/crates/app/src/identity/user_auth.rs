@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
+use zs_domain::identity::api_key::{ApiKeyRealm, PersonalApiKeyRepo};
 use zs_domain::identity::totp;
 use zs_domain::identity::user::{User, UserRepo};
 use zs_domain::{Error, Id, Result};
@@ -61,6 +62,7 @@ pub struct UserPrincipal {
 pub struct UserAuthService {
     repo: Arc<dyn UserRepo>,
     clock: Arc<dyn Clock>,
+    api_keys: Option<Arc<dyn PersonalApiKeyRepo>>,
     signer: Signer,
     challenge_signer: Signer,
     ttl: Duration,
@@ -84,11 +86,17 @@ impl UserAuthService {
         Self {
             repo,
             clock,
+            api_keys: None,
             signer: Signer::new(secret),
             challenge_signer: jwt::challenge_signer(secret),
             ttl: Duration::hours(expire_hours.max(1)),
             remember_ttl: Duration::hours(remember_me_expire_hours.max(1)),
         }
+    }
+
+    pub fn with_api_keys(mut self, repo: Arc<dyn PersonalApiKeyRepo>) -> Self {
+        self.api_keys = Some(repo);
+        self
     }
 
     pub fn repo(&self) -> &Arc<dyn UserRepo> {
@@ -101,6 +109,15 @@ impl UserAuthService {
 
     /// Issues an access token (`remember_me` selects the long lifetime).
     pub fn issue_token(&self, user: &User, remember_me: bool) -> Result<(String, DateTime<Utc>)> {
+        self.issue_bound_token(user, remember_me, "")
+    }
+
+    fn issue_bound_token(
+        &self,
+        user: &User,
+        remember_me: bool,
+        key_hash: &str,
+    ) -> Result<(String, DateTime<Utc>)> {
         let now = self.clock.now();
         let ttl = if remember_me {
             self.remember_ttl
@@ -114,7 +131,13 @@ impl UserAuthService {
             typ: jwt::TYP_ACCESS.into(),
             reg: Registered::new(now, ttl),
         };
+        let mut claims = claims;
+        claims.reg.api_key_hash = key_hash.to_owned();
         Ok((self.signer.sign(&claims)?, now + ttl))
+    }
+
+    pub fn issue_api_token(&self, user: &User, key_hash: &str) -> Result<(String, DateTime<Utc>)> {
+        self.issue_bound_token(user, false, key_hash)
     }
 
     /// Validates a bearer token: signature, `typ`, token version, account status.
@@ -139,6 +162,13 @@ impl UserAuthService {
         if !user.accepts_token(claims.token_version, claims.reg.iat) {
             return Err(Error::unauthorized("error.token_revoked"));
         }
+        super::api_key::validate_binding(
+            self.api_keys.as_ref(),
+            ApiKeyRealm::User,
+            user.id,
+            &claims.reg.api_key_hash,
+        )
+        .await?;
         Ok(UserPrincipal {
             id: user.id,
             email: claims.email,

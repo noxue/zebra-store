@@ -43,3 +43,11 @@ Docker 部署在命令前加 `docker compose exec zebra`，配置路径用 `/app
 后台登录只统计**失败**的尝试，并且按“用户名 + IP”分别计数：同一个 IP（例如公司出口）下的多位管理员互不影响，
 成功登录会清零该账号的计数。连续失败达到 `security.login_rate_limit.max_attempts` 次后，
 该账号在这个 IP 上被锁 `block_seconds` 秒；两步验证码输错同样按失败计数。
+
+## 个人 API Key（AI / 脚本调用）
+
+在后台「安全设置 → 个人 API Key」生成 Key，立即复制保存。每个管理员只有一把个人 Key，完整内容只显示一次。可随时轮换或删除；旧 Key 和它签发的 Token 会立即失效，网页登录会话不受影响。
+
+脚本先请求 `POST /api/v1/admin/api-key/token`，JSON 请求体为 `{"api_key":"你的 Key"}`。从响应的 `data.token` 取得 Token，再在其他 HTTP 请求中携带 `Authorization: Bearer <token>`。`data.expires_at` 表示 Token 到期时间，到期后可用仍有效的 Key 再次换取。
+
+Key 与账号权限一致：只读管理员的 Key 仍然只能读取；角色变更会作用于后续请求。请仅通过 HTTPS 传递 Key，并将它保存在脚本运行环境的密钥管理中，避免写入网址、日志或代码仓库。个人 API Key 用于自动化，无需每次交互式输入两步验证码。

@@ -40,6 +40,7 @@ pub(super) fn routes() -> Routes {
         .get("/orders", list)
         .get("/orders/stats", stats)
         .get("/orders/{order_no}", detail)
+        .post("/orders/{order_no}/refund", request_refund)
         .get(
             "/orders/{order_no}/fulfillment/download",
             download_fulfillment,
@@ -191,9 +192,39 @@ pub(super) async fn detail_json(
     order: &Order,
     truncate: bool,
 ) -> Result<Value, Error> {
-    Ok(serde_json::to_value(
-        svc.order_detail(order, truncate).await?,
-    )?)
+    let mut value = serde_json::to_value(svc.order_detail(order, truncate).await?)?;
+    if let Some(object) = value.as_object_mut() {
+        let mode = match svc.buyer_refund_mode(order).await {
+            Ok(mode) => mode,
+            Err(error) => {
+                tracing::warn!(%error, order_id = order.id, "buyer_refund_mode_failed");
+                "contact_support"
+            }
+        };
+        object.insert("refund_mode".into(), mode.into());
+        object.insert(
+            "refund_state".into(),
+            svc.public_refund_state(order.id)
+                .await
+                .unwrap_or("none")
+                .into(),
+        );
+    }
+    Ok(value)
+}
+
+async fn request_refund(
+    State(s): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    tenant: TenantCtx,
+    Path(order_no): Path<String>,
+) -> ApiResult<Data<Value>> {
+    let svc = &s.svc.order.service;
+    let order = svc
+        .get_order(&Viewer::User(user.id), &tenant.0, &order_no)
+        .await?;
+    let result = svc.buyer_original_refund(&order).await?;
+    ok(json!({"status": result.attempt.status, "refund_no": result.attempt.refund_no}))
 }
 
 async fn create(

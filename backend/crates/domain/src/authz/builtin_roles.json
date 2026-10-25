@@ -72,6 +72,22 @@
         "subject": "",
         "object": "/admin/2fa/recovery-codes/regenerate",
         "action": "POST"
+      },
+      {
+        "object": "/admin/api-key",
+        "action": "GET"
+      },
+      {
+        "object": "/admin/api-key",
+        "action": "POST"
+      },
+      {
+        "object": "/admin/api-key",
+        "action": "PUT"
+      },
+      {
+        "object": "/admin/api-key",
+        "action": "DELETE"
       }
     ],
     "Immutable": true
@@ -331,6 +347,22 @@
         "subject": "",
         "object": "/admin/post-categories/:id/status",
         "action": "PATCH"
+      },
+      {
+        "object": "/admin/api-key",
+        "action": "GET"
+      },
+      {
+        "object": "/admin/api-key",
+        "action": "POST"
+      },
+      {
+        "object": "/admin/api-key",
+        "action": "PUT"
+      },
+      {
+        "object": "/admin/api-key",
+        "action": "DELETE"
       }
     ],
     "Immutable": true
@@ -450,6 +482,22 @@
         "subject": "",
         "object": "/admin/gift-cards",
         "action": "GET"
+      },
+      {
+        "object": "/admin/api-key",
+        "action": "GET"
+      },
+      {
+        "object": "/admin/api-key",
+        "action": "POST"
+      },
+      {
+        "object": "/admin/api-key",
+        "action": "PUT"
+      },
+      {
+        "object": "/admin/api-key",
+        "action": "DELETE"
       }
     ],
     "Immutable": true
@@ -779,6 +827,22 @@
         "subject": "",
         "object": "/admin/resellers/product-settings/:reseller_id/:product_id",
         "action": "DELETE"
+      },
+      {
+        "object": "/admin/api-key",
+        "action": "GET"
+      },
+      {
+        "object": "/admin/api-key",
+        "action": "POST"
+      },
+      {
+        "object": "/admin/api-key",
+        "action": "PUT"
+      },
+      {
+        "object": "/admin/api-key",
+        "action": "DELETE"
       }
     ],
     "Immutable": true
@@ -867,6 +931,16 @@
       {
         "subject": "",
         "object": "/admin/orders/:id/manual-refund",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/orders/:id/manual-refund/prepare",
+        "action": "POST"
+      },
+      {
+        "subject": "",
+        "object": "/admin/orders/:id/manual-refund/confirm",
         "action": "POST"
       },
       {
@@ -968,6 +1042,22 @@
         "subject": "",
         "object": "/admin/users/:id/wallet/adjust",
         "action": "POST"
+      },
+      {
+        "object": "/admin/api-key",
+        "action": "GET"
+      },
+      {
+        "object": "/admin/api-key",
+        "action": "POST"
+      },
+      {
+        "object": "/admin/api-key",
+        "action": "PUT"
+      },
+      {
+        "object": "/admin/api-key",
+        "action": "DELETE"
       }
     ],
     "Immutable": true
@@ -1207,6 +1297,22 @@
         "subject": "",
         "object": "/admin/resellers/domains/:id/disable",
         "action": "POST"
+      },
+      {
+        "object": "/admin/api-key",
+        "action": "GET"
+      },
+      {
+        "object": "/admin/api-key",
+        "action": "POST"
+      },
+      {
+        "object": "/admin/api-key",
+        "action": "PUT"
+      },
+      {
+        "object": "/admin/api-key",
+        "action": "DELETE"
       }
     ],
     "Immutable": true

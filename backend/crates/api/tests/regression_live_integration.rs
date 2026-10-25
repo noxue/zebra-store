@@ -366,3 +366,266 @@ async fn lqa_i4_html_answering_host_is_classified_by_step() {
         Ok(r) => assert!(!r.ok, "an HTML page never confirms a purchase: {r:?}"),
     }
 }
+
+async fn import_local_cards(app: &IntApp, product: i64, sku: i64, cards: &[&str]) {
+    let created = app
+        .admin(
+            "POST",
+            "/api/v1/admin/card-secrets/batch",
+            Some(json!({"product_id":product,"sku_id":sku,"secrets":cards})),
+        )
+        .await;
+    assert_eq!(data(&created)["created"], cards.len());
+}
+async fn local_first_order(
+    app: &IntApp,
+    token: &str,
+    product: i64,
+    sku: i64,
+    quantity: i32,
+) -> Value {
+    app.call(
+        "POST",
+        "/api/v1/orders",
+        Some(json!({"items":[{"product_id":product,"sku_id":sku,"quantity":quantity}]})),
+        Some(token),
+    )
+    .await
+}
+
+// DLV-03 / UPS-09: local imports need no converter or special source marker.
+#[tokio::test]
+async fn local_first_splits_shortfall_and_procures_only_missing_quantity() {
+    for defer_stock in [false, true] {
+        use zs_infra::db::entity::{card_secrets, fulfillments, order_items};
+        let (base, supplier) = start_supplier().await;
+        let app = app().await;
+        let (_, product, sku) = imported(&app, &base, &supplier, 1).await;
+        data(&app.admin("PATCH", &format!("/api/v1/admin/products/{product}/wholesale-prices"), Some(json!({"wholesale_prices":[{"sku_id":sku,"min_quantity":3,"unit_price":"4.00"}]}))).await);
+        data(
+            &app.admin(
+                "PUT",
+                "/api/v1/admin/settings",
+                Some(
+                    json!({"key":"order_config","value":{"reserve_stock_on_payment":defer_stock}}),
+                ),
+            )
+            .await,
+        );
+        import_local_cards(&app, product, sku, &["PREBOUGHT-A", "PREBOUGHT-B"]).await;
+        let (uid, token) = app.user("local-first@example.com").await;
+        fund(&app, uid, "100.00").await;
+        let created = local_first_order(&app, &token, product, sku, 3).await;
+        assert_eq!(data(&created)["total_amount"], "12.00");
+        let no = data(&created)["order_no"].as_str().unwrap();
+        let parent = orders::Entity::find()
+            .filter(orders::Column::OrderNo.eq(no))
+            .one(&app.db)
+            .await
+            .unwrap()
+            .unwrap();
+        let children = orders::Entity::find()
+            .filter(orders::Column::ParentId.eq(parent.id))
+            .all(&app.db)
+            .await
+            .unwrap();
+        assert_eq!(children.len(), 2);
+        let items = order_items::Entity::find()
+            .filter(order_items::Column::OrderId.is_in(children.iter().map(|c| c.id)))
+            .all(&app.db)
+            .await
+            .unwrap();
+        let local = items.iter().find(|i| i.fulfillment_type == "auto").unwrap();
+        let remote = items
+            .iter()
+            .find(|i| i.fulfillment_type == "upstream")
+            .unwrap();
+        assert_eq!(local.quantity, 2);
+        assert_eq!(remote.quantity, 1);
+        assert_eq!(
+            children
+                .iter()
+                .find(|c| c.id == local.order_id)
+                .unwrap()
+                .total_amount,
+            sea_orm::prelude::Decimal::from(8)
+        );
+        assert_eq!(
+            children
+                .iter()
+                .find(|c| c.id == remote.order_id)
+                .unwrap()
+                .total_amount,
+            sea_orm::prelude::Decimal::from(4)
+        );
+        let cards = card_secrets::Entity::find()
+            .filter(card_secrets::Column::ProductId.eq(product))
+            .all(&app.db)
+            .await
+            .unwrap();
+        if defer_stock {
+            assert!(
+                cards
+                    .iter()
+                    .all(|c| c.status == "available" && c.order_id.is_none())
+            );
+        } else {
+            assert!(
+                cards
+                    .iter()
+                    .all(|c| c.status == "reserved" && c.order_id == Some(local.order_id))
+            );
+        }
+        let paid = app
+            .call(
+                "POST",
+                "/api/v1/payments",
+                Some(json!({"order_no":no,"channel_id":0,"use_balance":true})),
+                Some(&token),
+            )
+            .await;
+        assert_eq!(data(&paid)["order_paid"], true);
+        app.services
+            .order
+            .service
+            .auto_fulfill(local.order_id)
+            .await
+            .unwrap();
+        let delivered = fulfillments::Entity::find()
+            .filter(fulfillments::Column::OrderId.eq(local.order_id))
+            .one(&app.db)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(delivered.payload, "PREBOUGHT-A\nPREBOUGHT-B");
+        let procurement = procurement_orders::Entity::find()
+            .all(&app.db)
+            .await
+            .unwrap();
+        assert_eq!(procurement.len(), 1);
+        assert_eq!(procurement[0].local_order_id, remote.order_id);
+        app.services
+            .integration
+            .procurement
+            .submit(procurement[0].id)
+            .await
+            .unwrap();
+        let requests = supplier.hits();
+        let purchase = requests
+            .iter()
+            .find(|h| h.method == "POST" && h.path.ends_with("/orders"))
+            .unwrap();
+        let body: Value = serde_json::from_str(&purchase.body).unwrap();
+        assert_eq!(body["quantity"], 1);
+        let cards = card_secrets::Entity::find()
+            .filter(card_secrets::Column::ProductId.eq(product))
+            .all(&app.db)
+            .await
+            .unwrap();
+        assert!(cards.iter().all(|c| c.status == "used"));
+    }
+}
+
+#[tokio::test]
+async fn local_first_sells_with_empty_supplier_and_cancel_releases_local_reservations() {
+    use zs_infra::db::entity::{card_secrets, order_items};
+    let (base, supplier) = start_supplier().await;
+    let app = app().await;
+    let (_, product, sku) = imported(&app, &base, &supplier, 0).await;
+    import_local_cards(&app, product, sku, &["LOCAL-ONLY-A", "LOCAL-ONLY-B"]).await;
+    let slug = products::Entity::find_by_id(product)
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap()
+        .slug;
+    let public = app
+        .call(
+            "GET",
+            &format!("/api/v1/public/products/{slug}"),
+            None,
+            None,
+        )
+        .await;
+    assert_eq!(data(&public)["auto_stock_available"], 2);
+    assert_eq!(data(&public)["is_sold_out"], false);
+    let (_, token) = app.user("local-only@example.com").await;
+    let created = local_first_order(&app, &token, product, sku, 2).await;
+    let no = data(&created)["order_no"].as_str().unwrap();
+    let parent = orders::Entity::find()
+        .filter(orders::Column::OrderNo.eq(no))
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let child = orders::Entity::find()
+        .filter(orders::Column::ParentId.eq(parent.id))
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let item = order_items::Entity::find()
+        .filter(order_items::Column::OrderId.eq(child.id))
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(item.fulfillment_type, "auto");
+    assert_eq!(item.quantity, 2);
+    data(
+        &app.call(
+            "POST",
+            &format!("/api/v1/orders/{no}/cancel"),
+            None,
+            Some(&token),
+        )
+        .await,
+    );
+    let cards = card_secrets::Entity::find()
+        .filter(card_secrets::Column::ProductId.eq(product))
+        .all(&app.db)
+        .await
+        .unwrap();
+    assert!(
+        cards
+            .iter()
+            .all(|c| c.status == "available" && c.order_id.is_none())
+    );
+    assert!(
+        !supplier
+            .hits()
+            .iter()
+            .any(|h| h.method == "POST" && h.path.ends_with("/orders"))
+    );
+}
+
+// DLV-03: concurrent mapped-product orders cannot reserve the same local cards.
+#[tokio::test]
+async fn local_first_concurrent_checkout_never_double_reserves() {
+    use zs_infra::db::entity::card_secrets;
+    let (base, supplier) = start_supplier().await;
+    let app = app().await;
+    let (_, product, sku) = imported(&app, &base, &supplier, 0).await;
+    import_local_cards(&app, product, sku, &["CONCURRENT-ONLY-CARD"]).await;
+    let (_, a) = app.user("local-concurrent-a@example.com").await;
+    let (_, b) = app.user("local-concurrent-b@example.com").await;
+    let (first, second) = tokio::join!(
+        local_first_order(&app, &a, product, sku, 1),
+        local_first_order(&app, &b, product, sku, 1)
+    );
+    assert_eq!(
+        [&first, &second]
+            .iter()
+            .filter(|r| r["status_code"] == 0)
+            .count(),
+        1
+    );
+    let rows = card_secrets::Entity::find()
+        .filter(card_secrets::Column::ProductId.eq(product))
+        .all(&app.db)
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].status, "reserved");
+    assert!(rows[0].order_id.is_some());
+}

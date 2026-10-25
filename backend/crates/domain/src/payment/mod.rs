@@ -4,6 +4,7 @@
 pub mod alert;
 pub mod callback;
 pub mod channel;
+pub mod diagnosis;
 pub mod eligibility;
 pub mod errors;
 pub mod fee;

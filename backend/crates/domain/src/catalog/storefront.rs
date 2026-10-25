@@ -318,16 +318,12 @@ fn upstream_stock(
     let mut total: i64 = 0;
     let mut any_active = false;
     for sku in &mut product.skus {
-        let p1_available = if display == FulfillmentType::Auto {
-            sku.auto_stock_available.max(0)
-        } else {
-            0
-        };
+        let local_available = sku.auto_stock_available.max(0);
         let p2_stock = by_local
             .get(&sku.id)
             .filter(|m| m.upstream_is_active)
             .map_or(0, |m| m.upstream_stock);
-        if p1_available == 0 && p2_stock == 0 {
+        if local_available == 0 && p2_stock == 0 {
             sku.upstream_stock = 0;
             if display == FulfillmentType::Manual {
                 sku.manual_stock_total = 0;
@@ -338,12 +334,12 @@ fn upstream_stock(
         sku.upstream_stock = if p2_stock == MANUAL_STOCK_UNLIMITED {
             MANUAL_STOCK_UNLIMITED
         } else {
-            i32::try_from(i64::from(p2_stock).saturating_add(p1_available)).unwrap_or(i32::MAX)
+            i32::try_from(i64::from(p2_stock).saturating_add(local_available)).unwrap_or(i32::MAX)
         };
         if display == FulfillmentType::Auto {
             sku.auto_stock_available = i64::from(sku.upstream_stock);
         } else {
-            sku.manual_stock_total = p2_stock;
+            sku.manual_stock_total = sku.upstream_stock;
         }
         if p2_stock == MANUAL_STOCK_UNLIMITED {
             unlimited = true;
@@ -550,7 +546,12 @@ pub fn priced_product(product: &Product) -> PricedProduct {
         id: product.id,
         slug: product.slug.clone(),
         title: serde_json::Value::Object(product.title.clone()),
-        price: product.price_amount,
+        price: product
+            .skus
+            .iter()
+            .find(|sku| sku.is_active)
+            .map(ProductSku::reseller_base_price)
+            .unwrap_or(product.price_amount),
         cost_price: product.cost_price_amount,
         is_active: product.is_active,
         skus: product
@@ -561,7 +562,7 @@ pub fn priced_product(product: &Product) -> PricedProduct {
                 id: s.id,
                 sku_code: s.sku_code.clone(),
                 spec_values: serde_json::Value::Object(s.spec_values.clone()),
-                price: s.price_amount,
+                price: s.reseller_base_price(),
                 cost_price: s.cost_price_amount,
                 is_active: s.is_active,
             })

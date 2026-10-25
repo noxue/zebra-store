@@ -78,6 +78,74 @@ pub struct SiteConfigInput {
     pub seo: SeoInput,
     pub footer_links: Vec<LinkInput>,
     pub nav_config: NavConfigInput,
+    pub storefront_template: String,
+    pub template_mode: String,
+    pub theme: ThemeInput,
+}
+
+/// Optional visual overrides. Empty values inherit the main site's colours.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct ThemeInput {
+    pub primary_color: String,
+    pub secondary_color: String,
+    pub accent_color: String,
+    pub background_color: String,
+    pub surface_color: String,
+    pub text_color: String,
+}
+
+const THEME_COLORS: [&str; 6] = [
+    "primary_color",
+    "secondary_color",
+    "accent_color",
+    "background_color",
+    "surface_color",
+    "text_color",
+];
+
+fn normalize_visual(input: &SiteConfigInput) -> Result<Value> {
+    let template = input.storefront_template.trim();
+    if !template.is_empty()
+        && !matches!(
+            template,
+            "classic" | "vault" | "aurora" | "atelier" | "noir"
+        )
+    {
+        return Err(field(keys::SITE_CONFIG_INVALID));
+    }
+    let mode = input.template_mode.trim();
+    if !mode.is_empty() && !matches!(mode, "card" | "list") {
+        return Err(field(keys::SITE_CONFIG_INVALID));
+    }
+    let mut theme = Map::new();
+    if !template.is_empty() {
+        theme.insert("storefront_template".into(), json!(template));
+    }
+    if !mode.is_empty() {
+        theme.insert("template_mode".into(), json!(mode));
+    }
+    for (key, raw) in THEME_COLORS.into_iter().zip([
+        &input.theme.primary_color,
+        &input.theme.secondary_color,
+        &input.theme.accent_color,
+        &input.theme.background_color,
+        &input.theme.surface_color,
+        &input.theme.text_color,
+    ]) {
+        let color = raw.trim();
+        if color.is_empty() {
+            continue;
+        }
+        let hex = color
+            .strip_prefix('#')
+            .ok_or_else(|| field(keys::SITE_CONFIG_INVALID))?;
+        if !matches!(hex.len(), 3 | 6) || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Err(field(keys::SITE_CONFIG_INVALID));
+        }
+        theme.insert(key.into(), json!(color.to_ascii_lowercase()));
+    }
+    Ok(Value::Object(theme))
 }
 
 /// Normalized site configuration ready to be stored.
@@ -276,7 +344,7 @@ pub fn normalize_site_config(input: &SiteConfigInput) -> Result<SiteConfigDraft>
         seo,
         footer_links,
         nav_config,
-        theme: json!({}),
+        theme: normalize_visual(input)?,
     })
 }
 
@@ -451,6 +519,52 @@ pub fn overlay_public_config(
     if non_empty_object(&cfg.nav_config) {
         out.insert("nav_config".into(), cfg.nav_config.clone());
     }
+    if let Some(visual) = cfg.theme.as_object().filter(|visual| !visual.is_empty()) {
+        if let Some(template) = visual
+            .get("storefront_template")
+            .and_then(Value::as_str)
+            .filter(|v| matches!(*v, "classic" | "vault" | "aurora" | "atelier" | "noir"))
+        {
+            out.insert("storefront_template".into(), json!(template));
+            // The selected template supplies its own palette and default colour mode.
+            let mut base_theme = out
+                .remove("theme")
+                .and_then(|v| v.as_object().cloned())
+                .unwrap_or_default();
+            for key in THEME_COLORS {
+                base_theme.remove(key);
+            }
+            base_theme.insert(
+                "default_mode".into(),
+                json!(if matches!(template, "vault" | "noir") {
+                    "dark"
+                } else if template == "classic" {
+                    "system"
+                } else {
+                    "light"
+                }),
+            );
+            base_theme.insert("effects".into(), json!({"sakura": template == "classic", "sparkle": matches!(template, "classic" | "aurora")}));
+            out.insert("theme".into(), Value::Object(base_theme));
+        }
+        if let Some(mode) = visual
+            .get("template_mode")
+            .and_then(Value::as_str)
+            .filter(|v| matches!(*v, "card" | "list"))
+        {
+            out.insert("template_mode".into(), json!(mode));
+        }
+        let mut base_theme = out
+            .remove("theme")
+            .and_then(|v| v.as_object().cloned())
+            .unwrap_or_default();
+        for key in THEME_COLORS {
+            if let Some(color) = visual.get(key).and_then(Value::as_str) {
+                base_theme.insert(key.into(), json!(color));
+            }
+        }
+        out.insert("theme".into(), Value::Object(base_theme));
+    }
     Value::Object(out)
 }
 
@@ -486,6 +600,54 @@ mod tests {
             json!({"blog": false, "notice": true, "about": true})
         );
         assert_eq!(draft.nav_config["custom_items"][0]["url"], "tg://b");
+        assert_eq!(draft.theme, json!({}));
+    }
+
+    #[test]
+    fn reseller_visual_overrides_are_validated_and_isolated() {
+        let mut input = input();
+        input.storefront_template = "noir".into();
+        input.template_mode = "list".into();
+        input.theme.primary_color = "#A1b2C3".into();
+        let draft = normalize_site_config(&input).unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(draft.theme["primary_color"], "#a1b2c3");
+        let mut reseller = site(json!({"enabled": false}));
+        reseller.theme = draft.theme;
+        let mut main = base();
+        main["storefront_template"] = json!("classic");
+        main["template_mode"] = json!("card");
+        main["theme"] = json!({"primary_color": "#ff5fa2", "secondary_color": "#8b5cf6", "background_image": "/main.png", "default_mode": "light"});
+        let out = overlay_public_config(main.clone(), "r.test", "r.test", Some(&reseller));
+        assert_eq!(out["storefront_template"], "noir");
+        assert_eq!(out["template_mode"], "list");
+        assert_eq!(out["theme"]["primary_color"], "#a1b2c3");
+        assert!(out["theme"].get("secondary_color").is_none());
+        assert_eq!(out["theme"]["background_image"], "/main.png");
+        assert_eq!(out["theme"]["default_mode"], "dark");
+        reseller.theme = json!({});
+        assert_eq!(
+            overlay_public_config(main.clone(), "r.test", "r.test", Some(&reseller))["theme"],
+            main["theme"]
+        );
+        assert_eq!(
+            overlay_public_config(main.clone(), "r.test", "r.test", Some(&reseller))["storefront_template"],
+            "classic"
+        );
+        input.storefront_template = "invalid".into();
+        assert_eq!(
+            normalize_site_config(&input)
+                .err()
+                .map(|e| e.key().to_owned()),
+            Some(keys::SITE_CONFIG_INVALID.into())
+        );
+        input.storefront_template = String::new();
+        input.theme.primary_color = "red;display:none".into();
+        assert_eq!(
+            normalize_site_config(&input)
+                .err()
+                .map(|e| e.key().to_owned()),
+            Some(keys::SITE_CONFIG_INVALID.into())
+        );
     }
 
     #[test]

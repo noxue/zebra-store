@@ -177,7 +177,7 @@ Page states:
 - Channel type labels: wechat, wxpay, alipay, qqpay, paypal, stripe, usdt, usdt-trc20, usdc-trc20, trx.
 
 ### OrderDetail (`views/OrderDetail.vue`, `useOrderDetail`, `useOrderDisplayHelpers`)
-- **APIs:** `userOrderAPI.detail`, `cancel` (with confirm dialog), `downloadFulfillment` (blob).
+- **APIs:** `userOrderAPI.detail`, `cancel` (with confirm dialog), `downloadFulfillment` (blob), `requestRefund` (`POST /orders/:order_no/refund`).
 - **Header:** order number, status badge, "Pay now" (when pending), "Cancel".
 - **Amount card:** original, discount, promotion, wholesale, member, total, wallet paid, online paid, refunded.
 - **Time card:** created, paid, expires, canceled.
@@ -185,7 +185,7 @@ Page states:
 - **Fulfillment:** `order.fulfillment{type,status,payload,payload_line_count}` with copy and download buttons and a "truncated" hint; per-item `instructions` HTML blocks.
 - **Child orders:** `order.children[]`, each with its own items and fulfillment.
 - **Current Zebra Store behavior:** even one purchased product has one child order; when children are present the parent item list is omitted to avoid duplicate display. After delivery, the shared order body offers TXT export of the order number, full delivery payload and plain-text instructions. A truncated payload is fetched through the existing authenticated download endpoint.
-- **Refunds:** `refund_records[{amount,currency,remark,created_at}]`.
+- **Refunds:** `refund_records[{amount,currency,remark,created_at}]`, `refund_mode: none|automatic|contact_support`, and `refund_state: none|checking|processing|awaiting_support|syncing|succeeded|needs_review`. Order detail explains original-route refund. Automatic mode submits a full refund; other paid orders link to the configured contact page for manual support. `awaiting_support` means the card is locked while staff completes an external original-route transfer.
 
 ### GuestOrders (`views/GuestOrders.vue`, `useGuestOrders`)
 - **Form:** email, order password, optional order number. The last credentials are saved, with a "clear saved" action.
@@ -193,7 +193,7 @@ Page states:
 - **List:** order rows with view and pay actions, pagination.
 
 ### GuestOrderDetail (`views/GuestOrderDetail.vue`, `useGuestOrderDetail`)
-Asks for guest auth, then shows the same body as OrderDetail using `guestOrderAPI.detail` and `downloadFulfillment`.
+Asks for guest auth, then shows the same body as OrderDetail using `guestOrderAPI.detail`, `downloadFulfillment`, and authenticated `POST /guest/orders/:order_no/refund`.
 
 ### RechargeOrderDetail (`views/RechargeOrderDetail.vue`, `useRechargeOrderDetail`)
 - **APIs:** `walletAPI.rechargeDetail`, `walletAPI.captureRechargePayment`.
@@ -281,6 +281,7 @@ A separate layout with ResellerConsoleTopbar. Pages:
 - **Site:** ResellerSiteConfigPanel. Fields: site_name, logo, favicon (upload), announcement (localized, rich text via tiptap), support (telegram/whatsapp/email/url), SEO, footer_links, nav_config.
 - **Products:** ResellerProductSettingsPanel and ResellerProductRuleEditor.
   - Per-SKU `pricing_mode`: inherit, markup_percent, fixed_markup, fixed_price; plus is_listed and sort_order; preview, save, reset.
+  - Reseller pricing starts from each SKU's agent_price_amount when set, otherwise its main-shop price_amount; the main-shop display and checkout continue using price_amount.
   - The product-level rule has independent optional `content` and `instructions` localized overrides. Null inherits the main product; the delivery instructions are snapshotted into new reseller orders.
 - **Orders:** filters (status, order_no, date range); orders list, stats, detail with profit snapshot.
 - **Finance:** balances, settlement status.
@@ -466,7 +467,7 @@ Other config keys in use:
 **Reseller:**
 - Profile and apply: `GET /reseller/profile`, `POST /reseller/apply {reason}`.
 - Domains: `GET|POST /reseller/domains {domain}`.
-- Site config: `GET|PUT /reseller/site-config`; `POST /reseller/upload` (multipart `file`).
+- Site config: `GET|PUT /reseller/site-config`; `POST /reseller/upload` (multipart `file`). A reseller can set `storefront_template` (`classic|vault|aurora|atelier|noir`), `template_mode` (`card|list`), and `theme` hex colour overrides (`primary_color`, `secondary_color`, `accent_color`, `background_color`, `surface_color`, `text_color`). Empty values inherit the main site; selecting a template uses its default palette and light/dark mode unless colours are overridden. Existing branding, support, SEO, announcement and navigation fields remain independently editable.
 - Product settings: `GET /reseller/product-settings`, `GET|PUT|DELETE(?sku_id) /reseller/product-settings/:productId`, `POST …/preview`.
 - Dashboard and orders: `GET /reseller/dashboard`, `GET /reseller/orders`, `GET /reseller/orders/stats`, `GET /reseller/orders/:no`.
 - Finance: `GET /reseller/balance-accounts`, `GET /reseller/ledger-entries`, `GET|POST /reseller/withdraws`.
@@ -477,3 +478,8 @@ Other config keys in use:
 - localStorage: `user_token`, `user_profile`, `cart_items`, `locale`, `dujiao_theme`, `dj-storefront-template`, `dj_affiliate_attribution`, `dj_affiliate_visitor_key`, `announcement_dismiss`, `api_secret_viewed`
 - sessionStorage (with a localStorage fallback): `guest_order_auth`
 - sessionStorage only: `announcement_closed`
+
+### Personal API key (Personal center → Security)
+- All logged-in users can generate, rotate or delete their own personal automation key. Separate from the supplier API application/approval workflow.
+- Shows masked prefix and reveals the plaintext only once after generation/rotation, with an explicit copy action. No localStorage/sessionStorage persistence. Rotation/deletion requires confirmation and revokes all tokens derived from the old key.
+- `POST /api/v1/auth/api-key/token` with JSON `{api_key}` returns `{token,expires_at}` in the standard envelope. Subsequent requests use `Authorization: Bearer <token>` and the user's existing permissions.

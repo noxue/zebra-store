@@ -37,9 +37,9 @@ export const defaultRateLimit = (guest: boolean): RateLimitForm => ({
 
 export const recommendedGuestPolicy = (): RiskControlForm['guest'] => ({
   enabled: true,
-  max_pending_orders_per_ip: 2,
+  max_pending_orders_per_ip: 1,
   max_quantity_per_product_per_order: 1,
-  max_pending_quantity_per_ip_product: 2,
+  max_pending_quantity_per_ip_product: 1,
   payment_expire_minutes: 10,
   rate_limit: defaultRateLimit(true),
 })
@@ -91,9 +91,9 @@ export const parseRiskControlConfig = (raw: unknown): RiskControlForm => {
     form.common.ip_blacklist_text = strList(common?.ip_blacklist).join('\n')
     form.guest = {
       enabled: bool(guest.enabled, true),
-      max_pending_orders_per_ip: num(guest.max_pending_orders_per_ip, 2),
+      max_pending_orders_per_ip: num(guest.max_pending_orders_per_ip, 1),
       max_quantity_per_product_per_order: num(guest.max_quantity_per_product_per_order, 1),
-      max_pending_quantity_per_ip_product: num(guest.max_pending_quantity_per_ip_product, 2),
+      max_pending_quantity_per_ip_product: num(guest.max_pending_quantity_per_ip_product, 1),
       payment_expire_minutes: num(guest.payment_expire_minutes, 10),
       rate_limit: rateLimitFrom(guest.rate_limit, defaultRateLimit(true)),
     }

@@ -18,6 +18,7 @@ import {
 } from '@/components/ui'
 import type { AdminResellerWithdraw } from '@/api/types'
 import { formatDate } from '@/utils/format'
+import { getImageUrl } from '@/utils/image'
 import { CreatedRange } from './components/CreatedRange'
 import { RefreshButton } from './components/RefreshButton'
 import { ResellerCell } from './components/ResellerCell'
@@ -34,6 +35,25 @@ export default defineComponent({
 
     const statusLabel = (v?: string) =>
       v && (RESELLER_WITHDRAW_STATUSES as readonly string[]).includes(v) ? t(`admin.resellerWithdraws.status.${v}`) : v || '-'
+
+    const payoutDetails = (row: AdminResellerWithdraw) => (
+      <div class="space-y-1 break-words text-xs">
+        <div>{row.channel || '-'}</div>
+        <div class="break-all text-muted">{row.account || '-'}</div>
+        {row.payee_name && <div>{t('admin.resellerWithdraws.table.payeeName')}: {row.payee_name}</div>}
+        {row.qr_code_url && <a href={getImageUrl(row.qr_code_url)} target="_blank" rel="noopener noreferrer" class="text-primary underline">{t('admin.resellerWithdraws.table.viewQr')}</a>}
+      </div>
+    )
+
+    const actions = (row: AdminResellerWithdraw) => {
+      const disabled = w.operating.value || row.status !== 'pending'
+      return (
+        <div class="flex flex-wrap gap-2">
+          <Button size="xs" disabled={disabled} onClick={() => w.openReject(row)}>{t('admin.resellerWithdraws.actions.reject')}</Button>
+          <Button size="xs" variant="primary" disabled={disabled} onClick={() => w.pay(row)}>{t('admin.resellerWithdraws.actions.pay')}</Button>
+        </div>
+      )
+    }
 
     const columns = (): DataTableColumn<AdminResellerWithdraw>[] => [
       {
@@ -62,13 +82,7 @@ export default defineComponent({
         key: 'channel',
         title: t('admin.resellerWithdraws.table.channel'),
         class: 'text-xs break-words',
-        render: (r) => r.channel || '-',
-      },
-      {
-        key: 'account',
-        title: t('admin.resellerWithdraws.table.account'),
-        class: 'min-w-[160px] break-all text-xs text-muted',
-        render: (r) => r.account || '-',
+        render: payoutDetails,
       },
       {
         key: 'status',
@@ -106,19 +120,7 @@ export default defineComponent({
         key: 'action',
         title: t('admin.resellerWithdraws.table.action'),
         align: 'right',
-        render: (r) => {
-          const disabled = w.operating.value || r.status !== 'pending'
-          return (
-            <div class="flex flex-wrap items-center justify-end gap-2">
-              <Button size="xs" disabled={disabled} onClick={() => w.openReject(r)}>
-                {t('admin.resellerWithdraws.actions.reject')}
-              </Button>
-              <Button size="xs" variant="primary" disabled={disabled} onClick={() => w.pay(r)}>
-                {t('admin.resellerWithdraws.actions.pay')}
-              </Button>
-            </div>
-          )
-        },
+        render: actions,
       },
     ]
 
@@ -163,14 +165,30 @@ export default defineComponent({
           }}
         </FilterBar>
         <div>
-          <DataTable
+          <div class="space-y-3 md:hidden">
+            {!list.loading.value && list.items.value.length === 0 && <p class="py-8 text-center text-sm text-muted">{t('admin.resellerWithdraws.empty')}</p>}
+            {list.items.value.map((row) => (
+              <article key={row.id} class="zs-glass space-y-3 rounded-zs p-4">
+                <div class="flex items-start justify-between gap-3">
+                  <div class="zs-num font-semibold">{amountOrZero(row.amount)} {row.currency}</div>
+                  <Badge tone={withdrawStatusTone(row.status)} dot>{statusLabel(row.status)}</Badge>
+                </div>
+                <ResellerCell profile={row.profile} resellerId={row.reseller_id} />
+                {payoutDetails(row)}
+                <p class="text-xs text-muted">{formatDate(row.created_at)}</p>
+                {row.reject_reason && <p class="text-xs text-danger">{row.reject_reason}</p>}
+                {row.status === 'pending' && actions(row)}
+              </article>
+            ))}
+          </div>
+          <div class="hidden md:block"><DataTable
             columns={columns()}
             rows={list.items.value}
             rowKey={(r) => r.id}
             loading={list.loading.value}
             emptyText={t('admin.resellerWithdraws.empty')}
             minWidth="1120px"
-          />
+          /></div>
           <ListPagination pagination={list.pagination.value} onChangePage={list.changePage} onChangePageSize={list.changePageSize} />
         </div>
 

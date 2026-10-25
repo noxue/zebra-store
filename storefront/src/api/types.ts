@@ -603,6 +603,8 @@ export type OrderStatus =
 export interface Order {
   id?: number
   order_no: string
+  refund_mode?: 'none' | 'automatic' | 'contact_support'
+  refund_state?: 'none' | 'checking' | 'processing' | 'awaiting_support' | 'syncing' | 'succeeded' | 'needs_review'
   parent_order_no?: string
   guest_email?: string
   guest_locale?: string
@@ -625,6 +627,11 @@ export interface Order {
   fulfillment?: Fulfillment | null
   children?: Order[] | null
   refund_records?: RefundRecord[] | null
+}
+
+export interface OriginalRefundResponse {
+  status: 'preparing' | 'pending' | 'succeeded' | 'failed'
+  refund_no: string
 }
 
 export interface OrderListParams {
@@ -946,6 +953,9 @@ export type ResellerLocalizedText = Record<Locale, string>
 
 export interface ResellerSiteConfigPayload {
   site_name: string
+  storefront_template?: string
+  template_mode?: string
+  theme?: Partial<Record<'primary_color' | 'secondary_color' | 'accent_color' | 'background_color' | 'surface_color' | 'text_color', string>>
   logo?: string
   favicon?: string
   announcement?: {
@@ -1103,6 +1113,8 @@ export interface ResellerWithdrawData {
   currency: string
   channel: string
   account: string
+  payee_name?: string
+  qr_code_url?: string
   status: string
   reject_reason?: string
   processed_at?: string
@@ -1173,6 +1185,8 @@ export interface ResellerWithdrawApplyPayload {
   currency: string
   channel: string
   account: string
+  payee_name?: string
+  qr_code_url?: string
 }
 
 export interface PageParams {
@@ -1213,3 +1227,14 @@ export interface TotpEnableWithTokenResult extends TotpEnableResult {
 }
 
 // @section reseller-extra (Reseller console additions go below)
+
+/** Metadata only: the server never returns the stored key hash. */
+export interface PersonalApiKeyStatus {
+  realm: 'admin' | 'user'
+  owner_id: number
+  prefix: string
+  created_at: string
+  updated_at: string
+}
+export interface IssuedPersonalApiKey { api_key: string; prefix: string }
+export interface PersonalApiKeySession { token: string; expires_at: string }

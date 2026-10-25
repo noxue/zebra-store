@@ -965,6 +965,8 @@ dujiao-next 在约 7 个月内迭代了支付（10+ 网关）、订单/库存、
 - **对我们实现的要求**: Rust 退款服务在一个 DB 事务里完成"锁订单行 → 校验 → 更新 refunded_amount 和状态 → 父子同步 → 冲回返利 → 写退款记录 → 钱包入账（退款到钱包时）"。金额全程用 Decimal，保留 2 位小数。
 - **必测用例**: 1) 实付 100，先退 30（状态为 partially_refunded），再退 80 被拒绝（超额），再退 70 后状态为 refunded；2) 负数或 0 金额被拒绝；3) 未支付订单退款被拒绝；4) 对父订单部分退款，子订单无论原状态（有的已完成、有的在发货中）都变成 partially_refunded；5) 两个子订单一个 refunded、一个 completed，父订单为 partially_refunded；6) 利润趋势：窗口外的订单在窗口内退款，要从窗口内那天的收入里扣除。
 
+- 2026-10-26 补充回归：判断子单是否有真实在线付款时读取其父单的支付来源；子单的初始 `online_paid_amount` 只是金额快照，不能据此阻止纯钱包支付订单的退款。事务内同样核对父单，并保留在途网关退款互斥。自动化：`regression_live_integration::lqa_i3_rejected_purchase_is_flagged_and_cancel_refunds`、`regression_live_reseller::lqa_r4_child_refund_claws_back_profit`。
+
 #### RFD-03 管理员退款到余额必须要求订单已支付(paid_at 非空)
 
 - 提交: 7af926fc 2026-02-24, bb19a243 2026-02-24

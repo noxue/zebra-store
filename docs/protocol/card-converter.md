@@ -12,6 +12,8 @@
 
 转换器提供 `POST /integration/v1/exchanges` 和 `GET /health`。套餐、上游来源等业务值由管理员按商品配置在 `extra` 中；转换器自行校验，不要求类型发现接口。
 
+退款防并发扩展（AI Top-up 已实现）：`POST /integration/v1/refunds/prepare` 接收 `{"order_no":"...","refund_no":"...","cards":["系统卡密"]}`，确认这些卡属于该转换订单、尚未使用且无充值记录，并在同一事务中锁定为不可核销；同一退款号和卡集合重试返回原结果，变更卡集合返回冲突。店铺只有收到全部准备成功后才可向支付渠道发起退款。`POST /integration/v1/refunds/confirm` 接收 `{"order_no":"...","refund_no":"..."}`，在汇付等渠道已确认退款后把卡永久标记为因 `payment_refund` 失效并释放可安全释放的上游绑定；`POST /integration/v1/refunds/cancel` 仅用于明确未退款成功时撤销准备。`POST /integration/v1/refunds/status` 返回 `prepared`、`confirmed` 或 `cancelled` 及原因。四个接口均使用同一专用集成 Token。支付结果未知时保持 `prepared`，先以原退款流水号查询支付结果，不得撤销卡锁或换流水号再次退款。
+
 ## 转换
 
 `POST /integration/v1/exchanges`

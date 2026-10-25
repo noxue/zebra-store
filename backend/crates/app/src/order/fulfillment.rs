@@ -141,7 +141,7 @@ impl OrderService {
         if order_id <= 0 || admin_id <= 0 {
             return Err(Error::bad_request(keys::FULFILLMENT_INVALID));
         }
-        let data = normalize_delivery_data(delivery_data);
+        let mut data = normalize_delivery_data(delivery_data);
         let mut payload = payload.trim().to_owned();
         if payload.is_empty() && data.is_empty() {
             return Err(Error::bad_request(keys::FULFILLMENT_INVALID));
@@ -166,6 +166,7 @@ impl OrderService {
                 )
                 .await?;
             payload = converted.payload;
+            data = converted.delivery_data;
         }
         let now = self.deps.clock.now();
         let fulfillment = self

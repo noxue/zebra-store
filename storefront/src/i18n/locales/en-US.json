@@ -634,6 +634,8 @@
         "withdrawAmountRequired": "Please enter withdraw amount",
         "withdrawChannelRequired": "Please enter withdraw channel",
         "withdrawAccountRequired": "Please enter withdraw account",
+        "withdrawPayeeRequired": "Please enter the payee name",
+        "withdrawQrRequired": "Please upload a payment QR code",
         "withdrawFailed": "Failed to submit withdraw request, please try again later"
       }
     },
@@ -725,7 +727,9 @@
           "content": "Content",
           "contentDescription": "Announcement and SEO",
           "navigation": "Navigation",
-          "navigationDescription": "Footer and navigation"
+          "navigationDescription": "Footer and navigation",
+          "appearance": "Appearance",
+          "appearanceDescription": "Template and colors"
         },
         "nav": {
           "blog": "Blog",
@@ -800,6 +804,21 @@
           "footerLinks": "Footer Links",
           "linkName": "Link Name",
           "navVisibility": "Navigation Visibility"
+        },
+        "appearance": {
+          "inherit": "Use main site",
+          "inheritHint": "Blank fields inherit the main site. Selecting a template uses its palette; entered colors override it.",
+          "template": "Storefront template",
+          "layout": "Product layout",
+          "card": "Cards",
+          "list": "List",
+          "colorPlaceholder": "Blank uses default color",
+          "primary_color": "Primary",
+          "secondary_color": "Secondary",
+          "accent_color": "Accent",
+          "background_color": "Background",
+          "surface_color": "Surface",
+          "text_color": "Text"
         }
       },
       "productSettings": {
@@ -1467,6 +1486,7 @@
     },
     "site": {
       "title": "Store Settings",
+      "appearanceEntry": "Templates & colors",
       "description": "Configure reseller storefront name, announcements, support, navigation, and theme basics.",
       "previewStore": "Preview site",
       "cards": {
@@ -1533,7 +1553,17 @@
       "exceedAvailable": "Exceeds available balance",
       "noCurrency": "No withdrawable currency",
       "confirmTitle": "Confirm withdrawal",
-      "confirmMessage": "Submit a withdrawal request for {amount} {currency}?"
+      "confirmMessage": "Submit a withdrawal request for {amount} {currency}?",
+      "channels": { "alipay": "Alipay", "wechat": "WeChat Pay" },
+      "payeeName": "Payee name",
+      "payeeNamePlaceholder": "Name matching the receiving account",
+      "qrCode": "Payment QR code",
+      "qrHint": "Alipay and WeChat withdrawals require a payment QR code",
+      "uploadQr": "Upload QR code",
+      "removeQr": "Remove QR code",
+      "viewQr": "View QR code",
+      "qrImageOnly": "Choose an image file",
+      "qrUploadFailed": "QR code upload failed"
     },
     "orders": {
       "title": "Sales Orders",
@@ -1648,6 +1678,21 @@
   },
   "orderDetail": {
     "title": "Order Detail",
+    "refundNotice": "Bought the wrong item or no longer need it? Request a refund to the original payment method. Used cards require manual review.",
+    "requestRefund": "Request Refund",
+    "contactRefundSupport": "Contact support for a refund",
+    "refundConfirm": "Request a full refund to the original payment method? We will check that the card has not been used.",
+    "refundSucceeded": "The payment provider confirmed your refund",
+    "refundPending": "Refund in progress. Check this order again later.",
+    "refundFailed": "Automatic refund is unavailable. Contact support for review.",
+    "refundState": {
+      "checking": "Checking the card and refund eligibility",
+      "processing": "The payment provider is processing your refund",
+      "awaiting_support": "Support is returning the payment to its original method. The card is locked.",
+      "syncing": "The provider confirmed the refund; card status is syncing",
+      "succeeded": "Refund completed to the original payment method",
+      "needs_review": "This refund needs support review"
+    },
     "subtitle": "Check order status and fulfillment",
     "notFound": "Order not found or deleted",
     "payNow": "Pay now",

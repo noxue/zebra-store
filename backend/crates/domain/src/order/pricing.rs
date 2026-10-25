@@ -762,3 +762,66 @@ mod tests {
         assert_eq!(child_profit(Some(&item), false), Amount::ZERO);
     }
 }
+
+/// Splits a fully priced line without re-applying quantity tiers or coupons.
+/// The remainder receives every rounding cent so family totals stay unchanged.
+pub fn split_priced_line(
+    line: &PricedLine,
+    first_quantity: i32,
+) -> Option<(PricedLine, PricedLine)> {
+    if first_quantity <= 0 || first_quantity >= line.quantity {
+        return None;
+    }
+    let share = |amount: Amount| {
+        Amount::new(
+            amount.decimal() * rust_decimal::Decimal::from(first_quantity)
+                / rust_decimal::Decimal::from(line.quantity),
+        )
+    };
+    let mut first = line.clone();
+    let mut rest = line.clone();
+    first.quantity = first_quantity;
+    rest.quantity = line.quantity - first_quantity;
+    macro_rules! split { ($($field:ident),+) => { $(first.$field=share(line.$field); rest.$field=line.$field-first.$field;)+ }; }
+    split!(
+        original_total_price,
+        total_price,
+        member_discount,
+        promotion_discount,
+        wholesale_discount,
+        coupon_discount
+    );
+    Some((first, rest))
+}
+
+#[cfg(test)]
+mod local_first_tests {
+    use super::*;
+    #[test]
+    fn local_first_preserves_bulk_price_coupon_and_rounding() {
+        let line = PricedLine {
+            product_id: 1,
+            sku_id: 2,
+            quantity: 3,
+            original_unit_price: Amount::from(12),
+            unit_price: Amount::from(10),
+            original_total_price: Amount::from(36),
+            total_price: Amount::from(30),
+            member_discount: Amount::ZERO,
+            promotion_discount: Amount::ZERO,
+            wholesale_discount: Amount::from(6),
+            coupon_discount: "1.00".parse().unwrap(),
+            promotion_id: None,
+        };
+        let (local, upstream) = split_priced_line(&line, 2).unwrap();
+        assert_eq!(local.quantity, 2);
+        assert_eq!(upstream.quantity, 1);
+        assert_eq!(local.unit_price.to_string(), "10.00");
+        assert_eq!(local.coupon_discount.to_string(), "0.67");
+        assert_eq!(upstream.coupon_discount.to_string(), "0.33");
+        assert_eq!(local.payable().to_string(), "19.33");
+        assert_eq!(upstream.payable().to_string(), "9.67");
+        assert!(split_priced_line(&line, 0).is_none());
+        assert!(split_priced_line(&line, 3).is_none());
+    }
+}
