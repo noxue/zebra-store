@@ -31,6 +31,15 @@ export default defineComponent({
         <Switch modelValue={value} onUpdate:modelValue={onUpdate} />
       </div>
     )
+    const preconvertedRow = (value: boolean, onUpdate: (v: boolean) => void) => (
+      <div class="flex items-start justify-between gap-4 border-b border-line py-3">
+        <div>
+          <p class="text-sm font-medium text-fg">{t('admin.cardSecrets.preconvertedLabel')}</p>
+          <p class="mt-1 text-xs text-muted">{t('admin.cardSecrets.preconvertedHint')}</p>
+        </div>
+        <Switch modelValue={value} onUpdate:modelValue={onUpdate} />
+      </div>
+    )
     const messages = (error: string, success: string) => (
       <>
         {error && <div class="rounded-zs-sm border border-line bg-danger-soft p-3 text-sm text-danger-text">{error}</div>}
@@ -60,6 +69,7 @@ export default defineComponent({
               </FormField>
             </div>
             {dedupRow(f.batchForm.deduplicate, (v) => (f.batchForm.deduplicate = v))}
+            {preconvertedRow(f.batchForm.preconverted, (v) => (f.batchForm.preconverted = v))}
             {messages(f.batchError.value, f.batchSuccess.value)}
             <div class="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <Button onClick={f.resetBatchForm}>{t('admin.common.reset')}</Button>
@@ -104,6 +114,7 @@ export default defineComponent({
               </FormField>
             </div>
             {dedupRow(f.importForm.deduplicate, (v) => (f.importForm.deduplicate = v))}
+            {preconvertedRow(f.importForm.preconverted, (v) => (f.importForm.preconverted = v))}
             {messages(f.importError.value, f.importSuccess.value)}
             <div class="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <Button onClick={f.resetImportForm}>{t('admin.common.reset')}</Button>

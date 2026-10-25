@@ -51,7 +51,7 @@ const CALLBACK_ROUTES_TTL: Duration = Duration::from_secs(300);
 /// Lifetime of a cached `/public/config` payload (original: 60 s).
 pub const PUBLIC_CONFIG_TTL: Duration = Duration::from_secs(60);
 const SMTP_TEST_SUBJECT: &str = "SMTP 配置测试邮件";
-const SMTP_TEST_BODY: &str = "这是一封来自 Dujiao-Next 的 SMTP 测试邮件，说明当前配置可正常发送。";
+const SMTP_TEST_BODY: &str = "这是一封来自 Zebra Store 的 SMTP 测试邮件，说明当前配置可正常发送。";
 
 /// Process-local TTL cache for `/public/config` payloads, keyed by tenant.
 #[derive(Debug, Default)]

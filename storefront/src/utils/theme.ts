@@ -31,7 +31,10 @@ watch(theme, (mode) => {
 /** Applies `theme.default_mode` from site config when the user never chose. */
 export const applyDefaultThemeMode = (mode: string | undefined) => {
   if (userChosen || !mode || mode === 'system') return
-  if (mode === 'light' || mode === 'dark') theme.value = mode
+  if (mode === 'light' || mode === 'dark') {
+    theme.value = mode
+    apply(mode)
+  }
 }
 
 export const useTheme = () => ({

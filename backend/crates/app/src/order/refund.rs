@@ -80,6 +80,8 @@ impl OrderService {
                 Some(gateway_refund_status::MANUAL_PREPARING) => "checking",
                 Some(gateway_refund_status::MANUAL_LOCKING) => "checking",
                 Some(gateway_refund_status::MANUAL_AWAITING) => "awaiting_support",
+                Some(gateway_refund_status::MANUAL_CANCELING) => "checking",
+                Some(gateway_refund_status::MANUAL_CANCELED) => "none",
                 Some(gateway_refund_status::SUCCEEDED)
                     if attempt.as_ref().is_some_and(|a| a.card_confirmed) =>
                 {
@@ -107,6 +109,10 @@ impl OrderService {
                 )
                 .await
                 .map(|_| ())
+            } else if attempt.status == gateway_refund_status::MANUAL_CANCELING {
+                self.cancel_manual_refund(attempt.order_id, attempt.id)
+                    .await
+                    .map(|_| ())
             } else if attempt.status == gateway_refund_status::SUCCEEDED {
                 let order = self
                     .deps
@@ -166,10 +172,37 @@ impl OrderService {
         Ok(())
     }
 
+    async fn ensure_no_online_payment(&self, order: &Order) -> Result<()> {
+        // Payment is attached to the parent. Child payment split fields are the
+        // checkout snapshot and are not updated by a wallet-only payment.
+        let paid_order = if let Some(parent_id) = order.parent_id {
+            self.deps
+                .repo
+                .get(parent_id)
+                .await?
+                .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?
+        } else {
+            order.clone()
+        };
+        if paid_order.online_paid_amount.is_positive() {
+            return Err(Error::bad_request("error.gateway_refund_pending"));
+        }
+        Ok(())
+    }
+
     /// Buyer-facing availability for a full refund to the successful payment method.
     pub async fn buyer_refund_mode(&self, order: &Order) -> Result<&'static str> {
         if order.paid_at.is_none() || order.total_amount <= order.refunded_amount {
             return Ok("none");
+        }
+        // A terminal provider failure needs staff review before another gateway
+        // submission. The admin flow can retry after the merchant fixes the cause.
+        if self
+            .latest_refund_attempt(order.id)
+            .await?
+            .is_some_and(|attempt| attempt.status == gateway_refund_status::FAILED)
+        {
+            return Ok("contact_support");
         }
         if order.refunded_amount != zs_shared::money::Amount::ZERO
             || order.wallet_paid_amount != zs_shared::money::Amount::ZERO
@@ -194,12 +227,13 @@ impl OrderService {
                 if self.deps.integration.is_none() {
                     return Ok("contact_support");
                 }
+                let has_binding = if let Some(integration) = &self.deps.integration {
+                    integration.requires_converter(target).await?
+                } else {
+                    false
+                };
                 if fulfillment.status != "delivered"
-                    || !fulfillment
-                        .logistics
-                        .get("card_converter_id")
-                        .and_then(serde_json::Value::as_i64)
-                        .is_some_and(|id| id > 0)
+                    || (!fulfillment.logistics.contains_key("card_converter_id") && !has_binding)
                 {
                     return Ok("contact_support");
                 }
@@ -374,6 +408,7 @@ impl OrderService {
                 gateway_refund_status::MANUAL_PREPARING
                     | gateway_refund_status::MANUAL_LOCKING
                     | gateway_refund_status::MANUAL_AWAITING
+                    | gateway_refund_status::MANUAL_CANCELING
             )
         }) {
             return Err(Error::bad_request("error.gateway_refund_pending"));
@@ -643,24 +678,6 @@ impl OrderService {
                 "error.card_converter_refund_review_required",
             ));
         }
-        let targets: Vec<&Order> = if order.children.is_empty() {
-            vec![&order]
-        } else {
-            order.children.iter().collect()
-        };
-        for target in targets {
-            if let Some(fulfillment) = &target.fulfillment
-                && !fulfillment
-                    .logistics
-                    .get("card_converter_id")
-                    .and_then(serde_json::Value::as_i64)
-                    .is_some_and(|id| id > 0)
-            {
-                return Err(Error::bad_request(
-                    "error.card_converter_refund_review_required",
-                ));
-            }
-        }
         if let Some(parent_id) = order.parent_id
             && let Some(parent) = self.deps.repo.get(parent_id).await?
             && amount > parent.total_amount - parent.refunded_amount
@@ -765,18 +782,7 @@ impl OrderService {
             .get(order_id)
             .await?
             .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
-        let payment_order = match order.parent_id.filter(|id| *id > 0) {
-            Some(id) => self
-                .deps
-                .repo
-                .get(id)
-                .await?
-                .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?,
-            None => order,
-        };
-        if payment_order.online_paid_amount.is_positive() {
-            return Err(Error::bad_request("error.gateway_refund_pending"));
-        }
+        self.ensure_no_online_payment(&order).await?;
         self.apply_refund(order_id, amount, remark, true, false, None)
             .await
     }
@@ -796,18 +802,7 @@ impl OrderService {
             .get(order_id)
             .await?
             .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
-        let payment_order = match order.parent_id.filter(|id| *id > 0) {
-            Some(id) => self
-                .deps
-                .repo
-                .get(id)
-                .await?
-                .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?,
-            None => order,
-        };
-        if payment_order.online_paid_amount.is_positive() {
-            return Err(Error::bad_request("error.gateway_refund_pending"));
-        }
+        self.ensure_no_online_payment(&order).await?;
         self.apply_refund(order_id, amount, remark, false, fee_refunded, None)
             .await
     }
@@ -997,6 +992,72 @@ impl OrderService {
             .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
         self.confirm_and_mark(&order, &attempt).await?;
         Ok(done)
+    }
+
+    /// Releases a prepared manual refund only when no transfer has been confirmed.
+    pub async fn cancel_manual_refund(
+        &self,
+        order_id: Id,
+        attempt_id: Id,
+    ) -> Result<GatewayRefundAttempt> {
+        let attempt = self
+            .deps
+            .store
+            .gateway_refund_attempt(attempt_id)
+            .await?
+            .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
+        if attempt.order_id != order_id || !attempt.refund_no.starts_with("MR") {
+            return Err(Error::bad_request("error.gateway_refund_pending"));
+        }
+        if attempt.status == gateway_refund_status::MANUAL_CANCELED {
+            return Ok(attempt);
+        }
+        if !matches!(
+            attempt.status.as_str(),
+            gateway_refund_status::MANUAL_AWAITING | gateway_refund_status::MANUAL_CANCELING
+        ) {
+            return Err(Error::bad_request("error.gateway_refund_pending"));
+        }
+        if !self
+            .deps
+            .store
+            .claim_manual_refund_cancellation(attempt.id, self.deps.clock.now())
+            .await?
+        {
+            let current = self
+                .deps
+                .store
+                .gateway_refund_attempt(attempt_id)
+                .await?
+                .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
+            return if matches!(
+                current.status.as_str(),
+                gateway_refund_status::MANUAL_CANCELING | gateway_refund_status::MANUAL_CANCELED
+            ) {
+                Ok(current)
+            } else {
+                Err(Error::bad_request("error.gateway_refund_pending"))
+            };
+        }
+        let order = self
+            .deps
+            .repo
+            .get(order_id)
+            .await?
+            .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
+        self.cancel_card_refund(&order, &attempt.refund_no).await?;
+        self.deps
+            .store
+            .update_gateway_refund_attempt(
+                attempt.id,
+                &GatewayRefundAttemptUpdate {
+                    status: gateway_refund_status::MANUAL_CANCELED.to_owned(),
+                    payload: Map::new(),
+                    error: "manual refund canceled before transfer".to_owned(),
+                    now: self.deps.clock.now(),
+                },
+            )
+            .await
     }
 
     /// `PATCH /admin/order-refunds/:id/payment-fee` (RFD-01): returns the full admin row.

@@ -21,6 +21,7 @@ import {
   countListedSkus,
   estimateResellerPrice,
   normalizeResellerProductSettingsPagination,
+  summarizeProductBasePrice,
   summarizeProductEffectivePrice,
 } from '@/utils/reseller/productSettings'
 import { siteConfigFormToPayload, siteConfigToForm } from '@/utils/reseller/siteConfig'
@@ -94,6 +95,8 @@ describe('domains', () => {
 describe('pricing', () => {
   it('estimates price by mode', () => {
     expect(estimateResellerPrice('100.00', { sku_id: 0, pricing_mode: 'inherit' }, '10')).toBe('110.00')
+    expect(estimateResellerPrice('36.00', { sku_id: 0, pricing_mode: 'inherit' }, '0', '40.00')).toBe('40.00')
+    expect(estimateResellerPrice('42.00', { sku_id: 0, pricing_mode: 'inherit' }, '0', '40.00')).toBe('42.00')
     expect(estimateResellerPrice('98.00', { sku_id: 0, pricing_mode: 'markup_percent', markup_percent: '12.5' })).toBe('110.25')
     expect(estimateResellerPrice('98.00', { sku_id: 0, pricing_mode: 'fixed_markup', fixed_markup_amount: '2.5' })).toBe('100.50')
     expect(estimateResellerPrice('98.00', { sku_id: 0, pricing_mode: 'fixed_price', fixed_price_amount: '120' })).toBe('120.00')
@@ -133,6 +136,23 @@ describe('pricing', () => {
     expect(countListedSkus(detail)).toBe(2)
   })
 
+  // RSL-11: the displayed cost belongs to this reseller, never the shared product price.
+  it('shows per-site SKU costs and excludes hidden or inactive SKUs', () => {
+    const detail = {
+      product_setting: undefined,
+      skus: [
+        { id: 10, sku_code: 'a', spec_values: {}, base_price_amount: '38.67', shared_agent_price_amount: '45.00', is_active: true, effective_price_amount: '50.00' },
+        { id: 11, sku_code: 'b', spec_values: {}, base_price_amount: '120.33', shared_agent_price_amount: '125.00', is_active: true, effective_price_amount: '135.00' },
+        { id: 12, sku_code: 'c', spec_values: {}, base_price_amount: '500.00', is_active: true, setting: { product_id: 1, sku_id: 12, is_listed: false, pricing_mode: 'inherit', markup_percent: '0.00', fixed_markup_amount: '0.00', fixed_price_amount: '0.00', sort_order: 0 } },
+        { id: 13, sku_code: 'd', spec_values: {}, base_price_amount: '600.00', is_active: false },
+      ],
+    }
+    expect(summarizeProductBasePrice(detail)).toBe('38.67 - 120.33')
+    expect(summarizeProductEffectivePrice(detail)).toBe('50.00 - 135.00')
+    expect(summarizeProductEffectivePrice(detail, '-', { 10: { effective: '55.00' }, 11: { effective: '140.00' } })).toBe('55.00 - 140.00')
+    expect(summarizeProductBasePrice({ product_setting: undefined, skus: [detail.skus[0]] })).toBe('38.67')
+  })
+
   it('normalizes pagination', () => {
     expect(normalizeResellerProductSettingsPagination({ page: '2', page_size: 10, total: 0, total_page: 0 })).toEqual({ page: 2, page_size: 10, total: 0, total_page: 1 })
     expect(normalizeResellerProductSettingsPagination(null).page).toBe(1)
@@ -168,6 +188,10 @@ describe('finance', () => {
     expect(validateWithdrawForm({ amount: '', currency: 'CNY', channel: 'a', account: 'b' })).toBe('withdrawAmountRequired')
     expect(validateWithdrawForm({ amount: '1', currency: 'CNY', channel: '', account: 'b' })).toBe('withdrawChannelRequired')
     expect(validateWithdrawForm({ amount: '1', currency: 'CNY', channel: 'a', account: 'b' })).toBeNull()
+    expect(validateWithdrawForm({ amount: '1', currency: 'CNY', channel: 'alipay', account: 'b' })).toBe('withdrawPayeeRequired')
+    expect(validateWithdrawForm({ amount: '1', currency: 'CNY', channel: 'wechat', account: 'b', payee_name: '张三' })).toBe('withdrawQrRequired')
+    expect(validateWithdrawForm({ amount: '1', currency: 'CNY', channel: 'wechat', account: 'b', payee_name: '张三', qr_code_url: '/uploads/reseller/qr.png' })).toBeNull()
+    expect(validateWithdrawForm({ amount: '1', currency: 'CNY', channel: '支付宝', account: 'b', payee_name: '张三' })).toBe('withdrawQrRequired')
   })
 })
 
@@ -192,11 +216,13 @@ describe('site config form', () => {
       id: 1,
       updated_at: '',
       site_name: ' Shop ',
+      scripts: [{ name: ' Chat ', enabled: true, position: 'body_end', code: ' chat() ' }],
       storefront_template: 'noir',
       template_mode: 'list',
       theme: { primary_color: '#123abc', background_color: '#eeeeee' },
       footer_links: [{ name: { 'zh-CN': '链接', 'zh-TW': '', 'en-US': '' }, url: 'https://a' }],
       nav_config: { builtin: { blog: false }, custom_items: [] },
+      support: { wechat_id: 'seller', wechat_qr_code: '/uploads/reseller/support.png', qq_number: '123', qq_group: '456', wechat_group_qr_code: '/uploads/reseller/group.png' },
     })
     expect(form.nav_config.builtin).toEqual({ blog: false, notice: true, about: true })
     expect(form.announcement.type).toBe('info')
@@ -206,7 +232,10 @@ describe('site config form', () => {
     expect(payload.storefront_template).toBe('noir')
     expect(payload.template_mode).toBe('list')
     expect(payload.theme?.primary_color).toBe('#123abc')
+    expect(payload.support?.wechat_id).toBe('seller')
+    expect(payload.support?.wechat_group_qr_code).toBe('/uploads/reseller/group.png')
     expect(payload.footer_links).toHaveLength(1)
+    expect(payload.scripts).toEqual([{ name: 'Chat', enabled: true, position: 'body_end', code: 'chat()' }])
   })
 })
 

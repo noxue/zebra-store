@@ -62,7 +62,7 @@ The order-risk data fix-up runs before `resellerstore.Migrate`, so it will be in
   - Manual stock: manual_stock_total (-1 = unlimited), manual_stock_locked, manual_stock_sold
   - payment_channel_ids (JSON text; empty = any channel), is_affiliate_enabled, is_mapped, is_active, sort_order
   - Has many product_skus
-- **product_skus**: product_id + sku_code (unique together), spec_values (JSON), price_amount, nullable agent_price_amount (reseller base; null inherits price_amount), cost_price_amount, the same three manual-stock fields, is_active, sort_order
+- **product_skus**: product_id + sku_code (unique together), spec_values (JSON), price_amount, nullable agent_price_amount (shared reseller base; null inherits price_amount), cost_price_amount, the same three manual-stock fields, is_active, sort_order. The effective shared base must be positive and not below cost_price_amount.
 - **product_mappings**: connection_id, local_product_id (unique), upstream_product_id, upstream_fulfillment_type, upstream_status, is_active, last_synced_at
 - **sku_mappings**: product_mapping_id, local_sku_id, upstream_sku_id, upstream_price, upstream_stock, upstream_is_active, stock_synced_at
 
@@ -114,8 +114,9 @@ A parent order's status is recalculated from its children (`CalcParentStatus`).
 - **card_secrets**: product_id, sku_id, batch_id, secret (text), status (`available`/`reserved`/`used`), order_id, reserved_at, used_at
 - **card_secret_batches**: product_id, sku_id, batch_no (unique), source (`manual`/`csv`), total_count, note, created_by
 - 手动录入和 CSV 导入的 `note` 是该批每张卡密的来源标识；本地自动发货时转换器可用 `card.notes` 条件（所有卡密备注均匹配）或同源订单的 `card.note` 占位符/条件。混合备注的订单不能将单一备注写入 `extra`。
-- 已绑定转换器的上游商品可混用本地导入与上游采购：下单时若当前 SKU 中批次备注准确为 `p1` 的可用卡密足量，整笔订单预占这些卡密并按本地自动发货；不足则整笔走原上游采购。两条路径均在交付前转换，买家仅收到系统卡密。前台自动发卡库存展示叠加可用 P1 数量；数量判定和预占使用同一来源条件。
+- 已绑定转换器的上游商品可混用本地导入与上游采购：下单时若当前 SKU 中批次备注准确为 `p1` 的可用卡密足量，整笔订单预占这些卡密并按本地自动发货；不足则整笔走原上游采购。上游原始卡密在交付前转换，已标记的系统卡密直接交付；买家仅收到系统卡密。前台自动发卡库存展示叠加可用 P1 数量；数量判定和预占使用同一来源条件。
 - 无上游映射的自动发卡商品可用批次备注 `p1`、`p2`、`p3` 标识卡密来源，转换器绑定通过 `card.notes` 规则生成对应的 `extra.provider`；未匹配的来源应拒绝转换。AI Top-up 的 P3 仅支持 Go、Plus、Pro 5X、Pro 20X，Pro Max 25X 暂不可绑定。
+- 卡密批次导入可选 `preconverted`（默认 false）：已生成的系统卡密标记后在自动交付时原样发给买家，不再次请求绑定的转换器；未标记的上游原始卡密继续转换。该标记存于批次 `source`（`manual_preconverted` / `csv_preconverted`），与 `note` 的 P1/P2/P3 渠道标识独立。同一订单混合两类卡密时，仅向转换器发送原始卡密，交付结果保持原卡密顺序。
 - **gift_cards**: batch_id, name, code (unique; upper-cased on redeem), amount, currency, status (`active`/`redeemed`/`disabled`), expires_at, redeemed_at, redeemed_user_id, wallet_txn_id
 - **gift_card_batches**: batch_no, name, amount, currency, quantity, expires_at, created_by
 
@@ -175,7 +176,8 @@ A parent order's status is recalculated from its children (`CalcParentStatus`).
 - **reseller_product_settings**
   - reseller_id + product_id + sku_id (unique), is_listed
   - pricing_mode: `inherit`, `markup_percent`, `fixed_markup` or `fixed_price`
-  - markup_percent, fixed_markup_amount, fixed_price_amount, sort_order
+  - no effective pricing rule and zero default markup: sale price inherits the main-site SKU price (not the agent base); settlement/profit still uses the effective agent base. If retail is below the base, use the base as the safe fallback. The inherited retail price is exempt from the reseller markup cap; explicit rules and profile default markup remain capped.
+  - markup_percent, fixed_markup_amount, fixed_price_amount, nullable agent_price_amount (admin-only reseller base override; SKU → product → shared SKU base), sort_order
   - Zebra Store extension: nullable `content_json` and `instructions_json` on the product-level (`sku_id=0`) rule. Null inherits the main product; a JSON object overrides it. Order items snapshot the effective instructions at checkout.
 - **reseller_order_snapshots**: order_id (unique), reseller_id, domain, currency, reseller_user_id, buyer_user_id, base_amount, reseller_amount, profit_amount, profit_eligible, profit_block_reason, pricing_snapshot, risk_snapshot
 - **reseller_ledger_entries**
@@ -183,7 +185,7 @@ A parent order's status is recalculated from its children (`CalcParentStatus`).
   - type: `order_profit`, `refund_deduct`, `manual_adjust`, `withdraw_lock` or `withdraw_paid`
   - status: `pending_confirm`, `available`, `locked`, `withdrawn` or `canceled`
   - available_at, withdraw_request_id, remark
-- **reseller_withdraw_requests**: reseller_id, amount, currency, channel, account, status (`pending`, `rejected`, `paid`), reject_reason, processed_by, processed_at
+- **reseller_withdraw_requests**: reseller_id, amount, currency, channel, account, payee_name, qr_code_url, status (`pending`, `rejected`, `paid`), reject_reason, processed_by, processed_at
 - **reseller_balance_accounts**: reseller_id + currency (unique), status, available / locked / negative amount caches, last_ledger_entry_id, risk_note
 - **reseller_related_accounts**: reseller_id + user_id (unique), relation_type, source, status, remark, created_by
 
@@ -524,6 +526,7 @@ All four paths can be replaced by admin-set custom paths (settings key `callback
 | POST | `/orders/:id/manual-refund` | Legacy wallet-only administrative record (`amount`, `remark`, `payment_fee_refunded`); online-paid orders must use the two-step flow |
 | POST | `/orders/:id/manual-refund/prepare` | Unsupported automatic channel: validate payment and amount, reserve a durable manual attempt, lock converter cards; returns `attempt` in `manual_awaiting` with no completed refund record |
 | POST | `/orders/:id/manual-refund/confirm` | After support returns funds to the original method, submit `{attempt_id,transfer_ref}`; idempotently record one refund, invalidate converter cards and release safe upstream binding; failed card confirmation is retried |
+| POST | `/orders/:id/manual-refund/cancel` | Before any transfer, submit `{attempt_id}` to cancel a prepared manual refund; atomically block confirmation, release converter card locks, finish as `manual_canceled` and retry interrupted cancellation |
 | POST | `/orders/:id/original-refund` | Admin original-route refund; submits only when the gateway supports the amount, and uses the durable refund attempt and card barrier |
 | GET | `/order-refunds`, `/order-refunds/:id` | Refund records |
 | PATCH | `/order-refunds/:id/payment-fee` | Set fee-refunded flag |
@@ -766,7 +769,7 @@ All four paths can be replaced by admin-set custom paths (settings key `callback
 
 **Affiliate:**
 - Visitors are tracked by `affiliate_code` and visitor key; the order keeps a snapshot.
-- Commission = base amount (only affiliate-enabled products) × `commission_rate`%.
+- Commission = `commission_rate`% of the smaller of affiliate-enabled items' margin and the full order margin. Item margin uses the purchase-time cost snapshot; order margin subtracts all item costs, payment fees and reseller profit from the paid amount. A zero or negative margin creates no commission.
 - It stays `pending_confirm` for `confirm_days`, then becomes `available` (job every minute).
 - Withdrawals need at least `min_withdraw_amount` and use a configured channel; admins pay or reject.
 - Self-referral is ignored.
@@ -783,7 +786,7 @@ All four paths can be replaced by admin-set custom paths (settings key `callback
 - Optional `reseller.cname_target` is the config-file fallback for one shared CNAME destination for custom subdomains. `reseller_domain_review_config` in the generic admin settings API holds `{mode:"manual"|"auto",cname_target:"hostname"}`; its saved target overrides the config fallback and may be a CDN hostname. Default mode is `manual`. Manual mode creates a `pending_review` row and checks the public CNAME on admin approval; wrong DNS leaves it pending. Auto mode requires a configured shared target and checks the CNAME on submission, activating a correct domain immediately; wrong or unavailable DNS rejects submission. Without a target, the existing manual flow applies. Mode changes affect only new submissions. `GET /api/v1/reseller/domain-setup` returns `{cname_target,review_mode}` to authenticated console users.
 - Requests are matched to a reseller by Host (`ResellerTenantMiddleware`, cached); `main_hosts` means the main shop.
 - Optional reverse-proxy reads: `GET /api/v1/internal/reseller-domains/allow?domain=<DNS name>` returns HTTP 204 only when reseller support is enabled and the domain and its profile are active; any other result denies on-demand certificate issuance. `GET /api/v1/internal/reseller-domains` requires `Authorization: Bearer <reseller.domain_sync_token>` and returns `{status_code:0,msg:"success",data:{domains:[...]}}` for Nginx certificate synchronization. The inventory route is disabled when the token is blank; both routes return 404 when reseller support is off. These internal routes are for loopback proxy access and should not be publicly proxied.
-- The reseller controls branding (`reseller_site_configs`, layered over `/public/config`) and which products are listed and how they are priced (inherit, markup %, fixed markup, fixed price, capped by `max_markup_percent`).
+- The reseller controls branding (`reseller_site_configs`, layered over `/public/config`) and which products are listed and how they are priced (inherit, markup %, fixed markup, fixed price, capped by `max_markup_percent`). Admins can override the reseller base per site/product/SKU. Sale prices may be below the main shop price but cannot be below the effective reseller base or SKU cost. Reseller accounts cannot change or clear admin base overrides.
 - Each order records the reseller profit. It is posted to the ledger as `pending_confirm` and becomes `available` after `settlement_confirm_days` (job every minute). Resellers request withdrawals; admins pay them.
 
 **Supplying other shops, and buying from other shops:**
@@ -857,9 +860,11 @@ All four paths can be replaced by admin-set custom paths (settings key `callback
 - **Service:** `modules/settings/application/*`. Each key has a normalizer; saving some keys clears the cached public config or callback routes (`default_registry.go`).
 - **Schemas:** `modules/settings/schema/*`.
 
+脚本范围扩展：主站 `site_config.scripts[]` 新增 `scope: global|main`，旧记录未标范围时按 `main` 处理。分站 `reseller_site_configs.scripts_json` 独立保存脚本。分站公开配置只包含显式设为全局的脚本和自己的脚本；未配置时也不包含仅主站脚本。分站脚本在无 `allow-same-origin` 的 sandbox iframe 中运行。
+
 | Key | Contents |
 |---|---|
-| `site_config` | `brand{site_name, site_url, site_icon, site_logo, site_description(ml)}`, `contact{telegram, whatsapp}`, `seo{title, keywords, description}` (ml), `legal{terms, privacy}` (ml), `about{hero, introduction, services{title, items}, contact{title, text}}`, `scripts[{name, enabled, position: head/body_end, code}]` (max 20), `footer_links[{name, url}]` (max 20), `currency` (3 letters, default CNY), `template_mode` (card/list), `storefront_template` (classic/vault/aurora/atelier/noir), `theme` (colours, images, effects, `show_home_hero`, `show_footer_quick_links`, `show_repository_link`), `languages` |
+| `site_config` | `brand{site_name, site_url, site_icon, site_logo, site_logo_dark, site_description(ml)}`, `contact{telegram, whatsapp, wechat_id, wechat_qr_code, qq_number, qq_group, wechat_group_qr_code}`, `seo{title, keywords, description}` (ml), `legal{terms, privacy}` (ml), `about{hero, introduction, services{title, items}, contact{title, text}}`, `scripts[{name, enabled, position: head/body_end, code}]` (max 20), `footer_links[{name, url}]` (max 20), `currency` (3 letters, default CNY), `template_mode` (card/list), `storefront_template` (classic/vault/aurora/atelier/noir), `theme` (colours, images, effects, `show_home_hero`, `show_footer_quick_links`, `show_repository_link`), `languages` |
 | `order_config` | payment_expire_minutes, max_refund_days |
 | `smtp_config` | enabled, host, port, username, password, from, from_name, use_tls, use_ssl, order_notification_enabled, verify_code{expire_minutes, send_interval_seconds, max_attempts, length} |
 | `captcha_config` | provider, scenes{…}, image{length, width, height, noise_count, show_line, expire_seconds, max_store}, turnstile{site_key, secret_key, verify_url, timeout_ms} |

@@ -5,7 +5,7 @@
 mod common;
 
 use chrono::{Duration, Utc};
-use common::{TestApp, data};
+use common::{TestApp, data, test_config};
 use sea_orm::prelude::Decimal;
 use sea_orm::{ActiveModelTrait, Set};
 use serde_json::json;
@@ -59,7 +59,7 @@ async fn public_config_shape() {
     assert_eq!(d["languages"], json!(["zh-CN", "zh-TW", "en-US"]));
     assert_eq!(d["currency"], "CNY");
     assert_eq!(d["storefront_template"], "classic");
-    assert_eq!(d["contact"]["telegram"], "https://telegram.me/dujiaoka");
+    assert_eq!(d["contact"]["telegram"], "");
     assert_eq!(d["scripts"], json!([]));
     assert_eq!(
         d["captcha"],
@@ -73,6 +73,7 @@ async fn public_config_shape() {
     );
     assert_eq!(d["google_auth"], json!({"enabled": false, "client_id": ""}));
     assert_eq!(d["affiliate"]["enabled"], false);
+    assert_eq!(d["reseller_enabled"], false);
     assert_eq!(d["smtp_enabled"], false);
     assert_eq!(d["registration_enabled"], true);
     assert_eq!(d["email_verification_enabled"], true);
@@ -103,6 +104,15 @@ async fn public_config_shape() {
     assert_eq!(channels[0]["max_amount"], "1000.00");
     assert!(channels[0].get("config_json").is_none());
     assert!(channels[0].get("fee_rate").is_none());
+}
+
+#[tokio::test]
+async fn reseller_menu_flag_tracks_server_feature_switch() {
+    let mut cfg = test_config();
+    cfg.reseller.enabled = true;
+    let app = TestApp::with_config(cfg).await;
+    let response = app.call("GET", "/api/v1/public/config", None, None).await;
+    assert_eq!(data(&response)["reseller_enabled"], true);
 }
 
 #[tokio::test]

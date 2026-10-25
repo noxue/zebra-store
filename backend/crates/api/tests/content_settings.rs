@@ -17,7 +17,7 @@ async fn generic_settings_get_put_normalize() {
         .put(
             "/api/v1/admin/settings",
             json!({"key": "site_config", "value": {
-                "brand": {"site_name": " Zebra ", "site_logo": "/uploads/common/l.png"},
+                "brand": {"site_name": " Zebra ", "site_logo": "/uploads/common/l.png", "site_logo_dark": "/uploads/common/d.png"},
                 "currency": "usd",
                 "storefront_template": "evil",
                 "scripts": [{"name": "ga", "code": "<script>1</script>", "position": "footer", "enabled": true}],
@@ -28,6 +28,7 @@ async fn generic_settings_get_put_normalize() {
     let d = data(&saved);
     assert_eq!(d["brand"]["site_name"], "Zebra");
     assert_eq!(d["brand"]["site_logo"], "/uploads/common/l.png");
+    assert_eq!(d["brand"]["site_logo_dark"], "/uploads/common/d.png");
     assert_eq!(d["currency"], "USD");
     // SET-04: enum settings are whitelisted
     assert_eq!(d["storefront_template"], "classic");

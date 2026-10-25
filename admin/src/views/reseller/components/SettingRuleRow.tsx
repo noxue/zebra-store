@@ -19,6 +19,7 @@ export const SettingRuleRow = defineComponent({
       default: undefined,
     },
     hint: String,
+    sharedBase: String,
   },
   setup(props) {
     const { t } = useI18n()
@@ -26,7 +27,7 @@ export const SettingRuleRow = defineComponent({
       const f = props.form
       const invalid = props.preview?.valid === false
       return (
-        <div class="grid gap-3 lg:grid-cols-[minmax(160px,1fr)_80px_170px_repeat(3,minmax(100px,1fr))_minmax(130px,160px)] lg:items-start">
+        <div class="grid gap-3 lg:grid-cols-[minmax(160px,1fr)_80px_140px_repeat(4,minmax(100px,1fr))_minmax(130px,160px)] lg:items-start">
           <FormField label={props.label}>
             <div class="flex min-h-9 items-center rounded-zs-sm border border-line bg-surface-muted px-3 py-1.5 text-sm">{props.name}</div>
           </FormField>
@@ -43,6 +44,9 @@ export const SettingRuleRow = defineComponent({
                 value: m,
               }))}
             />
+          </FormField>
+          <FormField label={t('admin.resellerProductSettings.agentPrice')} hint={props.sharedBase ? `${t('admin.resellerProductSettings.sharedAgentPrice')}: ${props.sharedBase}` : t('admin.resellerProductSettings.agentPriceHint')}>
+            <Input v-model={f.agent_price_amount} type="number" step="0.01" min={0} placeholder={t('admin.resellerProductSettings.agentPricePlaceholder')} />
           </FormField>
           <FormField label={t('admin.resellerProductSettings.modes.markupPercent')}>
             <Input v-model={f.markup_percent} mono />

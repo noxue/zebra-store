@@ -158,6 +158,12 @@ describe('buildProductPayload', () => {
     expect(buildProductPayload(form, t, opts).skus[0]!.agent_price_amount).toBeNull()
     sku.agent_price_amount = 0
     expect(() => buildProductPayload(form, t, opts)).toThrow('skuAgentPriceInvalid')
+    sku.agent_price_amount = 29
+    sku.cost_price_amount = 30
+    expect(() => buildProductPayload(form, t, opts)).toThrow('skuAgentPriceInvalid')
+    sku.agent_price_amount = ''
+    sku.price_amount = 25
+    expect(() => buildProductPayload(form, t, opts)).toThrow('skuAgentPriceInvalid')
   })
 
   it('zeroes SKU manual stock for auto fulfilment', () => {

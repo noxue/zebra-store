@@ -27,6 +27,8 @@ pub struct Model {
     pub fixed_markup_amount: Decimal,
     #[sea_orm(column_type = "Decimal(Some((20, 2)))")]
     pub fixed_price_amount: Decimal,
+    #[sea_orm(column_type = "Decimal(Some((20, 2)))", nullable)]
+    pub agent_price_amount: Option<Decimal>,
     #[sea_orm(indexed, default_value = 0)]
     pub sort_order: i32,
     #[sea_orm(column_type = "Json", nullable)]

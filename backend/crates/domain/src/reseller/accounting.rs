@@ -547,6 +547,49 @@ mod tests {
     }
 
     #[test]
+    fn payout_qr_validation_preserves_legacy_withdrawals() {
+        let legacy = withdraw_draft(d("1"), "CNY", "alipay", "a").unwrap_or_else(|e| panic!("{e}"));
+        assert!(legacy.payee_name.is_empty());
+        assert!(legacy.qr_code_url.is_empty());
+        let valid = withdraw_draft_with_payout(
+            d("1"),
+            "CNY",
+            "wechat",
+            "a",
+            " 张三 ",
+            "/uploads/reseller/qr.png",
+        )
+        .unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(valid.payee_name, "张三");
+        assert_eq!(valid.qr_code_url, "/uploads/reseller/qr.png");
+        for qr in [
+            "javascript:alert(1)",
+            "/uploads/reseller/../other.png",
+            "https://other.test/qr.png",
+        ] {
+            assert_eq!(
+                withdraw_draft_with_payout(d("1"), "CNY", "wechat", "a", "张三", qr)
+                    .unwrap_err()
+                    .key(),
+                keys::WITHDRAW_PAYOUT_INVALID
+            );
+        }
+        assert_eq!(
+            withdraw_draft_with_payout(
+                d("1"),
+                "CNY",
+                "wechat",
+                "a",
+                &"x".repeat(101),
+                "/uploads/reseller/qr.png"
+            )
+            .unwrap_err()
+            .key(),
+            keys::WITHDRAW_PAYOUT_INVALID
+        );
+    }
+
+    #[test]
     fn keys_format() {
         assert_eq!(profit_key(5), "order_profit:5");
         assert_eq!(refund_key(9), "refund_deduct:9");

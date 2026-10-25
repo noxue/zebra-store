@@ -136,6 +136,265 @@ async fn lqa_r1_reseller_catalog_matches_checkout() {
     assert!(xml.contains("/products/qa-int-b"));
 }
 
+// RSL-07/RSL-09: no per-product rule is needed to sell at the main-site SKU price.
+#[tokio::test]
+async fn unconfigured_reseller_uses_main_sale_price_and_agent_profit() {
+    use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter, Set};
+    use zs_infra::db::entity::{orders, product_skus, reseller_order_snapshots};
+
+    let app = App::new().await;
+    let (_, reseller_token, reseller_id) = app.reseller("default-price@example.test", "5").await;
+    let host = app.system_domain(reseller_id, "default-price").await;
+    let (product_id, skus) = app
+        .product("default-main-price", "40.00", &[("40.00", "33.00")])
+        .await;
+    let mut sku = product_skus::Entity::find_by_id(skus[0])
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap()
+        .into_active_model();
+    sku.agent_price_amount = Set(Some("36.00".parse().unwrap()));
+    sku.update(&app.db).await.unwrap();
+
+    let detail = app
+        .call(
+            "GET",
+            &format!("/api/v1/reseller/product-settings/{product_id}"),
+            None,
+            Some(&reseller_token),
+        )
+        .await;
+    assert_eq!(data(&detail)["skus"][0]["base_price_amount"], "36.00");
+    assert_eq!(data(&detail)["skus"][0]["effective_price_amount"], "40.00");
+    assert!(data(&detail)["skus"][0].get("setting").is_none());
+
+    let (_, public) = app
+        .raw(
+            "GET",
+            "/api/v1/public/products/default-main-price",
+            None,
+            None,
+            &[("host", host.as_str())],
+        )
+        .await;
+    assert_eq!(data(&public)["skus"][0]["price_amount"], "40.00");
+
+    let (_, buyer) = app.user("default-price-buyer@example.test").await;
+    let (_, order) = app
+        .raw(
+            "POST",
+            "/api/v1/orders",
+            Some(json!({"items": [{"product_id": product_id, "sku_id": skus[0], "quantity": 1}]})),
+            Some(&buyer),
+            &[("host", host.as_str())],
+        )
+        .await;
+    assert_eq!(data(&order)["total_amount"], "40.00", "{order}");
+    let order_no = data(&order)["order_no"].as_str().unwrap();
+    let order_id = orders::Entity::find()
+        .filter(orders::Column::OrderNo.eq(order_no))
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap()
+        .id;
+    let snapshot = reseller_order_snapshots::Entity::find()
+        .filter(reseller_order_snapshots::Column::OrderId.eq(order_id))
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(snapshot.base_amount, "36.00".parse().unwrap());
+    assert_eq!(snapshot.reseller_amount, "40.00".parse().unwrap());
+    assert_eq!(snapshot.profit_amount, "4.00".parse().unwrap());
+}
+
+// RSL-07/RSL-09: admin base overrides are isolated by reseller, and console edits cannot erase them.
+#[tokio::test]
+async fn reseller_agent_base_isolated_and_used_for_checkout_profit() {
+    use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter, Set};
+    use zs_infra::db::entity::{orders, product_skus, reseller_order_snapshots};
+
+    let app = App::new().await;
+    let (_, owner_token, site_a) = app.reseller("base-a@example.test", "50").await;
+    let (_, _, site_b) = app.reseller("base-b@example.test", "50").await;
+    let host_a = app.system_domain(site_a, "base-a").await;
+    let host_b = app.system_domain(site_b, "base-b").await;
+    let (product, skus) = app
+        .product(
+            "site-agent-base",
+            "100.00",
+            &[("100.00", "70.00"), ("100.00", "75.00")],
+        )
+        .await;
+    for sku_id in &skus {
+        let mut row = product_skus::Entity::find_by_id(*sku_id)
+            .one(&app.db)
+            .await
+            .unwrap()
+            .unwrap()
+            .into_active_model();
+        row.agent_price_amount = Set(Some("80.00".parse().unwrap()));
+        row.update(&app.db).await.unwrap();
+    }
+    let admin_url = format!("/api/v1/admin/resellers/product-settings/{site_a}/{product}");
+    let save = app.admin_call("PUT", &admin_url, Some(json!({"settings": [
+        {"sku_id": 0, "is_listed": true, "pricing_mode": "fixed_price", "fixed_price_amount": "90.00", "agent_price_amount": "75.00"},
+        {"sku_id": skus[1], "is_listed": true, "pricing_mode": "markup_percent", "markup_percent": "0", "agent_price_amount": "85.00"}
+    ]}))).await;
+    assert_eq!(save["status_code"], 0, "{save}");
+    assert_eq!(data(&save)["skus"][0]["base_price_amount"], "75.00");
+    assert_eq!(data(&save)["skus"][1]["base_price_amount"], "85.00");
+
+    let (_, a) = app
+        .raw(
+            "GET",
+            "/api/v1/public/products/site-agent-base",
+            None,
+            None,
+            &[("host", host_a.as_str())],
+        )
+        .await;
+    let (_, b) = app
+        .raw(
+            "GET",
+            "/api/v1/public/products/site-agent-base",
+            None,
+            None,
+            &[("host", host_b.as_str())],
+        )
+        .await;
+    let (_, main) = app
+        .raw(
+            "GET",
+            "/api/v1/public/products/site-agent-base",
+            None,
+            None,
+            &[("host", MAIN)],
+        )
+        .await;
+    assert_eq!(data(&a)["skus"][0]["price_amount"], "90.00");
+    assert_eq!(data(&a)["skus"][1]["price_amount"], "85.00");
+    assert_eq!(data(&b)["skus"][0]["price_amount"], "100.00");
+    assert_eq!(data(&main)["skus"][0]["price_amount"], "100.00");
+
+    let (_, buyer) = app.user("base-buyer@example.test").await;
+    let (_, order) = app
+        .raw(
+            "POST",
+            "/api/v1/orders",
+            Some(json!({"items": [{"product_id": product, "sku_id": skus[0], "quantity": 1}]})),
+            Some(&buyer),
+            &[("host", host_a.as_str())],
+        )
+        .await;
+    assert_eq!(data(&order)["total_amount"], "90.00", "{order}");
+    let order_no = data(&order)["order_no"].as_str().unwrap();
+    let order_id = orders::Entity::find()
+        .filter(orders::Column::OrderNo.eq(order_no))
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap()
+        .id;
+    let snapshot = reseller_order_snapshots::Entity::find()
+        .filter(reseller_order_snapshots::Column::OrderId.eq(order_id))
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        zs_shared::money::Amount::new(snapshot.base_amount).to_string(),
+        "75.00"
+    );
+    assert_eq!(
+        zs_shared::money::Amount::new(snapshot.profit_amount).to_string(),
+        "15.00"
+    );
+
+    // A later cost increase invalidates only site A's cheaper base for this SKU.
+    let mut raised = product_skus::Entity::find_by_id(skus[0])
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap()
+        .into_active_model();
+    raised.cost_price_amount = Set("76.00".parse().unwrap());
+    raised.update(&app.db).await.unwrap();
+    let (_, a_after_cost) = app
+        .raw(
+            "GET",
+            "/api/v1/public/products/site-agent-base",
+            None,
+            None,
+            &[("host", host_a.as_str())],
+        )
+        .await;
+    let (_, b_after_cost) = app
+        .raw(
+            "GET",
+            "/api/v1/public/products/site-agent-base",
+            None,
+            None,
+            &[("host", host_b.as_str())],
+        )
+        .await;
+    assert_eq!(data(&a_after_cost)["skus"].as_array().unwrap().len(), 1);
+    assert_eq!(data(&b_after_cost)["skus"].as_array().unwrap().len(), 2);
+    let (_, denied) = app
+        .raw(
+            "POST",
+            "/api/v1/orders",
+            Some(json!({"items": [{"product_id": product, "sku_id": skus[0], "quantity": 1}]})),
+            Some(&buyer),
+            &[("host", host_a.as_str())],
+        )
+        .await;
+    assert_ne!(denied["status_code"], 0);
+    let mut restored = product_skus::Entity::find_by_id(skus[0])
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap()
+        .into_active_model();
+    restored.cost_price_amount = Set("70.00".parse().unwrap());
+    restored.update(&app.db).await.unwrap();
+
+    let console_url = format!("/api/v1/reseller/product-settings/{product}");
+    let attempted = app.call("PUT", &console_url, Some(json!({"settings": [{"sku_id": 0, "is_listed": true, "agent_price_amount": "60.00"}]})), Some(&owner_token)).await;
+    assert_ne!(attempted["status_code"], 0);
+    let edited = app
+        .call(
+            "PUT",
+            &console_url,
+            Some(
+                json!({"settings": [{"sku_id": 0, "is_listed": true, "pricing_mode": "inherit"}]}),
+            ),
+            Some(&owner_token),
+        )
+        .await;
+    assert_eq!(edited["status_code"], 0, "{edited}");
+    assert_eq!(data(&edited)["skus"][0]["base_price_amount"], "75.00");
+    let reset = app
+        .call("DELETE", &console_url, None, Some(&owner_token))
+        .await;
+    assert_eq!(reset["status_code"], 0, "{reset}");
+    let after_reset = app.admin_call("GET", &admin_url, None).await;
+    assert_eq!(
+        data(&after_reset)["product_setting"]["agent_price_amount"],
+        "75.00"
+    );
+
+    let below_cost = app.admin_call("PUT", &admin_url, Some(json!({"settings": [{"sku_id": 0, "is_listed": true, "agent_price_amount": "69.99"}]}))).await;
+    assert_ne!(below_cost["status_code"], 0);
+    let preview = app.admin_call("POST", &format!("{admin_url}/preview"), Some(json!({"settings": [{"sku_id": 0, "is_listed": true, "agent_price_amount": "69.99"}]}))).await;
+    assert_eq!(data(&preview)["items"][0]["valid"], false);
+    let clear = app.admin_call("PUT", &admin_url, Some(json!({"settings": [{"sku_id": 0, "is_listed": true, "pricing_mode": "inherit", "agent_price_amount": null}]}))).await;
+    assert_eq!(clear["status_code"], 0, "{clear}");
+    assert_eq!(data(&clear)["skus"][0]["base_price_amount"], "80.00");
+}
+
 /// Paid reseller-site order of `qty` × the single SKU of `slug`: `(parent_id, child_id)`.
 async fn site_sale(app: &App, host: &str, buyer: &str, product: i64, sku: i64) -> (i64, i64) {
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};

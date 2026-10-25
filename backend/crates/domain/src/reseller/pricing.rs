@@ -77,12 +77,13 @@ pub fn apply_rule(
 }
 
 /// Resolves the reseller unit price: SKU rule → product rule → profile default markup
-/// → base price (`ResolveUnitAmount`). `inherit` rules fall through.
+/// → main-site retail price (`ResolveUnitAmount`). `inherit` rules fall through.
 pub fn resolve_unit_amount(
     profile: &Profile,
     product_setting: Option<&ProductSetting>,
     sku_setting: Option<&ProductSetting>,
     base: Decimal,
+    retail: Decimal,
 ) -> (Decimal, PricingRule) {
     if let Some(s) = sku_setting.filter(|s| s.pricing_mode != PricingMode::Inherit) {
         return apply_rule(s, RuleSource::Sku, base);
@@ -102,7 +103,8 @@ pub fn resolve_unit_amount(
         );
     }
     (
-        round2(base),
+        // An inherited sale price must never fall below the reseller's payable base.
+        round2(retail.max(base)),
         PricingRule {
             mode: PricingMode::Inherit,
             source: RuleSource::Inherit,
@@ -120,14 +122,9 @@ pub fn validate_unit_amount(
     base: Decimal,
     reseller: Decimal,
 ) -> Result<()> {
+    validate_price_floor(cost, base, reseller)?;
     let base = round2(base);
     let reseller = round2(reseller);
-    if reseller <= Decimal::ZERO || reseller < base {
-        return Err(Error::bad_request(keys::PRICE_INVALID));
-    }
-    if cost > Decimal::ZERO && reseller < round2(cost) {
-        return Err(Error::bad_request(keys::PRICE_INVALID));
-    }
     let max = profile.max_markup_percent.decimal();
     if max > Decimal::ZERO && base > Decimal::ZERO {
         let implied = round4((reseller - base) / base * Decimal::ONE_HUNDRED);
@@ -138,6 +135,32 @@ pub fn validate_unit_amount(
     Ok(())
 }
 
+fn validate_price_floor(cost: Decimal, base: Decimal, reseller: Decimal) -> Result<()> {
+    let reseller = round2(reseller);
+    if reseller <= Decimal::ZERO
+        || reseller < round2(base)
+        || (cost > Decimal::ZERO && reseller < round2(cost))
+    {
+        return Err(Error::bad_request(keys::PRICE_INVALID));
+    }
+    Ok(())
+}
+
+fn validate_resolved_unit_amount(
+    profile: &Profile,
+    cost: Decimal,
+    base: Decimal,
+    reseller: Decimal,
+    source: RuleSource,
+) -> Result<()> {
+    // The main site's own retail price is not a markup chosen by the reseller.
+    if source == RuleSource::Inherit {
+        validate_price_floor(cost, base, reseller)
+    } else {
+        validate_unit_amount(profile, cost, base, reseller)
+    }
+}
+
 /// A SKU as seen by the pricing rules.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PricedSku {
@@ -145,6 +168,8 @@ pub struct PricedSku {
     pub sku_code: String,
     pub spec_values: Value,
     pub price: Amount,
+    /// Main-site SKU sale price, distinct from the reseller's payable base.
+    pub retail_price: Amount,
     pub cost_price: Amount,
     pub is_active: bool,
 }
@@ -156,6 +181,8 @@ pub struct PricedProduct {
     pub slug: String,
     pub title: Value,
     pub price: Amount,
+    /// Main-site product sale price (or first active SKU sale price).
+    pub retail_price: Amount,
     pub cost_price: Amount,
     pub is_active: bool,
     pub skus: Vec<PricedSku>,
@@ -170,6 +197,7 @@ pub struct SettingInput {
     pub markup_percent: Decimal,
     pub fixed_markup_amount: Decimal,
     pub fixed_price_amount: Decimal,
+    pub agent_price_amount: Option<Amount>,
     pub sort_order: i32,
     pub content: Option<serde_json::Map<String, Value>>,
     pub instructions: Option<serde_json::Map<String, Value>>,
@@ -193,6 +221,7 @@ pub fn draft_setting(input: &SettingInput) -> Result<ProductSetting> {
     s.markup_percent = Amount::new(input.markup_percent);
     s.fixed_markup_amount = Amount::new(input.fixed_markup_amount);
     s.fixed_price_amount = Amount::new(input.fixed_price_amount);
+    s.agent_price_amount = input.agent_price_amount;
     s.sort_order = input.sort_order;
     s.content = input.content.clone();
     s.instructions = input.instructions.clone();
@@ -206,33 +235,96 @@ pub fn normalize_setting(
     product: &PricedProduct,
     input: &SettingInput,
 ) -> Result<ProductSetting> {
+    normalize_setting_with_parent(profile, product, input, None)
+}
+
+pub fn normalize_setting_with_parent(
+    profile: &Profile,
+    product: &PricedProduct,
+    input: &SettingInput,
+    product_setting: Option<&ProductSetting>,
+) -> Result<ProductSetting> {
     let setting = draft_setting(input)?;
-    if !setting.is_listed {
-        return Ok(setting);
-    }
     if input.sku_id > 0 {
         let sku = product
             .skus
             .iter()
             .find(|s| s.id == input.sku_id && s.is_active)
             .ok_or_else(|| Error::bad_request(keys::SKU_INVALID))?;
-        let base = round2(sku.price.decimal());
-        let (price, _) = resolve_unit_amount(profile, None, Some(&setting), base);
-        validate_unit_amount(profile, sku.cost_price.decimal(), base, price)?;
+        let base = resolve_base(product_setting, Some(&setting), sku.price.decimal());
+        validate_base(sku.cost_price.decimal(), base)?;
+        if !setting.is_listed {
+            return Ok(setting);
+        }
+        let (price, rule) = resolve_unit_amount(
+            profile,
+            product_setting,
+            Some(&setting),
+            base,
+            sku.retail_price.decimal(),
+        );
+        validate_resolved_unit_amount(profile, sku.cost_price.decimal(), base, price, rule.source)?;
         return Ok(setting);
     }
     if product.skus.is_empty() {
-        let base = round2(product.price.decimal());
-        let (price, _) = resolve_unit_amount(profile, Some(&setting), None, base);
-        validate_unit_amount(profile, product.cost_price.decimal(), base, price)?;
+        let base = resolve_base(Some(&setting), None, product.price.decimal());
+        validate_base(product.cost_price.decimal(), base)?;
+        if !setting.is_listed {
+            return Ok(setting);
+        }
+        let (price, rule) = resolve_unit_amount(
+            profile,
+            Some(&setting),
+            None,
+            base,
+            product.retail_price.decimal(),
+        );
+        validate_resolved_unit_amount(
+            profile,
+            product.cost_price.decimal(),
+            base,
+            price,
+            rule.source,
+        )?;
         return Ok(setting);
     }
     for sku in product.skus.iter().filter(|s| s.is_active) {
-        let base = round2(sku.price.decimal());
-        let (price, _) = resolve_unit_amount(profile, Some(&setting), None, base);
-        validate_unit_amount(profile, sku.cost_price.decimal(), base, price)?;
+        let base = resolve_base(Some(&setting), None, sku.price.decimal());
+        validate_base(sku.cost_price.decimal(), base)?;
+        if !setting.is_listed {
+            continue;
+        }
+        let (price, rule) = resolve_unit_amount(
+            profile,
+            Some(&setting),
+            None,
+            base,
+            sku.retail_price.decimal(),
+        );
+        validate_resolved_unit_amount(profile, sku.cost_price.decimal(), base, price, rule.source)?;
     }
     Ok(setting)
+}
+
+/// SKU override wins over product override; both inherit the shared SKU agent price.
+pub fn resolve_base(
+    product_setting: Option<&ProductSetting>,
+    sku_setting: Option<&ProductSetting>,
+    shared_base: Decimal,
+) -> Decimal {
+    round2(
+        sku_setting
+            .and_then(|s| s.agent_price_amount)
+            .or_else(|| product_setting.and_then(|s| s.agent_price_amount))
+            .map_or(shared_base, Amount::decimal),
+    )
+}
+
+pub fn validate_base(cost: Decimal, base: Decimal) -> Result<()> {
+    if base <= Decimal::ZERO || (cost > Decimal::ZERO && base < round2(cost)) {
+        return Err(Error::bad_request(keys::PRICE_INVALID));
+    }
+    Ok(())
 }
 
 /// Product-level and SKU-level rules of one product.
@@ -286,8 +378,14 @@ pub fn effective_prices(
     let product_setting = settings.iter().find(|s| s.sku_id == 0);
     let mut out = EffectivePrices::default();
     if let Some(ps) = product_setting.filter(|s| s.is_listed) {
-        let (price, rule) =
-            resolve_unit_amount(profile, Some(ps), None, round2(product.price.decimal()));
+        let base = resolve_base(Some(ps), None, product.price.decimal());
+        let (price, rule) = resolve_unit_amount(
+            profile,
+            Some(ps),
+            None,
+            base,
+            product.retail_price.decimal(),
+        );
         out.prices.insert(0, price);
         out.sources.insert(0, rule.source);
     }
@@ -299,11 +397,13 @@ pub fn effective_prices(
         if sku_setting.is_some_and(|s| !s.is_listed) {
             continue;
         }
+        let base = resolve_base(product_setting, sku_setting, sku.price.decimal());
         let (price, rule) = resolve_unit_amount(
             profile,
             product_setting,
             sku_setting,
-            round2(sku.price.decimal()),
+            base,
+            sku.retail_price.decimal(),
         );
         out.prices.insert(sku.id, price);
         out.sources.insert(sku.id, rule.source);
@@ -347,7 +447,7 @@ pub fn preview(
             sku_settings.insert(input.sku_id, s);
         }
     }
-    let product_base = round2(product.price.decimal());
+    let product_base = resolve_base(product_setting.as_ref(), None, product.price.decimal());
     let mut head = PreviewItem {
         sku_id: 0,
         is_listed: product_setting.as_ref().is_none_or(|s| s.is_listed),
@@ -357,19 +457,46 @@ pub fn preview(
         error_code: "",
     };
     if let Some(ps) = product_setting.as_ref().filter(|s| s.is_listed) {
-        let (price, _) = resolve_unit_amount(profile, Some(ps), None, product_base);
+        let (price, rule) = resolve_unit_amount(
+            profile,
+            Some(ps),
+            None,
+            product_base,
+            product.retail_price.decimal(),
+        );
         head.effective_price = price;
         let check = if product.skus.is_empty() {
-            validate_unit_amount(profile, product.cost_price.decimal(), product_base, price)
+            validate_base(product.cost_price.decimal(), product_base).and_then(|()| {
+                validate_resolved_unit_amount(
+                    profile,
+                    product.cost_price.decimal(),
+                    product_base,
+                    price,
+                    rule.source,
+                )
+            })
         } else {
             product
                 .skus
                 .iter()
                 .filter(|s| s.is_active)
                 .try_for_each(|sku| {
-                    let base = round2(sku.price.decimal());
-                    let (p, _) = resolve_unit_amount(profile, Some(ps), None, base);
-                    validate_unit_amount(profile, sku.cost_price.decimal(), base, p)
+                    let base = resolve_base(Some(ps), None, sku.price.decimal());
+                    let (p, rule) = resolve_unit_amount(
+                        profile,
+                        Some(ps),
+                        None,
+                        base,
+                        sku.retail_price.decimal(),
+                    );
+                    validate_base(sku.cost_price.decimal(), base)?;
+                    validate_resolved_unit_amount(
+                        profile,
+                        sku.cost_price.decimal(),
+                        base,
+                        p,
+                        rule.source,
+                    )
                 })
         };
         if let Err(e) = check {
@@ -380,7 +507,7 @@ pub fn preview(
     let mut items = vec![head];
     for sku in product.skus.iter().filter(|s| s.is_active) {
         let sku_setting = sku_settings.get(&sku.id);
-        let base = round2(sku.price.decimal());
+        let base = resolve_base(product_setting.as_ref(), sku_setting, sku.price.decimal());
         let mut item = PreviewItem {
             sku_id: sku.id,
             is_listed: true,
@@ -396,9 +523,23 @@ pub fn preview(
             items.push(item);
             continue;
         }
-        let (price, _) = resolve_unit_amount(profile, product_setting.as_ref(), sku_setting, base);
+        let (price, rule) = resolve_unit_amount(
+            profile,
+            product_setting.as_ref(),
+            sku_setting,
+            base,
+            sku.retail_price.decimal(),
+        );
         item.effective_price = price;
-        if let Err(e) = validate_unit_amount(profile, sku.cost_price.decimal(), base, price) {
+        if let Err(e) = validate_base(sku.cost_price.decimal(), base).and_then(|()| {
+            validate_resolved_unit_amount(
+                profile,
+                sku.cost_price.decimal(),
+                base,
+                price,
+                rule.source,
+            )
+        }) {
             item.valid = false;
             item.error_code = preview_code(&e);
         }
@@ -444,9 +585,26 @@ pub fn display_prices(
             out.hidden_sku_ids.insert(sku.id);
             continue;
         }
-        let base = round2(sku.price.decimal());
-        let (price, _) = resolve_unit_amount(profile, product_setting, sku_setting, base);
-        if validate_unit_amount(profile, sku.cost_price.decimal(), base, price).is_err() {
+        let base = resolve_base(product_setting, sku_setting, sku.price.decimal());
+        let (price, rule) = resolve_unit_amount(
+            profile,
+            product_setting,
+            sku_setting,
+            base,
+            sku.retail_price.decimal(),
+        );
+        if validate_base(sku.cost_price.decimal(), base)
+            .and_then(|()| {
+                validate_resolved_unit_amount(
+                    profile,
+                    sku.cost_price.decimal(),
+                    base,
+                    price,
+                    rule.source,
+                )
+            })
+            .is_err()
+        {
             // Dirty rule (base / cost price changed after saving): hide the SKU only.
             out.hidden_sku_ids.insert(sku.id);
             continue;
@@ -460,14 +618,29 @@ pub fn display_prices(
         }
     }
     if product.skus.is_empty() {
-        let (price, _) = resolve_unit_amount(
+        let base = resolve_base(product_setting, None, product.price.decimal());
+        let (price, rule) = resolve_unit_amount(
             profile,
             product_setting,
             None,
-            round2(product.price.decimal()),
+            base,
+            product.retail_price.decimal(),
         );
-        out.visible = true;
-        out.display_price = Amount::new(price);
+        if validate_base(product.cost_price.decimal(), base)
+            .and_then(|()| {
+                validate_resolved_unit_amount(
+                    profile,
+                    product.cost_price.decimal(),
+                    base,
+                    price,
+                    rule.source,
+                )
+            })
+            .is_ok()
+        {
+            out.visible = true;
+            out.display_price = Amount::new(price);
+        }
     }
     out
 }
@@ -501,8 +674,10 @@ pub struct OrderLine {
     pub product_id: Id,
     pub sku_id: Id,
     pub quantity: i32,
-    /// SKU base (main-site) unit price.
+    /// Effective reseller agent base for this SKU.
     pub base_unit: Amount,
+    /// SKU sale price on the main site.
+    pub retail_unit: Amount,
     /// SKU cost price (`0` = none).
     pub cost: Amount,
 }
@@ -520,9 +695,16 @@ pub fn price_order_line(
     if product_setting.is_some_and(|s| !s.is_listed) || sku_setting.is_some_and(|s| !s.is_listed) {
         return Err(Error::bad_request(keys::PRODUCT_NOT_LISTED));
     }
-    let base = round2(line.base_unit.decimal());
-    let (unit, rule) = resolve_unit_amount(profile, product_setting, sku_setting, base);
-    validate_unit_amount(profile, line.cost.decimal(), base, unit)?;
+    let base = resolve_base(product_setting, sku_setting, line.base_unit.decimal());
+    validate_base(line.cost.decimal(), base)?;
+    let (unit, rule) = resolve_unit_amount(
+        profile,
+        product_setting,
+        sku_setting,
+        base,
+        line.retail_unit.decimal(),
+    );
+    validate_resolved_unit_amount(profile, line.cost.decimal(), base, unit, rule.source)?;
     let qty = Decimal::from(line.quantity);
     let base_total = round2(base * qty);
     let reseller_total = round2(unit * qty);
@@ -716,6 +898,7 @@ mod tests {
             sku_code: format!("S{id}"),
             spec_values: Value::Null,
             price: amt(price),
+            retail_price: amt(price),
             cost_price: amt(cost),
             is_active: true,
         }
@@ -727,6 +910,7 @@ mod tests {
             slug: "p".into(),
             title: json!({"zh-CN": "P"}),
             price: amt("100"),
+            retail_price: amt("100"),
             cost_price: amt("0"),
             is_active: true,
             skus,
@@ -760,6 +944,7 @@ mod tests {
                 sku_id: row.id,
                 quantity: 2,
                 base_unit: row.reseller_base_price(),
+                retail_unit: row.price_amount,
                 cost: row.cost_price_amount,
             },
         )
@@ -772,15 +957,136 @@ mod tests {
         assert_eq!(row.reseller_base_price(), amt("40"));
     }
 
+    // RSL-07/RSL-09: an unconfigured site sells at main retail while profit uses the agent base.
+    #[test]
+    fn inherited_sale_price_uses_main_retail_and_keeps_agent_profit() {
+        use crate::catalog::product::testkit::{product as catalog_product, sku as catalog_sku};
+        use crate::catalog::storefront::priced_product;
+
+        let mut row = catalog_sku(1, "DEFAULT", true);
+        row.price_amount = amt("40");
+        row.agent_price_amount = Some(amt("36"));
+        row.cost_price_amount = amt("33");
+        let priced = priced_product(&catalog_product(vec![row.clone()]));
+        let profile = prof("0", "5");
+        assert_eq!(
+            preview(&profile, &priced, &[]).unwrap()[1].effective_price,
+            d("40")
+        );
+        assert_eq!(
+            effective_prices(&profile, &priced, &[]).prices[&row.id],
+            d("40")
+        );
+        assert_eq!(
+            display_prices(&profile, &priced, &[]).sku_prices[&row.id],
+            amt("40")
+        );
+        let line = OrderLine {
+            product_id: priced.id,
+            sku_id: row.id,
+            quantity: 2,
+            base_unit: row.reseller_base_price(),
+            retail_unit: row.price_amount,
+            cost: row.cost_price_amount,
+        };
+        let order = price_order_line(&profile, &SettingIndex::default(), &line).unwrap();
+        assert_eq!(order.base_unit_amount, d("36"));
+        assert_eq!(order.reseller_unit_amount, d("40"));
+        assert_eq!(order.profit_amount, d("8"));
+        assert_eq!(order.rule_source, RuleSource::Inherit);
+
+        // A manually selected price remains subject to the administrator's markup cap.
+        let manual = rule(row.id, PricingMode::FixedPrice, "40");
+        assert_eq!(
+            price_order_line(&profile, &SettingIndex::new([&manual]), &line)
+                .unwrap_err()
+                .key(),
+            keys::MARKUP_EXCEEDED
+        );
+        // If the main site is cheaper than the payable base, the default remains sellable.
+        assert_eq!(
+            resolve_unit_amount(&profile, None, None, d("42"), d("40")).0,
+            d("42")
+        );
+    }
+
+    // RSL-07/RSL-09: each site uses its own base, even when its sale price is below main shop.
+    #[test]
+    fn site_agent_base_controls_sale_floor_profit_and_fallback() {
+        let profile = prof("0", "50");
+        let mut product_rule = rule(0, PricingMode::FixedPrice, "90");
+        product_rule.agent_price_amount = Some(amt("75"));
+        let index = SettingIndex::new([&product_rule]);
+        let line = OrderLine {
+            product_id: 1,
+            sku_id: 11,
+            quantity: 2,
+            base_unit: amt("80"),
+            retail_unit: amt("80"),
+            cost: amt("70"),
+        };
+        let site = price_order_line(&profile, &index, &line).unwrap();
+        assert_eq!(site.base_unit_amount, d("75"));
+        assert_eq!(site.reseller_unit_amount, d("90"));
+        assert_eq!(site.profit_amount, d("30"));
+        let other_site = price_order_line(&profile, &SettingIndex::default(), &line).unwrap();
+        assert_eq!(other_site.base_unit_amount, d("80"));
+        assert_eq!(other_site.reseller_unit_amount, d("80"));
+
+        let mut sku_rule = rule(11, PricingMode::Inherit, "");
+        sku_rule.agent_price_amount = Some(amt("85"));
+        assert_eq!(
+            resolve_base(Some(&product_rule), Some(&sku_rule), d("80")),
+            d("85")
+        );
+        let index = SettingIndex::new([&product_rule, &sku_rule]);
+        assert_eq!(
+            price_order_line(&profile, &index, &line)
+                .unwrap()
+                .base_unit_amount,
+            d("85")
+        );
+
+        sku_rule.agent_price_amount = Some(amt("69"));
+        assert_eq!(
+            price_order_line(&profile, &SettingIndex::new([&sku_rule]), &line)
+                .unwrap_err()
+                .key(),
+            keys::PRICE_INVALID
+        );
+        let priced = product(vec![sku(11, "80", "70")]);
+        assert!(
+            display_prices(&profile, &priced, &[sku_rule.clone()])
+                .hidden_sku_ids
+                .contains(&11)
+        );
+        let input = SettingInput {
+            sku_id: 11,
+            is_listed: false,
+            agent_price_amount: Some(amt("69")),
+            ..SettingInput::default()
+        };
+        assert_eq!(
+            normalize_setting(&profile, &priced, &input)
+                .unwrap_err()
+                .key(),
+            keys::PRICE_INVALID
+        );
+    }
+
     #[test]
     fn pricing_modes() {
         let p = prof("0", "0");
         let base = d("100");
-        assert_eq!(resolve_unit_amount(&p, None, None, base).0, d("100.00"));
+        assert_eq!(
+            resolve_unit_amount(&p, None, None, base, base).0,
+            d("100.00")
+        );
         let (price, r) = resolve_unit_amount(
             &p,
             Some(&rule(0, PricingMode::MarkupPercent, "12.5")),
             None,
+            base,
             base,
         );
         assert_eq!((price, r.source), (d("112.50"), RuleSource::Product));
@@ -789,7 +1095,8 @@ mod tests {
                 &p,
                 None,
                 Some(&rule(2, PricingMode::FixedMarkup, "7.25")),
-                base
+                base,
+                base,
             )
             .0,
             d("107.25")
@@ -798,6 +1105,7 @@ mod tests {
             &p,
             Some(&rule(0, PricingMode::MarkupPercent, "50")),
             Some(&rule(2, PricingMode::FixedPrice, "130")),
+            base,
             base,
         );
         assert_eq!(
@@ -810,11 +1118,17 @@ mod tests {
             Some(&rule(0, PricingMode::Inherit, "")),
             Some(&rule(2, PricingMode::Inherit, "")),
             base,
+            base,
         );
         assert_eq!((price, r.source), (d("100.00"), RuleSource::Inherit));
         let p10 = prof("10", "0");
-        let (price, r) =
-            resolve_unit_amount(&p10, Some(&rule(0, PricingMode::Inherit, "")), None, base);
+        let (price, r) = resolve_unit_amount(
+            &p10,
+            Some(&rule(0, PricingMode::Inherit, "")),
+            None,
+            base,
+            base,
+        );
         assert_eq!((price, r.source), (d("110.00"), RuleSource::Profile));
         // half away from zero at cents
         assert_eq!(apply_markup_percent(d("0.05"), d("50")), d("0.08"));
@@ -866,6 +1180,7 @@ mod tests {
             sku_id: 2,
             quantity: 3,
             base_unit: amt("100"),
+            retail_unit: amt("100"),
             cost: amt("90"),
         };
         let item = price_order_line(&p, &index, &line).unwrap_or_else(|e| panic!("{e}"));
@@ -937,6 +1252,7 @@ mod tests {
             sku_id: 12,
             quantity: 1,
             base_unit: amt("100"),
+            retail_unit: amt("100"),
             cost: amt("0"),
         };
         assert_eq!(
@@ -960,6 +1276,7 @@ mod tests {
             markup_percent: d(v),
             fixed_markup_amount: d(v),
             fixed_price_amount: d(v),
+            agent_price_amount: None,
             sort_order: 0,
             content: None,
             instructions: None,

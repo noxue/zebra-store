@@ -281,7 +281,8 @@ A separate layout with ResellerConsoleTopbar. Pages:
 - **Site:** ResellerSiteConfigPanel. Fields: site_name, logo, favicon (upload), announcement (localized, rich text via tiptap), support (telegram/whatsapp/email/url), SEO, footer_links, nav_config.
 - **Products:** ResellerProductSettingsPanel and ResellerProductRuleEditor.
   - Per-SKU `pricing_mode`: inherit, markup_percent, fixed_markup, fixed_price; plus is_listed and sort_order; preview, save, reset.
-  - Reseller pricing starts from each SKU's agent_price_amount when set, otherwise its main-shop price_amount; the main-shop display and checkout continue using price_amount.
+  - Reseller pricing base resolves from the site/SKU admin agent-price override, then site/product override, then the shared SKU agent price, then the main-shop price. A reseller sale price may be below the main-shop price but must cover its effective base and SKU cost.
+  - The reseller console labels the effective agent price as **成本价** (the reseller's purchase cost) and the customer-facing effective price as **售价**. List rows and product-level editor badges summarize the listed SKUs' own effective base prices; SKU editor badges show each SKU's effective base. The product's main-shop price is never used as the console's cost display. For multiple listed SKUs, display the minimum–maximum price range.
   - The product-level rule has independent optional `content` and `instructions` localized overrides. Null inherits the main product; the delivery instructions are snapshotted into new reseller orders.
 - **Orders:** filters (status, order_no, date range); orders list, stats, detail with profit snapshot.
 - **Finance:** balances, settlement status.
@@ -305,6 +306,7 @@ Three booleans under `site_config.theme` control independent page sections. `sho
   - Computed: `siteIconHref`, `isResellerTenant` (`config.tenant.mode==='reseller'`), `canAccessResellerConsole`.
   - Actions: `setLocale` (writes localStorage `locale` and calls `setI18nLocale`), `loadConfig(force)` (GET `/public/config`; computes the server time offset from `server_time`; injects `config.scripts`), `getServerTime`.
   - A global `useHead` sets `html lang`, the title (`seo.title[locale]`, falling back to `brand.site_name`), favicon (`brand.site_icon` or `/dj.svg`), and meta keywords/description.
+  - Before `/public/config` resolves, the static HTML and Vue root show the same neutral skeleton. The app keeps the document title empty and delays Navbar, page content, template and theme colours until config is applied; a failed request shows a retry action.
 - **`userAuth.ts`:**
   - State: `token` (localStorage `user_token`), `user` (localStorage `user_profile`), `loading`, `challengeToken`, `challengeExpiresAt`.
   - Actions: login, verify2FA, register, sendVerifyCode, telegramLogin, telegramOidcLogin, telegramMiniAppLogin, googleLogin, googleRedirectLogin, forgotPassword, syncUserProfile, logout.
@@ -323,7 +325,7 @@ Three booleans under `site_config.theme` control independent page sections. `sho
 | Setting | Config field | Where used |
 |---|---|---|
 | Site name | `brand.site_name` | Navbar wordmark (fallback "Dujiao-Next"), title |
-| Logo | `brand.site_logo` | Via `getImageUrl`, which prefixes relative `/uploads/...` with `VITE_API_BASE_URL` |
+| Logo | `brand.site_logo`, `brand.site_logo_dark` | Light mode uses `site_logo`; dark mode uses `site_logo_dark` when set, otherwise `site_logo`. Relative upload paths use `getImageUrl`. |
 | Favicon | `brand.site_icon` | Global head |
 | Other brand fields | `brand.site_description{locale}`, `brand.site_url` | Footer; canonical URLs |
 | **Currency** | `config.currency` (3-letter code, default CNY) | `useLocalized().formatPrice` prints `"12.34 CNY"`; amounts are handled as decimal strings via `src/utils/money.ts` (integer cents) |
@@ -333,13 +335,13 @@ Three booleans under `site_config.theme` control independent page sections. `sho
 Other config keys in use:
 - `template_mode` (`card` | `list`), `storefront_template`
 - `nav_config{builtin{blog,notice,about}, custom_items[{title,url,link_type,target,icon,sort_order,enabled}]}`
-- `footer_links`, `contact{telegram,whatsapp}`, `support{…}`
+- `footer_links`, `contact{telegram,whatsapp,email,support_url,wechat_id,wechat_qr_code,qq_number,qq_group,wechat_group_qr_code}`, `support{…}`; reseller contacts replace main-site contacts per tenant.
 - `announcement`, `about`, `legal{terms,privacy}`
 - `captcha{provider:'none'|'image'|'turnstile', scenes{login,register_send_code,reset_send_code,guest_create_order,gift_card_redeem}, turnstile{site_key}}`
 - `telegram_auth{enabled,bot_username,mode,mini_app_url}`, `google_auth{enabled,client_id}`
 - `registration_enabled`, `email_verification_enabled`, `email_domain_allowlist_enabled`, `allowed_email_domains`
-- `wallet_only_payment`, `wallet_recharge_channel_ids`, `affiliate.withdraw_channels`
-- `seo{title,keywords,description,default_og_image}`, `scripts[{name,enabled,position:'head'|'body_end',code}]`
+- `wallet_only_payment`, `wallet_recharge_channel_ids`, `affiliate.withdraw_channels`, `reseller_enabled` (server-wide reseller switch; hides the personal-center entry and guards console routes when false)
+- `seo{title,keywords,description,default_og_image}`, `scripts[{name,enabled,position:'head'|'body_end',scope:'global'|'main'|'reseller',code}]`; reseller scripts run only in a sandboxed frame.
 - `tenant.mode`, `server_time`, `app_version`
 
 ## 6. i18n (`src/i18n/index.ts`, `src/i18n/locales/*.json`)
@@ -470,7 +472,7 @@ Other config keys in use:
 - Site config: `GET|PUT /reseller/site-config`; `POST /reseller/upload` (multipart `file`). A reseller can set `storefront_template` (`classic|vault|aurora|atelier|noir`), `template_mode` (`card|list`), and `theme` hex colour overrides (`primary_color`, `secondary_color`, `accent_color`, `background_color`, `surface_color`, `text_color`). Empty values inherit the main site; selecting a template uses its default palette and light/dark mode unless colours are overridden. Existing branding, support, SEO, announcement and navigation fields remain independently editable.
 - Product settings: `GET /reseller/product-settings`, `GET|PUT|DELETE(?sku_id) /reseller/product-settings/:productId`, `POST …/preview`.
 - Dashboard and orders: `GET /reseller/dashboard`, `GET /reseller/orders`, `GET /reseller/orders/stats`, `GET /reseller/orders/:no`.
-- Finance: `GET /reseller/balance-accounts`, `GET /reseller/ledger-entries`, `GET|POST /reseller/withdraws`.
+- Finance: `GET /reseller/balance-accounts`, `GET /reseller/ledger-entries`, `GET|POST /reseller/withdraws` (`POST` accepts optional `payee_name` and uploaded `qr_code_url` in addition to amount/currency/channel/account; current Alipay/WeChat UI requires both).
 
 ---
 

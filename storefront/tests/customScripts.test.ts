@@ -41,4 +41,43 @@ describe('custom scripts', () => {
     expect(document.querySelectorAll('[data-site-script-managed="1"]')).toHaveLength(0)
     expect(counter()).toBe(1)
   })
+
+  it('isolates reseller code and never runs main-only code on a reseller site', () => {
+    applyCustomScripts([
+      { name: 'main', enabled: true, scope: 'main', code: bump },
+      { name: 'reseller', enabled: true, scope: 'reseller', code: bump },
+    ], 'reseller')
+    expect(counter()).toBe(0)
+    const frame = document.querySelector('iframe[data-site-script-managed]') || document.querySelector('[data-site-script-group="reseller"] iframe')
+    expect(frame).not.toBeNull()
+    expect(frame?.getAttribute('sandbox')).toBe('allow-scripts allow-popups')
+    expect(frame?.getAttribute('sandbox')).not.toContain('allow-same-origin')
+    expect(frame?.hasAttribute('credentialless')).toBe(true)
+    expect((frame as HTMLIFrameElement).srcdoc).toContain('qaA08')
+    expect(document.querySelectorAll('script[data-site-script-managed]')).toHaveLength(0)
+    const launcher = document.querySelector<HTMLButtonElement>('[data-site-script-group="reseller"] button')
+    expect(launcher?.getAttribute('aria-expanded')).toBe('false')
+    launcher?.click()
+    expect(launcher?.getAttribute('aria-expanded')).toBe('true')
+  })
+
+  it('runs global and main scripts on the main site without reseller code', () => {
+    applyCustomScripts([
+      { name: 'global', enabled: true, scope: 'global', code: bump },
+      { name: 'main', enabled: true, scope: 'main', code: bump },
+      { name: 'reseller', enabled: true, scope: 'reseller', code: bump },
+    ], 'main')
+    expect(counter()).toBe(2)
+    expect(document.querySelector('iframe')).toBeNull()
+  })
+
+  it('does not inherit main-only scripts when a reseller has no scripts', () => {
+    applyCustomScripts([
+      { name: 'global', enabled: true, scope: 'global', code: bump },
+      { name: 'main', enabled: true, scope: 'main', code: bump },
+      { name: 'legacy', enabled: true, code: bump },
+    ], 'reseller')
+    expect(counter()).toBe(1)
+    expect(document.querySelector('iframe')).toBeNull()
+  })
 })

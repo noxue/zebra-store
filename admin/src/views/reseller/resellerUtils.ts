@@ -135,6 +135,7 @@ export const blankSettingForm = (skuId: number): AdminResellerProductSettingPayl
   markup_percent: '0.00',
   fixed_markup_amount: '0.00',
   fixed_price_amount: '0.00',
+  agent_price_amount: '',
   sort_order: 0,
   ...(skuId === 0 ? { content: null, instructions: null } : {}),
 })
@@ -146,6 +147,7 @@ export const settingFormFromRule = (rule: AdminResellerProductSettingRule | unde
   markup_percent: amountOrZero(rule?.markup_percent),
   fixed_markup_amount: amountOrZero(rule?.fixed_markup_amount),
   fixed_price_amount: amountOrZero(rule?.fixed_price_amount),
+  agent_price_amount: rule?.agent_price_amount == null ? '' : String(rule.agent_price_amount),
   sort_order: Number(rule?.sort_order || 0),
   ...(skuId === 0 ? { content: rule?.content ?? null, instructions: rule?.instructions ?? null } : {}),
 })
@@ -178,6 +180,7 @@ export interface ResellerSiteConfigForm {
   theme: Record<'primary_color' | 'secondary_color' | 'accent_color' | 'background_color' | 'surface_color' | 'text_color', string>
   logo: string
   favicon: string
+  scripts: Array<{ name: string; enabled: boolean; position: 'head' | 'body_end'; code: string }>
   announcement: {
     enabled: boolean
     type: string
@@ -189,6 +192,11 @@ export interface ResellerSiteConfigForm {
     whatsapp: string
     email: string
     support_url: string
+    wechat_id: string
+    wechat_qr_code: string
+    qq_number: string
+    qq_group: string
+    wechat_group_qr_code: string
   }
   seo: {
     title: ResellerLocalizedText
@@ -207,13 +215,14 @@ export const createBlankSiteConfigForm = (): ResellerSiteConfigForm => ({
   theme: { primary_color: '', secondary_color: '', accent_color: '', background_color: '', surface_color: '', text_color: '' },
   logo: '',
   favicon: '',
+  scripts: [],
   announcement: {
     enabled: false,
     type: 'info',
     title: blankLocalizedText(),
     content: blankLocalizedText(),
   },
-  support: { telegram: '', whatsapp: '', email: '', support_url: '' },
+  support: { telegram: '', whatsapp: '', email: '', support_url: '', wechat_id: '', wechat_qr_code: '', qq_number: '', qq_group: '', wechat_group_qr_code: '' },
   seo: {
     title: blankLocalizedText(),
     keywords: blankLocalizedText(),
@@ -239,6 +248,10 @@ export const siteConfigToForm = (row: AdminResellerSiteConfig): ResellerSiteConf
     },
     logo: row.logo || '',
     favicon: row.favicon || '',
+    scripts: Array.isArray(row.scripts) ? row.scripts.map((script) => ({
+      name: String(script.name || ''), enabled: script.enabled === true,
+      position: script.position === 'body_end' ? 'body_end' : 'head', code: String(script.code || ''),
+    })) : [],
     announcement: {
       enabled: announcement.enabled === true,
       type: String(announcement.type || 'info'),
@@ -250,6 +263,11 @@ export const siteConfigToForm = (row: AdminResellerSiteConfig): ResellerSiteConf
       whatsapp: String(support.whatsapp || ''),
       email: String(support.email || ''),
       support_url: String(support.support_url || ''),
+      wechat_id: String(support.wechat_id || ''),
+      wechat_qr_code: String(support.wechat_qr_code || ''),
+      qq_number: String(support.qq_number || ''),
+      qq_group: String(support.qq_group || ''),
+      wechat_group_qr_code: String(support.wechat_group_qr_code || ''),
     },
     seo: {
       title: normalizeLocalizedTextForForm(seo.title),
@@ -275,6 +293,7 @@ export const buildSiteConfigPayload = (form: ResellerSiteConfigForm): AdminResel
   theme: Object.fromEntries(Object.entries(form.theme).map(([key, color]) => [key, color.trim()])),
   logo: form.logo.trim(),
   favicon: form.favicon.trim(),
+  scripts: form.scripts.filter((script) => script.code.trim()).slice(0, 20).map((script) => ({ ...script, name: script.name.trim(), code: script.code.trim() })),
   announcement: {
     enabled: form.announcement.enabled,
     type: form.announcement.type.trim() || 'info',
@@ -286,6 +305,11 @@ export const buildSiteConfigPayload = (form: ResellerSiteConfigForm): AdminResel
     whatsapp: form.support.whatsapp.trim(),
     email: form.support.email.trim(),
     support_url: form.support.support_url.trim(),
+    wechat_id: form.support.wechat_id.trim(),
+    wechat_qr_code: form.support.wechat_qr_code.trim(),
+    qq_number: form.support.qq_number.trim(),
+    qq_group: form.support.qq_group.trim(),
+    wechat_group_qr_code: form.support.wechat_group_qr_code.trim(),
   },
   seo: {
     title: form.seo.title,

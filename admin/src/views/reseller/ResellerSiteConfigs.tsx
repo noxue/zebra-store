@@ -35,7 +35,7 @@ const ANNOUNCEMENT_TYPES = [
   { value: 'warning', icon: CircleAlert, iconClass: 'text-warning-text' },
 ] as const
 
-const TABS: SiteConfigTab[] = ['brand', 'appearance', 'announcement', 'support', 'seo', 'footer', 'nav']
+const TABS: SiteConfigTab[] = ['brand', 'appearance', 'announcement', 'support', 'seo', 'footer', 'nav', 'scripts']
 
 export default defineComponent({
   name: 'ResellerSiteConfigsView',
@@ -206,6 +206,21 @@ export default defineComponent({
               <FormField label={t('admin.resellerSiteConfigs.fields.supportUrl')}>
                 <Input v-model={form.support.support_url} />
               </FormField>
+              <FormField label={t('admin.resellerSiteConfigs.fields.wechatId')}>
+                <Input v-model={form.support.wechat_id} />
+              </FormField>
+              <FormField label={t('admin.resellerSiteConfigs.fields.qqNumber')}>
+                <Input v-model={form.support.qq_number} />
+              </FormField>
+              <FormField label={t('admin.resellerSiteConfigs.fields.qqGroup')}>
+                <Input v-model={form.support.qq_group} />
+              </FormField>
+              <FormField label={t('admin.resellerSiteConfigs.fields.wechatQrCode')}>
+                <MediaPicker v-model={form.support.wechat_qr_code} scene="common" />
+              </FormField>
+              <FormField label={t('admin.resellerSiteConfigs.fields.wechatGroupQrCode')}>
+                <MediaPicker v-model={form.support.wechat_group_qr_code} scene="common" />
+              </FormField>
             </div>
           )
         case 'seo':
@@ -265,6 +280,27 @@ export default defineComponent({
                 <div key={key} class="flex items-center justify-between rounded-zs border border-line px-4 py-2.5">
                   <span class="text-sm">{t(`admin.resellerSiteConfigs.navItems.${key}`)}</span>
                   <Switch v-model={form.nav_config.builtin[key]} />
+                </div>
+              ))}
+            </div>
+          )
+        case 'scripts':
+          return (
+            <div class="space-y-4">
+              <p class="text-sm text-muted">{t('admin.resellerSiteConfigs.scriptHint')}</p>
+              <Button size="sm" disabled={form.scripts.length >= 20} onClick={s.addScript}>
+                <Plus class="h-3.5 w-3.5" />{t('admin.settings.scripts.addScript')}
+              </Button>
+              {form.scripts.map((script, index) => (
+                <div key={index} class="space-y-3 rounded-zs border border-line p-4">
+                  <div class="flex justify-end"><Button size="sm" variant="ghost" onClick={() => s.removeScript(index)}>{t('admin.common.delete')}</Button></div>
+                  <FormField label={t('admin.settings.scripts.name')}><Input v-model={script.name} /></FormField>
+                  <FormField label={t('admin.settings.scripts.position')}><Select v-model={script.position} options={[
+                    { label: t('admin.settings.scripts.positionHead'), value: 'head' },
+                    { label: t('admin.settings.scripts.positionBodyEnd'), value: 'body_end' },
+                  ]} /></FormField>
+                  <Switch v-model={script.enabled} label={t('admin.settings.scripts.enabled')} />
+                  <FormField label={t('admin.settings.scripts.code')}><Textarea v-model={script.code} rows={7} mono /></FormField>
                 </div>
               ))}
             </div>

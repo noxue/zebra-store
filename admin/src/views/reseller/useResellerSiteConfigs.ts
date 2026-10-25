@@ -11,7 +11,7 @@ import { notifySuccess } from '@/utils/notify'
 import { blankLocalizedText, type ResellerLocale } from '@/utils/resellerSiteConfig'
 import { buildSiteConfigPayload, createBlankSiteConfigForm, queryString, siteConfigToForm, type ResellerSiteConfigForm } from './resellerUtils'
 
-export type SiteConfigTab = 'brand' | 'appearance' | 'announcement' | 'support' | 'seo' | 'footer' | 'nav'
+export type SiteConfigTab = 'brand' | 'appearance' | 'announcement' | 'support' | 'seo' | 'footer' | 'nav' | 'scripts'
 
 export function useResellerSiteConfigs() {
   const t = i18n.global.t
@@ -70,6 +70,8 @@ export function useResellerSiteConfigs() {
 
   const addFooterLink = () => form.footer_links.push({ name: blankLocalizedText(), url: '' })
   const removeFooterLink = (index: number) => form.footer_links.splice(index, 1)
+  const addScript = () => { if (form.scripts.length < 20) form.scripts.push({ name: '', enabled: true, position: 'body_end', code: '' }) }
+  const removeScript = (index: number) => form.scripts.splice(index, 1)
 
   const save = async () => {
     if (!selected.value) return
@@ -131,6 +133,8 @@ export function useResellerSiteConfigs() {
     closeEditor,
     addFooterLink,
     removeFooterLink,
+    addScript,
+    removeScript,
     save,
     reset,
   }

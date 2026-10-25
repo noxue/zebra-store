@@ -1,16 +1,17 @@
 //! Reseller product listing / pricing rules (`application/product_setting.go`).
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use zs_domain::reseller::ports::{
     ProductListFilter, ProductSettingRepo, ProfileRepo, SettingFilter, SettingSummary,
 };
 use zs_domain::reseller::pricing::{
-    EffectivePrices, PreviewItem, PricedProduct, SettingInput, effective_prices, normalize_setting,
-    preview,
+    EffectivePrices, PreviewItem, PricedProduct, SettingInput, draft_setting, effective_prices,
+    normalize_setting_with_parent, preview,
 };
-use zs_domain::reseller::{ProductSetting, Profile, not_found};
-use zs_domain::{Id, Result};
+use zs_domain::reseller::{ProductSetting, Profile, keys, not_found};
+use zs_domain::{Error, Id, Result};
 use zs_shared::clock::Clock;
 use zs_shared::page::{Page, PageRequest};
 
@@ -57,6 +58,57 @@ pub enum Owner {
 }
 
 impl ProductSettingService {
+    fn proposed_inputs(
+        owner: Owner,
+        inputs: &[SettingInput],
+        existing: &[ProductSetting],
+    ) -> Result<Vec<SettingInput>> {
+        let mut proposed: Vec<SettingInput> = existing
+            .iter()
+            .map(|setting| SettingInput {
+                sku_id: setting.sku_id,
+                is_listed: setting.is_listed,
+                pricing_mode: setting.pricing_mode.as_str().to_owned(),
+                markup_percent: setting.markup_percent.decimal(),
+                fixed_markup_amount: setting.fixed_markup_amount.decimal(),
+                fixed_price_amount: setting.fixed_price_amount.decimal(),
+                agent_price_amount: setting.agent_price_amount,
+                sort_order: setting.sort_order,
+                content: setting.content.clone(),
+                instructions: setting.instructions.clone(),
+            })
+            .collect();
+        let mut seen = HashSet::new();
+        if inputs.iter().any(|input| !seen.insert(input.sku_id)) {
+            return Err(Error::bad_request(keys::PRICE_INVALID));
+        }
+        if matches!(owner, Owner::User(_))
+            && inputs
+                .iter()
+                .any(|input| input.agent_price_amount.is_some())
+        {
+            return Err(Error::forbidden(keys::FORBIDDEN));
+        }
+        for input in inputs {
+            let mut next = input.clone();
+            if matches!(owner, Owner::User(_)) {
+                next.agent_price_amount = existing
+                    .iter()
+                    .find(|setting| setting.sku_id == next.sku_id)
+                    .and_then(|setting| setting.agent_price_amount);
+            }
+            if let Some(old) = proposed
+                .iter_mut()
+                .find(|setting| setting.sku_id == next.sku_id)
+            {
+                *old = next;
+            } else {
+                proposed.push(next);
+            }
+        }
+        Ok(proposed)
+    }
+
     pub fn new(
         profiles: Arc<dyn ProfileRepo>,
         repo: Arc<dyn ProductSettingRepo>,
@@ -131,12 +183,13 @@ impl ProductSettingService {
         inputs: &[SettingInput],
     ) -> Result<Vec<PreviewItem>> {
         let profile = self.profile(owner).await?;
-        let (product, _) = self
+        let (product, existing) = self
             .repo
             .product_with_settings(profile.id, product_id)
             .await?
             .ok_or_else(not_found)?;
-        preview(&profile, &product, inputs)
+        let proposed = Self::proposed_inputs(owner, inputs, &existing)?;
+        preview(&profile, &product, &proposed)
     }
 
     /// Validates every rule, saves them in one transaction and returns the new detail.
@@ -152,17 +205,55 @@ impl ProductSettingService {
             .product_for_save(product_id)
             .await?
             .ok_or_else(not_found)?;
+        let existing = self
+            .repo
+            .product_with_settings(profile.id, product_id)
+            .await?
+            .map(|(_, settings)| settings)
+            .unwrap_or_default();
+        let proposed = Self::proposed_inputs(owner, inputs, &existing)?;
+        if let Some(invalid) = preview(&profile, &product, &proposed)?
+            .iter()
+            .find(|item| item.is_listed && !item.valid)
+        {
+            let key = if invalid.error_code == "markup_exceeded" {
+                keys::MARKUP_EXCEEDED
+            } else {
+                keys::PRICE_INVALID
+            };
+            return Err(Error::bad_request(key));
+        }
+        let product_setting = proposed
+            .iter()
+            .find(|input| input.sku_id == 0)
+            .map(draft_setting)
+            .transpose()?;
         let rows = inputs
             .iter()
-            .map(|input| {
-                let mut row = normalize_setting(&profile, &product, input)?;
+            .map(|submitted| {
+                let input = proposed
+                    .iter()
+                    .find(|row| row.sku_id == submitted.sku_id)
+                    .ok_or_else(|| Error::bad_request(keys::PRICE_INVALID))?;
+                let mut row = normalize_setting_with_parent(
+                    &profile,
+                    &product,
+                    input,
+                    product_setting.as_ref(),
+                )?;
                 row.reseller_id = profile.id;
                 row.product_id = product.id;
                 Ok(row)
             })
             .collect::<Result<Vec<_>>>()?;
         self.repo
-            .save_settings(profile.id, product.id, &rows, self.clock.now())
+            .save_settings(
+                profile.id,
+                product.id,
+                &rows,
+                matches!(owner, Owner::Reseller(_)),
+                self.clock.now(),
+            )
             .await?;
         self.detail(&profile, product_id).await
     }
@@ -174,7 +265,13 @@ impl ProductSettingService {
             return Ok(());
         }
         self.repo
-            .delete_setting(profile.id, product_id, sku_id, self.clock.now())
+            .delete_setting(
+                profile.id,
+                product_id,
+                sku_id,
+                matches!(owner, Owner::Reseller(_)),
+                self.clock.now(),
+            )
             .await
     }
 

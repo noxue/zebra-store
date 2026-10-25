@@ -738,7 +738,7 @@ async fn preview_setting(
         .svc
         .reseller
         .product_settings
-        .preview(Owner::Reseller(rid), pid, &req.inputs()?)
+        .preview(Owner::Reseller(rid), pid, &req.inputs(true)?)
         .await
         .map_err(product_error)?;
     ok(dto::preview(&items))
@@ -755,7 +755,7 @@ async fn save_setting(
         .svc
         .reseller
         .product_settings
-        .save(Owner::Reseller(rid), pid, &req.inputs()?)
+        .save(Owner::Reseller(rid), pid, &req.inputs(true)?)
         .await
         .map_err(product_error)?;
     let sku_ids: Vec<Id> = req.settings.iter().map(|s| s.sku_id).collect();

@@ -242,6 +242,7 @@ export const adminAPI = {
   manualRefundOrder: (id: Id, data: AdminManualRefundPayload) => api.post<JsonObject>(`/admin/orders/${id}/manual-refund`, data),
   prepareManualRefundOrder: (id: Id, data: AdminManualRefundPayload) => api.post<{ attempt: { id: number; status: string } }>(`/admin/orders/${id}/manual-refund/prepare`, data),
   confirmManualRefundOrder: (id: Id, data: { attempt_id: number; transfer_ref: string }) => api.post<JsonObject>(`/admin/orders/${id}/manual-refund/confirm`, data),
+  cancelManualRefundOrder: (id: Id, data: { attempt_id: number }) => api.post<{ attempt: { status: string } }>(`/admin/orders/${id}/manual-refund/cancel`, data),
   originalRefundOrder: (id: Id, data: AdminManualRefundPayload) => api.post<AdminOriginalRefundResponse>(`/admin/orders/${id}/original-refund`, data),
   getOrderRefunds: (params?: QueryParams) => api.get<AdminOrderRefund[]>('/admin/order-refunds', { params }),
   getOrderRefund: (id: Id) => api.get<AdminOrderRefund>(`/admin/order-refunds/${id}`),
@@ -371,6 +372,7 @@ export const adminAPI = {
     secrets: string[]
     batch_no?: string
     note?: string
+    preconverted?: boolean
     deduplicate?: boolean
   }) => api.post<JsonObject>('/admin/card-secrets/batch', data),
   importCardSecretCSV: (formData: FormData) => api.post<JsonObject>('/admin/card-secrets/import', formData),

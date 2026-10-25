@@ -81,6 +81,8 @@ pub fn without_existing(secrets: Vec<String>, existing: &HashSet<String>) -> Vec
 pub enum BatchSource {
     Manual,
     Csv,
+    ManualPreconverted,
+    CsvPreconverted,
 }
 
 impl BatchSource {
@@ -88,7 +90,23 @@ impl BatchSource {
         match self {
             Self::Manual => "manual",
             Self::Csv => "csv",
+            Self::ManualPreconverted => "manual_preconverted",
+            Self::CsvPreconverted => "csv_preconverted",
         }
+    }
+
+    pub fn with_preconverted(self, preconverted: bool) -> Self {
+        if !preconverted {
+            return self;
+        }
+        match self {
+            Self::Manual | Self::ManualPreconverted => Self::ManualPreconverted,
+            Self::Csv | Self::CsvPreconverted => Self::CsvPreconverted,
+        }
+    }
+
+    pub fn is_preconverted(source: &str) -> bool {
+        matches!(source, "manual_preconverted" | "csv_preconverted")
     }
 }
 

@@ -396,6 +396,65 @@ async fn rsl02_withdraw_checks_net_available() {
     );
 }
 
+// RSL-02 / UPL-05: payout details survive the request, listing and admin review views.
+#[tokio::test]
+async fn withdrawal_payout_qr_roundtrip_and_validation() {
+    let shop = shop().await;
+    shop.available_profit("200.00").await;
+    let request = json!({
+        "amount": "12.30", "currency": "CNY", "channel": "wechat",
+        "account": "wechat-shop", "payee_name": "张三",
+        "qr_code_url": "/uploads/reseller/payee.png"
+    });
+    let created = shop
+        .app
+        .call(
+            "POST",
+            "/api/v1/reseller/withdraws",
+            Some(request.clone()),
+            Some(&shop.token),
+        )
+        .await;
+    assert_eq!(data(&created)["amount"], "12.30");
+    assert_eq!(data(&created)["payee_name"], "张三");
+    assert_eq!(data(&created)["qr_code_url"], "/uploads/reseller/payee.png");
+
+    let mine = shop
+        .app
+        .call("GET", "/api/v1/reseller/withdraws", None, Some(&shop.token))
+        .await;
+    assert_eq!(data(&mine)[0]["payee_name"], "张三");
+    assert_eq!(data(&mine)[0]["qr_code_url"], "/uploads/reseller/payee.png");
+    let admin = shop
+        .app
+        .admin_call("GET", "/api/v1/admin/resellers/withdraws", None)
+        .await;
+    assert_eq!(data(&admin)[0]["payee_name"], "张三");
+    assert_eq!(
+        data(&admin)[0]["qr_code_url"],
+        "/uploads/reseller/payee.png"
+    );
+
+    for bad in [
+        "javascript:alert(1)",
+        "/uploads/reseller/../admin.png",
+        "https://other.test/qr.png",
+    ] {
+        let mut invalid = request.clone();
+        invalid["qr_code_url"] = json!(bad);
+        let response = shop
+            .app
+            .call(
+                "POST",
+                "/api/v1/reseller/withdraws",
+                Some(invalid),
+                Some(&shop.token),
+            )
+            .await;
+        err(&response, 400, "提现收款姓名或二维码不合法");
+    }
+}
+
 // RSL-02: 60 available, withdraw 25 and pay → 35 / 0 / 0 / normal; full withdrawal → zeros.
 #[tokio::test]
 async fn rsl02_paid_withdrawal_caches() {

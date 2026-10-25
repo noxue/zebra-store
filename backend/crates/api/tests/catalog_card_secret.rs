@@ -15,7 +15,7 @@ use common::{TestApp, data};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde_json::{Value, json};
 use zs_domain::catalog::ordering::{CatalogOrdering, StockMove, StockTarget};
-use zs_infra::db::entity::{card_secrets, product_skus, products};
+use zs_infra::db::entity::{card_secret_batches, card_secrets, product_skus, products};
 use zs_infra::db::repo::catalog::ordering::{SeaCatalogOrdering, reserve_p1_secrets_in};
 
 const SECRETS: &str = "/api/v1/admin/card-secrets";
@@ -188,6 +188,20 @@ async fn batch_create_resolves_sku_and_deduplicates() {
         .await
         .unwrap();
     assert_eq!(rows[0].sku_id, single_skus[0]);
+    let ready = app
+        .post(
+            &format!("{SECRETS}/batch"),
+            json!({"product_id": single, "secrets": ["SYSTEM-READY"], "preconverted": true, "note": "p3"}),
+        )
+        .await;
+    let ready_batch_id = data(&ready)["batch_id"].as_i64().unwrap();
+    let ready_batch = card_secret_batches::Entity::find_by_id(ready_batch_id)
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(ready_batch.source, "manual_preconverted");
+    assert_eq!(ready_batch.note, "p3");
     let res = app
         .post(
             &format!("{SECRETS}/batch"),

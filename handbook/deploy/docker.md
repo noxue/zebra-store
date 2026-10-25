@@ -1,6 +1,6 @@
 # Docker 运行 Release 单文件（推荐）
 
-这种方式与线上 `ai.xiaodianpu.cc` 的实际部署一致：Docker 构建镜像时直接从
+Docker 构建镜像时直接从
 [GitHub Releases](https://github.com/noxue/zebra-store/releases) 下载并校验 Linux musl 单文件，运行时只有一个
 `zebra-store-app` 容器。前台、`/admin/` 后台、API 和后台任务都在同一个 `zebra-store` 二进制中。
 

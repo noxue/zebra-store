@@ -57,6 +57,8 @@ struct CreateBatchRequest {
     batch_no: String,
     #[serde(default)]
     note: String,
+    #[serde(default)]
+    preconverted: bool,
     deduplicate: Option<bool>,
 }
 
@@ -92,6 +94,7 @@ async fn create_batch(
                 secrets,
                 batch_no: req.batch_no,
                 note: req.note,
+                preconverted: req.preconverted,
                 admin_id: Some(admin.id),
                 deduplicate: req.deduplicate,
             },
@@ -101,7 +104,7 @@ async fn create_batch(
     ok(created_json(&created))
 }
 
-/// `POST /admin/card-secrets/import` (multipart: `product_id`, `sku_id`, `file`, `batch_no`, `note`, `deduplicate`).
+/// `POST /admin/card-secrets/import` (multipart: `product_id`, `sku_id`, `file`, `batch_no`, `note`, `deduplicate`, `preconverted`).
 async fn import(
     State(s): State<AppState>,
     CurrentAdmin(admin): CurrentAdmin,
@@ -126,6 +129,9 @@ async fn import(
     let sku_id = parse_query_id(get("sku_id").or(Some("0")), false).ok_or_else(invalid)?;
     let file = file.ok_or_else(invalid)?;
     let deduplicate = parse_bool_value(get("deduplicate")).map_err(|()| invalid())?;
+    let preconverted = parse_bool_value(get("preconverted"))
+        .map_err(|()| invalid())?
+        .unwrap_or(false);
     let content = String::from_utf8_lossy(&file).into_owned();
     let created = s
         .svc
@@ -138,6 +144,7 @@ async fn import(
                 secrets: Vec::new(),
                 batch_no: get("batch_no").unwrap_or_default().trim().to_owned(),
                 note: get("note").unwrap_or_default().trim().to_owned(),
+                preconverted,
                 admin_id: Some(admin.id),
                 deduplicate,
             },

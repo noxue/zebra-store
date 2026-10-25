@@ -16,12 +16,12 @@ const errorText = (err: unknown, fallback: string) => (err instanceof Error && e
 export function useCardSecretBatchCreate(target: BatchCreateTarget) {
   const t = i18n.global.t
 
-  const batchForm = reactive({ secrets: '', batch_no: '', note: '', deduplicate: true })
+  const batchForm = reactive({ secrets: '', batch_no: '', note: '', deduplicate: true, preconverted: false })
   const batchSubmitting = ref(false)
   const batchError = ref('')
   const batchSuccess = ref('')
 
-  const importForm = reactive({ file: null as File | null, batch_no: '', note: '', deduplicate: true })
+  const importForm = reactive({ file: null as File | null, batch_no: '', note: '', deduplicate: true, preconverted: false })
   const importSubmitting = ref(false)
   const importError = ref('')
   const importSuccess = ref('')
@@ -41,7 +41,7 @@ export function useCardSecretBatchCreate(target: BatchCreateTarget) {
   }
 
   const resetBatchForm = () => {
-    Object.assign(batchForm, { secrets: '', batch_no: '', note: '', deduplicate: true })
+    Object.assign(batchForm, { secrets: '', batch_no: '', note: '', deduplicate: true, preconverted: false })
     batchError.value = ''
     batchSuccess.value = ''
   }
@@ -64,6 +64,7 @@ export function useCardSecretBatchCreate(target: BatchCreateTarget) {
         batch_no: batchForm.batch_no.trim(),
         note: batchForm.note.trim(),
         deduplicate: batchForm.deduplicate,
+        preconverted: batchForm.preconverted,
       })
       batchSuccess.value = t('admin.cardSecrets.success.batchCreated')
       batchForm.secrets = ''
@@ -82,7 +83,7 @@ export function useCardSecretBatchCreate(target: BatchCreateTarget) {
 
   const resetImportForm = () => {
     clearImportFile()
-    Object.assign(importForm, { batch_no: '', note: '', deduplicate: true })
+    Object.assign(importForm, { batch_no: '', note: '', deduplicate: true, preconverted: false })
     importError.value = ''
     importSuccess.value = ''
   }
@@ -103,6 +104,7 @@ export function useCardSecretBatchCreate(target: BatchCreateTarget) {
       formData.append('batch_no', importForm.batch_no.trim())
       formData.append('note', importForm.note.trim())
       formData.append('deduplicate', String(importForm.deduplicate))
+      formData.append('preconverted', String(importForm.preconverted))
       formData.append('file', importForm.file)
       await adminAPI.importCardSecretCSV(formData)
       resetImportForm()

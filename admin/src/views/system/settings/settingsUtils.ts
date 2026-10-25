@@ -42,10 +42,12 @@ export const clampNumber = (value: unknown, min: number, max: number, fallback: 
 
 // ---- basic tab ----
 export type SiteScriptPosition = 'head' | 'body_end'
+export type SiteScriptScope = 'global' | 'main'
 export interface SiteScriptItem {
   name: string
   enabled: boolean
   position: SiteScriptPosition
+  scope: SiteScriptScope
   code: string
 }
 export interface FooterLinkItem {
@@ -53,7 +55,7 @@ export interface FooterLinkItem {
   url: string
 }
 
-export const createSiteScriptItem = (): SiteScriptItem => ({ name: '', enabled: true, position: 'head', code: '' })
+export const createSiteScriptItem = (): SiteScriptItem => ({ name: '', enabled: true, position: 'head', scope: 'main', code: '' })
 export const createFooterLinkItem = (): FooterLinkItem => ({ name: '', url: '' })
 
 export const normalizeSiteScriptEnabled = (raw: unknown): boolean => {
@@ -74,6 +76,7 @@ export const normalizeSiteScripts = (raw: unknown): SiteScriptItem[] => {
       name: typeof value.name === 'string' ? value.name : '',
       enabled: normalizeSiteScriptEnabled(value.enabled),
       position: (value.position === 'body_end' ? 'body_end' : 'head') as SiteScriptPosition,
+      scope: (value.scope === 'global' ? 'global' : 'main') as SiteScriptScope,
       code: typeof value.code === 'string' ? value.code : '',
     }))
     .slice(0, SITE_SCRIPTS_MAX)

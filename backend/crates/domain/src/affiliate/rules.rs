@@ -6,7 +6,7 @@ use rust_decimal::Decimal;
 use zs_shared::money::Amount;
 
 use super::model::status;
-use super::ports::CommissionItem;
+use super::ports::CommissionOrder;
 use crate::{Error, Id};
 
 /// Length of generated affiliate codes (original `affiliateCodeLength`).
@@ -65,14 +65,19 @@ pub fn conversion_rate(valid_orders: i64, clicks: i64) -> f64 {
     (value * 100.0).round() / 100.0
 }
 
-/// Commission base: payable amount (`total_price − coupon_discount`, never negative) of
-/// the affiliate-enabled items (`calculateCommissionBaseAmount`).
-pub fn commission_base(items: &[CommissionItem]) -> Amount {
-    items
+/// Commission base is the lesser of eligible-item margin and total order margin.
+/// Both include the purchase-time cost snapshot; the total also reserves payment
+/// fees and reseller profit so a referral cannot consume another party's share.
+pub fn commission_base(order: &CommissionOrder) -> Amount {
+    let costs: Amount = order.items.iter().map(|i| i.cost_price * i.quantity).sum();
+    let eligible_margin: Amount = order
+        .items
         .iter()
         .filter(|i| i.affiliate_enabled)
-        .map(|i| (i.total_price - i.coupon_discount).non_negative())
-        .sum()
+        .map(|i| i.total_price - i.coupon_discount - i.cost_price * i.quantity)
+        .sum();
+    let order_margin = order.total_amount - costs - order.payment_fee - order.reseller_profit;
+    eligible_margin.min(order_margin).non_negative()
 }
 
 /// Rate rounded to two decimals and the commission `round2(base × rate / 100)`.
@@ -254,18 +259,40 @@ pub fn normalize_ids(ids: &[Id]) -> Vec<Id> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::affiliate::ports::CommissionItem;
     use chrono::TimeZone;
 
     fn amt(v: &str) -> Amount {
         v.parse().unwrap_or_default()
     }
 
-    fn item(total: &str, coupon: &str, enabled: bool) -> CommissionItem {
+    fn item(total: &str, coupon: &str, cost: &str, enabled: bool) -> CommissionItem {
         CommissionItem {
             product_id: 1,
             total_price: amt(total),
             coupon_discount: amt(coupon),
+            cost_price: amt(cost),
+            quantity: 1,
             affiliate_enabled: enabled,
+        }
+    }
+
+    fn order(
+        total: &str,
+        fee: &str,
+        reseller: &str,
+        items: Vec<CommissionItem>,
+    ) -> CommissionOrder {
+        CommissionOrder {
+            id: 1,
+            user_id: 2,
+            paid_at: None,
+            affiliate_profile_id: None,
+            affiliate_code: String::new(),
+            total_amount: amt(total),
+            payment_fee: amt(fee),
+            reseller_profit: amt(reseller),
+            items,
         }
     }
 
@@ -283,18 +310,49 @@ mod tests {
         assert!((conversion_rate(1, 3) - 33.33).abs() < f64::EPSILON);
         assert!(conversion_rate(0, 3).abs() < f64::EPSILON);
         assert!(conversion_rate(3, 0).abs() < f64::EPSILON);
-        // Only affiliate-enabled items count; coupons reduce the base, never below zero.
-        let base = commission_base(&[
-            item("100.00", "10.00", true),
-            item("50.00", "0", false),
-            item("5.00", "8.00", true),
-        ]);
-        assert_eq!(base, amt("90.00"));
-        assert_eq!(
-            commission_amount(amt("90.00"), 12.345),
-            (amt("12.35"), amt("11.12"))
-        );
+        // A 3170 sale with 3126 cost and 0.5% fee earns 10% of 28.15.
+        let base = commission_base(&order(
+            "3170.00",
+            "15.85",
+            "0",
+            vec![item("3170.00", "0", "3126.00", true)],
+        ));
+        assert_eq!(base, amt("28.15"));
+        assert_eq!(commission_amount(base, 10.0), (amt("10.00"), amt("2.82")));
         assert_eq!(commission_amount(amt("0.01"), 10.0).1, Amount::ZERO);
+    }
+
+    #[test]
+    fn commission_never_exceeds_margin_after_discount_fees_and_reseller_share() {
+        let items = vec![item("40.00", "0", "33.00", true)];
+        assert_eq!(
+            commission_base(&order("40.00", "0.20", "0", items.clone())),
+            amt("6.80")
+        );
+        assert_eq!(
+            commission_base(&order("40.00", "0.20", "6.80", items.clone())),
+            Amount::ZERO
+        );
+        assert_eq!(
+            commission_base(&order("33.00", "0.20", "0", items.clone())),
+            Amount::ZERO
+        );
+        assert_eq!(
+            commission_base(&order(
+                "40.00",
+                "0.20",
+                "0",
+                vec![item("40.00", "0", "33.00", false)]
+            )),
+            Amount::ZERO
+        );
+        let mut two = items[0].clone();
+        two.quantity = 2;
+        two.total_price = amt("80.00");
+        assert_eq!(
+            commission_base(&order("80.00", "0.40", "0", vec![two])),
+            amt("13.60")
+        );
     }
 
     #[test]

@@ -22,7 +22,74 @@ use sea_orm::sea_query::Expr;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde_json::{Value, json};
 use zs_domain::queue::kinds;
-use zs_infra::db::entity::{coupons, payment_channels, payments, wallet_accounts};
+use zs_infra::db::entity::{coupons, payment_channels, payments, product_skus, wallet_accounts};
+
+/// ORD-01 / ORD-03: canceling an unpaid deferred order cannot release another order's lock.
+#[tokio::test]
+async fn deferred_manual_cancel_preserves_older_stock_lock() {
+    let app = OrderApp::new().await;
+    let product = app
+        .product(
+            "manual-deferred-cancel",
+            json!({"price_amount": "10", "fulfillment_type": "manual", "manual_stock_total": 2}),
+        )
+        .await;
+    let (_, auth) = member(&app, "stock-cancel@example.com").await;
+    let first = member_order(&app, &auth, product, json!({})).await;
+    app.set_setting(
+        "order_config",
+        json!({"payment_expire_minutes": 15, "max_refund_days": 30, "reserve_stock_on_payment": true}),
+    )
+    .await;
+    let second = member_order(&app, &auth, product, json!({})).await;
+    let stock = product_skus::Entity::find_by_id(product.1)
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        (stock.manual_stock_total, stock.manual_stock_locked),
+        (1, 1)
+    );
+
+    let canceled = app
+        .call(
+            "POST",
+            &format!("/api/v1/orders/{second}/cancel"),
+            None,
+            &auth,
+        )
+        .await;
+    assert_eq!(canceled["status_code"], 0, "{canceled}");
+    let stock = product_skus::Entity::find_by_id(product.1)
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        (stock.manual_stock_total, stock.manual_stock_locked),
+        (1, 1)
+    );
+
+    let canceled = app
+        .call(
+            "POST",
+            &format!("/api/v1/orders/{first}/cancel"),
+            None,
+            &auth,
+        )
+        .await;
+    assert_eq!(canceled["status_code"], 0, "{canceled}");
+    let stock = product_skus::Entity::find_by_id(product.1)
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        (stock.manual_stock_total, stock.manual_stock_locked),
+        (2, 0)
+    );
+}
 use zs_infra::payment::http::{HttpRequest, HttpResponse, HttpTransport};
 
 /// A member with an access token.

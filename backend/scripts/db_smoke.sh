@@ -11,7 +11,10 @@ BIN="${1:-target-main/debug/zebra-store}"
 PORT=18091
 PG_URL="${PG_URL:-postgres://zebra:zebra@127.0.0.1:15432/zebra}"
 MYSQL_URL="${MYSQL_URL:-mysql://root:zebra@127.0.0.1:13306/zebra}"
-SQLITE_URL="sqlite://$(mktemp -d)/smoke.db?mode=rwc"
+SMOKE_DIR="$(mktemp -d)"
+trap 'rm -rf "$SMOKE_DIR"' EXIT
+SQLITE_URL="sqlite://$SMOKE_DIR/smoke.db?mode=rwc"
+CONFIG_FILE="$SMOKE_DIR/config.yml"
 BASE="http://127.0.0.1:${PORT}/api/v1"
 FAILED=0
 
@@ -25,7 +28,7 @@ export ZS__SERVER__HOST="127.0.0.1"
 export ZS__LOG__LEVEL="warn"
 
 start() {
-  ZS__DATABASE__URL="$1" "$BIN" --config /nonexistent.yml >"/tmp/zs-smoke-$2.log" 2>&1 &
+  ZS__DATABASE__URL="$1" "$BIN" --config "$CONFIG_FILE" >"/tmp/zs-smoke-$2.log" 2>&1 &
   SERVER_PID=$!
   for _ in $(seq 1 60); do
     curl -sf "http://127.0.0.1:${PORT}/health" >/dev/null 2>&1 && return 0

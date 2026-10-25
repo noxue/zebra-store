@@ -24,6 +24,7 @@ pub struct CreateSecretsInput {
     pub secrets: Vec<String>,
     pub batch_no: String,
     pub note: String,
+    pub preconverted: bool,
     pub admin_id: Option<Id>,
     /// `None` = deduplicate (DLV-10).
     pub deduplicate: Option<bool>,
@@ -148,7 +149,7 @@ impl CardSecretService {
                     product_id: input.product_id,
                     sku_id: sku.id,
                     batch_no,
-                    source,
+                    source: source.with_preconverted(input.preconverted),
                     note: input.note.trim().to_owned(),
                     created_by: input.admin_id.filter(|id| *id > 0),
                     secrets,

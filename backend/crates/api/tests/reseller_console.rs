@@ -3,8 +3,12 @@
 
 mod reseller_common;
 
+use axum::body::Body;
+use axum::http::{Request, header};
+use http_body_util::BodyExt;
 use reseller_common::{App, data, err};
 use serde_json::json;
+use tower::ServiceExt;
 
 #[tokio::test]
 async fn onboarding_flow_and_shapes() {
@@ -192,14 +196,17 @@ async fn site_config_roundtrip_and_field_errors() {
                 "storefront_template": "aurora",
                 "template_mode": "list",
                 "theme": {"primary_color": "#123abc", "background_color": "#eefbf7"},
+                "support": {"wechat_id": "shop_wechat", "wechat_qr_code": "/uploads/reseller/wechat.png", "qq_number": "123456", "qq_group": "654321", "wechat_group_qr_code": "/uploads/reseller/group.png"},
                 "footer_links": [{"name": {"zh-CN": "帮助"}, "url": "https://help.test"}],
                 "nav_config": {"builtin": {"blog": false}},
+                "scripts": [{"name": "客服", "enabled": true, "position": "body_end", "code": "window.widget=1", "scope": "main"}],
             })),
             Some(&token),
         )
         .await;
     let c = data(&saved);
     assert_eq!(c["footer_links"][0]["url"], "https://help.test");
+    assert_eq!(c["scripts"][0]["scope"], "reseller");
     assert_eq!(c["storefront_template"], "aurora");
     assert_eq!(c["template_mode"], "list");
     assert_eq!(c["theme"]["primary_color"], "#123abc");
@@ -209,12 +216,16 @@ async fn site_config_roundtrip_and_field_errors() {
     );
     assert_eq!(
         c["support"],
-        json!({"telegram": "", "whatsapp": "", "email": "", "support_url": ""})
+        json!({"telegram": "", "whatsapp": "", "email": "", "support_url": "", "wechat_id": "shop_wechat", "wechat_qr_code": "/uploads/reseller/wechat.png", "qq_number": "123456", "qq_group": "654321", "wechat_group_qr_code": "/uploads/reseller/group.png"})
     );
     let snap = app
         .call("GET", "/api/v1/reseller/site-config", None, Some(&token))
         .await;
     assert_eq!(data(&snap)["config"]["site_name"], "Shop");
+    assert_eq!(
+        data(&snap)["config"]["support"]["wechat_group_qr_code"],
+        "/uploads/reseller/group.png"
+    );
     assert_eq!(
         data(&snap)["config"]["theme"]["background_color"],
         "#eefbf7"
@@ -240,6 +251,10 @@ async fn site_config_roundtrip_and_field_errors() {
         (
             json!({"support": {"email": "bad"}}),
             "客服邮箱格式不正确，请检查后重试",
+        ),
+        (
+            json!({"support": {"wechat_qr_code": "javascript:alert(1)"}}),
+            "图片地址无效，请重新上传或填写以 https:// 开头的完整链接",
         ),
         (
             json!({"footer_links": [{"url": "http://plain.test"}]}),
@@ -304,6 +319,99 @@ async fn upload_requires_active_profile() {
         )
         .await;
     err(&res, 400, "未上传文件");
+}
+
+// UPL-03 / UPL-05: the reseller upload endpoint returns a usable image path.
+#[tokio::test]
+async fn reseller_customer_qr_can_be_uploaded_and_saved() {
+    let mut cfg = reseller_common::config();
+    let root = std::env::temp_dir().join(format!("zs-reseller-qr-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&root).unwrap();
+    cfg.upload.dir = root.to_string_lossy().into_owned();
+    let app = App::with(cfg).await;
+    let (_, token, _) = app.reseller("qr-support@example.test", "0").await;
+    let mut png = b"\x89PNG\r\n\x1a\n\x00\x00\x00\x0dIHDR".to_vec();
+    png.extend_from_slice(&32_u32.to_be_bytes());
+    png.extend_from_slice(&32_u32.to_be_bytes());
+    png.extend_from_slice(&[8, 6, 0, 0, 0]);
+    let boundary = "zebraQrBoundary";
+    let mut body = format!("--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"support.png\"\r\nContent-Type: image/png\r\n\r\n").into_bytes();
+    body.extend_from_slice(&png);
+    body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+    let request = Request::builder()
+        .method("POST")
+        .uri("/api/v1/reseller/upload")
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header(
+            header::CONTENT_TYPE,
+            format!("multipart/form-data; boundary={boundary}"),
+        )
+        .body(Body::from(body))
+        .unwrap();
+    let response = app.router.clone().oneshot(request).await.unwrap();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    let uploaded: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let url = data(&uploaded)["url"].as_str().unwrap();
+    assert!(url.starts_with("/uploads/reseller/"));
+    assert!(root.join(url.trim_start_matches("/uploads/")).exists());
+
+    let saved = app
+        .call(
+            "PUT",
+            "/api/v1/reseller/site-config",
+            Some(json!({
+                "support": {"wechat_qr_code": url}
+            })),
+            Some(&token),
+        )
+        .await;
+    assert_eq!(data(&saved)["support"]["wechat_qr_code"], url);
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
+// RSL-11: the reseller list, detail and preview must expose this site's cost,
+// while another reseller continues to receive the shared agent price.
+#[tokio::test]
+async fn rsl11_site_agent_price_in_console_responses() {
+    let app = App::new().await;
+    let (_, token, reseller_id) = app.reseller("site-price@example.test", "0").await;
+    let (_, other_token, _) = app.reseller("shared-price@example.test", "0").await;
+    let (product_id, skus) = app
+        .product("site-price", "45.00", &[("45.00", "33.00")])
+        .await;
+    let url = format!("/api/v1/reseller/product-settings/{product_id}");
+    let admin_url = format!("/api/v1/admin/resellers/product-settings/{reseller_id}/{product_id}");
+    data(&app.admin_call(
+        "PUT",
+        &admin_url,
+        Some(json!({"settings": [{"sku_id": skus[0], "is_listed": true, "pricing_mode": "inherit", "agent_price_amount": "38.67"}]})),
+    ).await);
+
+    let list = app
+        .call(
+            "GET",
+            "/api/v1/reseller/product-settings",
+            None,
+            Some(&token),
+        )
+        .await;
+    let row = &data(&list)[0];
+    assert_eq!(row["skus"][0]["base_price_amount"], "38.67");
+    assert_eq!(row["skus"][0]["shared_agent_price_amount"], "45.00");
+    let detail = app.call("GET", &url, None, Some(&token)).await;
+    assert_eq!(data(&detail)["skus"][0]["base_price_amount"], "38.67");
+    let preview = app.call("POST", &format!("{url}/preview"), Some(json!({"settings": [{"sku_id": skus[0], "is_listed": true, "pricing_mode": "inherit"}]})), Some(&token)).await;
+    assert_eq!(data(&preview)["items"][1]["base_price_amount"], "38.67");
+
+    let other = app
+        .call(
+            "GET",
+            "/api/v1/reseller/product-settings",
+            None,
+            Some(&other_token),
+        )
+        .await;
+    assert_eq!(data(&other)[0]["skus"][0]["base_price_amount"], "45.00");
 }
 
 // RSL-07: price floor / cost / markup cap enforced on save; preview matches.

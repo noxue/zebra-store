@@ -28,8 +28,8 @@ use std::sync::{
 };
 use zs_domain::queue::kinds;
 use zs_infra::db::entity::{
-    fulfillments, gateway_refund_attempts, order_items, orders, payments, procurement_orders,
-    product_skus, products,
+    gateway_refund_attempts, order_items, orders, payments, procurement_orders, product_skus,
+    products,
 };
 use zs_infra::payment::http::{HttpResponse, MockTransport};
 
@@ -89,6 +89,12 @@ async fn deferred_stock_reservation_is_atomic_with_payment() {
     );
     let second_order = app.order_by_no(second["order_no"].as_str().unwrap()).await;
     assert_eq!(second_order.status, "fulfilling");
+    assert_eq!(app.secrets_with(product, "reserved").await, 1);
+    assert_eq!(app.epay_callback(second_payment, "10.00").await, "success");
+    assert_eq!(
+        app.payment(second_payment).await.exception_code,
+        "stock_insufficient"
+    );
     assert_eq!(app.secrets_with(product, "reserved").await, 1);
 }
 
@@ -679,64 +685,6 @@ async fn huifu_pending_original_refund_is_queried_and_applied_once() {
     order.online_paid_amount = Set(order_common::dec("0.01"));
     order.update(&app.db).await.unwrap();
 
-    // A delivered card without exchange provenance cannot be locked by the
-    // converter. It must never reach the gateway refund submission.
-    let child = orders::Entity::find()
-        .filter(orders::Column::ParentId.eq(order_id))
-        .one(&app.db)
-        .await
-        .unwrap()
-        .unwrap();
-    let now = chrono::Utc::now();
-    let delivery = fulfillments::ActiveModel {
-        order_id: Set(child.id),
-        type_: Set("auto".into()),
-        status: Set("delivered".into()),
-        payload: Set("PRECONVERTED-CARD".into()),
-        logistics_json: Set(None),
-        delivered_by: Set(None),
-        delivered_at: Set(Some(now)),
-        created_at: Set(now),
-        updated_at: Set(now),
-        deleted_at: Set(None),
-        ..Default::default()
-    }
-    .insert(&app.db)
-    .await
-    .unwrap();
-    let no_provenance = app
-        .call(
-            "GET",
-            &format!(
-                "/api/v1/guest/orders/{}",
-                created["data"]["order_no"].as_str().unwrap()
-            ),
-            None,
-            &guest(),
-        )
-        .await;
-    assert_eq!(no_provenance["data"]["refund_mode"], "contact_support");
-    let refused = app
-        .admin_call(
-            "POST",
-            &format!("/api/v1/admin/orders/{order_id}/original-refund"),
-            Some(json!({"amount":"0.01","remark":"buyer_requested_refund"})),
-        )
-        .await;
-    assert_ne!(refused["status_code"], 0, "{refused}");
-    assert_eq!(
-        gateway_refund_attempts::Entity::find()
-            .filter(gateway_refund_attempts::Column::OrderId.eq(order_id))
-            .count(&app.db)
-            .await
-            .unwrap(),
-        0
-    );
-    fulfillments::Entity::delete_by_id(delivery.id)
-        .exec(&app.db)
-        .await
-        .unwrap();
-
     let detail = app
         .call(
             "GET",
@@ -749,6 +697,59 @@ async fn huifu_pending_original_refund_is_queried_and_applied_once() {
         )
         .await;
     assert_eq!(detail["data"]["refund_mode"], "automatic");
+    // A final provider failure must stop buyer retries until staff reviews it.
+    let failed = gateway_refund_attempts::ActiveModel {
+        order_id: Set(order_id),
+        payment_id: Set(payment_id),
+        channel_id: Set(channel),
+        request_date: Set("20261014".into()),
+        refund_no: Set("FAILED-BUYER-REFUND".into()),
+        provider_ref: Set("20261014:FAILED-BUYER-REFUND".into()),
+        amount: Set(order_common::dec("0.01")),
+        status: Set("failed".into()),
+        remark: Set("buyer_requested_refund".into()),
+        payment_fee_refunded: Set(false),
+        card_confirmed: Set(false),
+        payload: Set(None),
+        error: Set("provider rejected".into()),
+        refund_record_id: Set(None),
+        created_at: Set(paid_at),
+        updated_at: Set(paid_at),
+        ..Default::default()
+    }
+    .insert(&app.db)
+    .await
+    .unwrap();
+    let failed_detail = app
+        .call(
+            "GET",
+            &format!(
+                "/api/v1/guest/orders/{}",
+                created["data"]["order_no"].as_str().unwrap()
+            ),
+            None,
+            &guest(),
+        )
+        .await;
+    assert_eq!(failed_detail["data"]["refund_mode"], "contact_support");
+    assert_eq!(failed_detail["data"]["refund_state"], "needs_review");
+    let buyer_retry = app
+        .call(
+            "POST",
+            &format!(
+                "/api/v1/guest/orders/{}/refund",
+                created["data"]["order_no"].as_str().unwrap()
+            ),
+            None,
+            &guest(),
+        )
+        .await;
+    assert_ne!(buyer_retry["status_code"], 0);
+    assert_eq!(refund_calls.load(Ordering::SeqCst), 0);
+    gateway_refund_attempts::Entity::delete_by_id(failed.id)
+        .exec(&app.db)
+        .await
+        .unwrap();
     let denied = app
         .call(
             "POST",
@@ -926,6 +927,19 @@ async fn converter_exchange(
     (StatusCode::OK, Json(json!({"items":items}))).into_response()
 }
 
+async fn mixed_system_and_raw_exchange(
+    State(mock): State<Arc<ConverterMock>>,
+    Json(request): Json<Value>,
+) -> Json<Value> {
+    let items = request["items"].as_array().unwrap();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["index"], 0);
+    assert_eq!(items[0]["upstream_card"], "RAW-MIXED");
+    assert_eq!(request["extra"]["provider"], "p3");
+    mock.exchanges.fetch_add(1, Ordering::SeqCst);
+    Json(json!({"items":[{"index":0,"card":"SYSTEM-RAW-MIXED"}]}))
+}
+
 /// A failed conversion holds the exact stock cards and retry resumes only conversion.
 #[tokio::test]
 async fn local_card_converter_retry_does_not_consume_stock_twice() {
@@ -1079,6 +1093,152 @@ async fn local_card_converter_retry_does_not_consume_stock_twice() {
     assert_eq!(manual.payload, "SYSTEM-MANUAL-RAW-CARD");
     assert_eq!(manual.logistics["card_converter_id"], converter_id);
     assert_eq!(mock.exchanges.load(Ordering::SeqCst), 3);
+}
+
+/// DLV-03: a preconverted system card is delivered as-is even when the SKU has a converter.
+#[tokio::test]
+async fn preconverted_local_card_skips_bound_converter() {
+    use sea_orm::{ActiveModelTrait, Set};
+    use zs_domain::integration::card_converter::Binding;
+
+    let mock = Arc::new(ConverterMock::default());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let router = Router::new()
+        .route("/health", get(converter_health))
+        .route(
+            "/integration/v1/exchanges",
+            post(mixed_system_and_raw_exchange),
+        )
+        .with_state(mock.clone());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+
+    let app = OrderApp::with_local_converter().await;
+    let (product, sku) = app.product("ready-system-card", json!({})).await;
+    app.services
+        .catalog
+        .card_secret
+        .create_batch(
+            zs_app::catalog::card_secret::CreateSecretsInput {
+                product_id: product,
+                sku_id: sku,
+                secrets: vec!["SYSTEM-READY-CARD".into()],
+                note: "p3".into(),
+                preconverted: true,
+                ..Default::default()
+            },
+            zs_domain::catalog::card_secret::BatchSource::Manual,
+        )
+        .await
+        .unwrap();
+    let now = chrono::Utc::now();
+    let converter = zs_infra::db::entity::extra::card_converters::ActiveModel {
+        name: Set("test converter".into()),
+        base_url: Set(format!("http://{address}")),
+        token_enc: Set(app
+            .ctx
+            .cipher
+            .encrypt("test-converter-token-with-sufficient-length")
+            .unwrap()),
+        enabled: Set(true),
+        health: Set("unknown".into()),
+        consecutive_failures: Set(0),
+        last_checked_at: Set(None),
+        last_error: Set(String::new()),
+        created_at: Set(now),
+        updated_at: Set(now),
+        ..Default::default()
+    }
+    .insert(&app.db)
+    .await
+    .unwrap();
+    app.services
+        .integration
+        .card_converters
+        .save_binding(Binding {
+            id: 0,
+            product_id: product,
+            sku_id: sku,
+            converter_id: converter.id,
+            type_id: "account".into(),
+            extra_template: json!({"provider":"p3"}),
+            issues: Vec::new(),
+            created_at: now,
+            updated_at: now,
+        })
+        .await
+        .unwrap();
+
+    let channel = app.epay_channel().await;
+    let order = create_and_pay(&app, product, sku, 1, channel).await;
+    let order_no = order["order_no"].as_str().unwrap();
+    let payment_id = order["payment_id"].as_i64().unwrap();
+    assert_eq!(app.epay_callback(payment_id, "10.00").await, "success");
+    let child = app
+        .children(app.order_by_no(order_no).await.id)
+        .await
+        .remove(0);
+    app.services
+        .order
+        .service
+        .auto_fulfill(child.id)
+        .await
+        .unwrap();
+    assert_eq!(app.order(child.id).await.status, "completed");
+    let fulfillment = zs_infra::db::entity::fulfillments::Entity::find()
+        .filter(zs_infra::db::entity::fulfillments::Column::OrderId.eq(child.id))
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(fulfillment.payload, "SYSTEM-READY-CARD");
+    assert_eq!(mock.exchanges.load(Ordering::SeqCst), 0);
+    assert_eq!(app.secrets_with(product, "used").await, 1);
+
+    // A second order may contain both types: only the raw card goes to the
+    // converter, and the buyer receives both cards in their original order.
+    for (secret, preconverted) in [("SYSTEM-READY-MIXED", true), ("RAW-MIXED", false)] {
+        app.services
+            .catalog
+            .card_secret
+            .create_batch(
+                zs_app::catalog::card_secret::CreateSecretsInput {
+                    product_id: product,
+                    sku_id: sku,
+                    secrets: vec![secret.into()],
+                    note: "p3".into(),
+                    preconverted,
+                    ..Default::default()
+                },
+                zs_domain::catalog::card_secret::BatchSource::Manual,
+            )
+            .await
+            .unwrap();
+    }
+    let order = create_and_pay(&app, product, sku, 2, channel).await;
+    let order_no = order["order_no"].as_str().unwrap();
+    let payment_id = order["payment_id"].as_i64().unwrap();
+    assert_eq!(app.epay_callback(payment_id, "20.00").await, "success");
+    let child = app
+        .children(app.order_by_no(order_no).await.id)
+        .await
+        .remove(0);
+    app.services
+        .order
+        .service
+        .auto_fulfill(child.id)
+        .await
+        .unwrap();
+    assert_eq!(app.order(child.id).await.status, "completed");
+    let fulfillment = zs_infra::db::entity::fulfillments::Entity::find()
+        .filter(zs_infra::db::entity::fulfillments::Column::OrderId.eq(child.id))
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(fulfillment.payload, "SYSTEM-READY-MIXED\nSYSTEM-RAW-MIXED");
+    assert_eq!(mock.exchanges.load(Ordering::SeqCst), 1);
+    assert_eq!(app.secrets_with(product, "used").await, 3);
 }
 
 async fn hybrid_exchange(Json(request): Json<Value>) -> Json<Value> {

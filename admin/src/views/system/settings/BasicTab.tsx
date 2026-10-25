@@ -153,6 +153,15 @@ export default defineComponent({
                   tip={t('admin.settings.brand.siteLogoTip')}
                 />
               </FormField>
+              <FormField label={t('admin.settings.brand.siteLogoDark')}>
+                <BrandImageField
+                  v-model={f.brand.site_logo_dark}
+                  testId="site-logo-dark"
+                  placeholder="DARK"
+                  selectText={t('admin.settings.brand.siteLogoDarkSelect')}
+                  tip={t('admin.settings.brand.siteLogoDarkTip')}
+                />
+              </FormField>
               <div class="md:col-span-2">
                 <FormField hint={t('admin.settings.brand.siteDescriptionTip')}>
                   {{
@@ -195,6 +204,21 @@ export default defineComponent({
               </FormField>
               <FormField label={t('admin.settings.contact.whatsapp')}>
                 <Input v-model={f.contact.whatsapp} placeholder={t('admin.settings.contact.whatsappPlaceholder')} />
+              </FormField>
+              <FormField label={t('admin.settings.contact.wechatId')}>
+                <Input v-model={f.contact.wechat_id} />
+              </FormField>
+              <FormField label={t('admin.settings.contact.qqNumber')}>
+                <Input v-model={f.contact.qq_number} />
+              </FormField>
+              <FormField label={t('admin.settings.contact.qqGroup')}>
+                <Input v-model={f.contact.qq_group} />
+              </FormField>
+              <FormField label={t('admin.settings.contact.wechatQrCode')}>
+                <BrandImageField v-model={f.contact.wechat_qr_code} placeholder="QR" selectText={t('admin.settings.contact.uploadQr')} tip={t('admin.settings.contact.qrHint')} />
+              </FormField>
+              <FormField label={t('admin.settings.contact.wechatGroupQrCode')}>
+                <BrandImageField v-model={f.contact.wechat_group_qr_code} placeholder="QR" selectText={t('admin.settings.contact.uploadQr')} tip={t('admin.settings.contact.qrHint')} />
               </FormField>
             </div>
           </Card>
@@ -264,6 +288,12 @@ export default defineComponent({
                         </FormField>
                       </div>
                       <Switch v-model={script.enabled} label={t('admin.settings.scripts.enabled')} />
+                      <FormField label={t('admin.settings.scripts.scope')}>
+                        <Select v-model={script.scope} options={[
+                          { label: t('admin.settings.scripts.scopeMain'), value: 'main' },
+                          { label: t('admin.settings.scripts.scopeGlobal'), value: 'global' },
+                        ]} />
+                      </FormField>
                       <FormField label={t('admin.settings.scripts.code')}>
                         <Textarea v-model={script.code} rows={7} mono placeholder={t('admin.settings.scripts.codePlaceholder')} />
                       </FormField>

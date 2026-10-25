@@ -170,6 +170,27 @@ export function useOrderDetail(opts: { maxRefundDays: () => number; onChanged: (
     }
   }
 
+  const cancelManual = async () => {
+    const o = order.value
+    const attempt = o?.refund_attempt
+    if (!o || !attempt || attempt.status !== 'manual_awaiting') return
+    manual.error = ''
+    manual.success = ''
+    manual.submitting = true
+    try {
+      const response = await adminAPI.cancelManualRefundOrder(o.id, { attempt_id: attempt.id })
+      await fetchDetail(o.id, true)
+      manual.success = response.data?.attempt?.status === 'manual_canceled'
+        ? t('admin.orders.manualRefundCanceled')
+        : t('admin.orders.originalRefundPending')
+      opts.onChanged()
+    } catch (err) {
+      manual.error = errorMessage(err, t('admin.orders.refundFailed'))
+    } finally {
+      manual.submitting = false
+    }
+  }
+
   const submitOriginal = async () => {
     const o = order.value
     if (!o) return
@@ -233,6 +254,7 @@ export function useOrderDetail(opts: { maxRefundDays: () => number; onChanged: (
     submitWallet,
     submitManual,
     confirmManual,
+    cancelManual,
     submitOriginal,
     downloadFulfillment,
   }

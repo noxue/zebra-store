@@ -1,8 +1,7 @@
 # 手册截图清单
 
-手册里所有 `![说明](/screenshots/…)` 图片都列在这里。原有 89 张应用界面图片来自完成验收的
-dot2.com 实验环境和全新本地实例；新增 10 张店铺模板图片使用线上公开演示商品与隔离的模板预览配置，
-均整理到 `handbook/public/screenshots/`，重新构建即可发布。
+手册里所有 `![说明](/screenshots/…)` 图片都列在这里。应用界面图片来自完成验收的
+dot2.com 实验环境和全新本地实例，整理在 `handbook/public/screenshots/`。
 剩余 6 张宝塔面板图片必须在单独安装的宝塔测试服务器上采集，当前正文不引用它们，避免线上出现损坏图片或用模拟图误导读者。
 
 ## 约定
@@ -14,13 +13,7 @@ dot2.com 实验环境和全新本地实例；新增 10 张店铺模板图片使�
 - “不保存 / 不提交”的步骤截完图后取消，避免污染实验数据；会改动数据的步骤截完后执行 `lab.sh provision` 恢复；
 - 部署（宝塔）截图需要一台单独装了宝塔面板的测试服务器，不在 dot2.com 上。
 
-共 **105** 张：**99 张已完成，6 张宝塔面板外部环境截图待采集**。
-
-## 店铺模板（10）
-
-`templates/{classic,vault,aurora,atelier,noir}-{home,products}.png` 分别展示五种模板的首页和商品列表，
-来自 `https://ai.xiaodianpu.cc/` 的公开演示商品。只在截图浏览器中替换公开主题配置，线上站点设置未修改；
-视口 1440×900、整页截图，用在 `storefront/templates.md`、`README.md` 和 `README.en.md`。
+共 **95** 张：**89 张已完成，6 张宝塔面板外部环境截图待采集**。
 
 ## 用户前台（22）
 
@@ -62,7 +55,6 @@ dot2.com 实验环境和全新本地实例；新增 10 张店铺模板图片使�
 | `admin/authz-audit.png` | 权限审计日志 | 后台/authz-audit-logs | 至少有一次角色授权操作 | admin | 1440×900 | admin/rbac.md |
 | `admin/security.png` | 管理员安全设置 | 后台/security | 默认状态 | admin | 1440×900 | admin/security.md |
 | `admin/notifications.png` | 通知中心 | 后台/settings/notifications | 默认状态 | admin | 1440×1200 整页 | admin/notifications.md |
-| `admin/telegram-bot.png` | Telegram Bot 概览 | 后台/telegram-bot | 默认状态 | admin | 1440×900 | admin/telegram.md |
 | `admin/categories.png` | 商品分类 | 后台/categories | 有父子分类 | admin | 1440×900 | admin/products.md |
 | `admin/products.png` | 商品列表 | 后台/products | 默认列表 | admin | 1440×900 | admin/products.md |
 | `admin/product-edit.png` | 商品编辑弹窗 | 后台/products?product_id={lab-e2e-card 的 id} | 打开编辑弹窗，滚动到 SKU 区域 | admin | 1440×1000 | admin/products.md |

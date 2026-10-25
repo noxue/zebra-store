@@ -6,7 +6,6 @@ Zebra Store is a self-hosted digital-goods commerce platform. Its backend uses *
 
 - Repository: [github.com/noxue/zebra-store](https://github.com/noxue/zebra-store)
 - User guide: [zebra-store-docs.noxue.com](https://zebra-store-docs.noxue.com) (hosted on GitHub Pages)
-- Live site: [ai.xiaodianpu.cc](https://ai.xiaodianpu.cc)
 - Downloads: [GitHub Releases](https://github.com/noxue/zebra-store/releases)
 - Huifu SDK: [huifu-pay](https://github.com/noxue/huifu-pay) ([`huifu-pay` on crates.io](https://crates.io/crates/huifu-pay))
 - Card converter developer protocol: [English](docs/protocol/card-converter.en.md) / [中文](docs/protocol/card-converter.md)
@@ -25,15 +24,7 @@ Guest checkout can leave both email and order password empty. The storefront per
 
 ### Storefront templates
 
-Each pair shows the home page and product list with the same demo products. See the [template comparison guide](https://zebra-store-docs.noxue.com/storefront/templates) for setup details.
-
-| Template | Home | Product list |
-|---|---|---|
-| Classic | [<img src="handbook/public/screenshots/templates/classic-home.png" width="360" alt="Classic home">](handbook/public/screenshots/templates/classic-home.png) | [<img src="handbook/public/screenshots/templates/classic-products.png" width="360" alt="Classic products">](handbook/public/screenshots/templates/classic-products.png) |
-| Digital vault | [<img src="handbook/public/screenshots/templates/vault-home.png" width="360" alt="Digital vault home">](handbook/public/screenshots/templates/vault-home.png) | [<img src="handbook/public/screenshots/templates/vault-products.png" width="360" alt="Digital vault products">](handbook/public/screenshots/templates/vault-products.png) |
-| Aurora | [<img src="handbook/public/screenshots/templates/aurora-home.png" width="360" alt="Aurora home">](handbook/public/screenshots/templates/aurora-home.png) | [<img src="handbook/public/screenshots/templates/aurora-products.png" width="360" alt="Aurora products">](handbook/public/screenshots/templates/aurora-products.png) |
-| Atelier | [<img src="handbook/public/screenshots/templates/atelier-home.png" width="360" alt="Atelier home">](handbook/public/screenshots/templates/atelier-home.png) | [<img src="handbook/public/screenshots/templates/atelier-products.png" width="360" alt="Atelier products">](handbook/public/screenshots/templates/atelier-products.png) |
-| Noir | [<img src="handbook/public/screenshots/templates/noir-home.png" width="360" alt="Noir home">](handbook/public/screenshots/templates/noir-home.png) | [<img src="handbook/public/screenshots/templates/noir-products.png" width="360" alt="Noir products">](handbook/public/screenshots/templates/noir-products.png) |
+See the [template guide](https://zebra-store-docs.noxue.com/storefront/templates) for the five styles and setup steps.
 
 <details>
 <summary>View all storefront screenshots (22)</summary>

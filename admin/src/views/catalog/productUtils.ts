@@ -280,7 +280,11 @@ export const normalizeSKUsForSubmit = (skus: SKUFormItem[], fulfillmentType: str
       throw new Error(t('admin.products.errors.skuPriceInvalid', { index: index + 1 }))
     }
     const agentPrice = item.agent_price_amount === '' ? null : Number(item.agent_price_amount)
-    if (agentPrice !== null && (!Number.isFinite(agentPrice) || agentPrice <= 0)) {
+    const costPrice = Number(item.cost_price_amount) || 0
+    if (agentPrice !== null && (!Number.isFinite(agentPrice) || agentPrice <= 0 || agentPrice < costPrice)) {
+      throw new Error(t('admin.products.errors.skuAgentPriceInvalid', { index: index + 1 }))
+    }
+    if ((agentPrice ?? priceAmount) < costPrice) {
       throw new Error(t('admin.products.errors.skuAgentPriceInvalid', { index: index + 1 }))
     }
     return {
@@ -289,7 +293,7 @@ export const normalizeSKUsForSubmit = (skus: SKUFormItem[], fulfillmentType: str
       spec_values: normalizeSpecValues(item.spec_values),
       price_amount: priceAmount,
       agent_price_amount: agentPrice,
-      cost_price_amount: Number(item.cost_price_amount) || 0,
+      cost_price_amount: costPrice,
       manual_stock_total: fulfillmentType === 'manual' ? toSafeStockTotal(item.manual_stock_total) : 0,
       is_active: Boolean(item.is_active),
       sort_order: Number(item.sort_order) || 0,

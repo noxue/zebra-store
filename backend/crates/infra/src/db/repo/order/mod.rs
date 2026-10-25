@@ -342,6 +342,17 @@ impl OrderStore for SeaOrderStore {
         .await)
     }
 
+    async fn claim_manual_refund_cancellation(
+        &self,
+        attempt_id: Id,
+        now: DateTime<Utc>,
+    ) -> Result<bool> {
+        in_txn!(self, |txn| refund::claim_manual_refund_cancellation_in(
+            &txn, attempt_id, now
+        )
+        .await)
+    }
+
     async fn gateway_refund_attempts(&self, order_id: Id) -> Result<Vec<GatewayRefundAttempt>> {
         refund::list_gateway_refund_attempts_in(&self.db, order_id).await
     }

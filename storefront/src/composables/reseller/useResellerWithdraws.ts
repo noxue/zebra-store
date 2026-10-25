@@ -23,7 +23,7 @@ export const validateWithdrawForm = (form: WithdrawForm): string | null => {
   if (!form.currency.trim()) return 'withdrawCurrencyRequired'
   if (!form.channel.trim()) return 'withdrawChannelRequired'
   if (!form.account.trim()) return 'withdrawAccountRequired'
-  if (['alipay', 'wechat'].includes(form.channel.trim().toLowerCase())) {
+  if (['alipay', 'wechat', '支付宝', '微信'].includes(form.channel.trim().toLowerCase())) {
     if (!form.payee_name?.trim()) return 'withdrawPayeeRequired'
     if (!form.qr_code_url?.trim()) return 'withdrawQrRequired'
   }

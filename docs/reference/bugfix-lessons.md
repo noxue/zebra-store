@@ -1210,7 +1210,14 @@ dujiao-next 在约 7 个月内迭代了支付（10+ 网关）、订单/库存、
 - **对我们实现的要求**: 周期任务需考虑多实例（分布式锁/单 leader 调度），且 `ConfirmDueCommissions` 本身必须幂等：用 `UPDATE ... SET status='confirmed' WHERE id=? AND status='pending' AND confirm_at<=now` 以 rows_affected 决定是否入账。
 - **必测用例**: 两个 worker 同时执行确认 → 每条佣金只确认/入账一次。
 
-## 10. 分销商/租户/域名（RSL，10 条）
+## 10. 分销商/租户/域名（RSL，11 条）
+
+#### RSL-11 分销商商品列表误把主站统一代理价当作本站成本价
+
+- 问题现象: 管理员按分站或 SKU 设置专属代理价后，分销商商品定价列表及商品级编辑区仍显示主站统一价格，SKU 行和实际结算却采用专属价格。
+- 根因: 前端直接读取 `product.price_amount`，没有汇总接口提供的每个 SKU 的 `base_price_amount`。
+- 修复要求: 分销商成本价一律使用当前分站 SKU 生效代理价；列表与商品级编辑区按在售 SKU 显示单价或范围，SKU 行显示自身价格。售价也按在售 SKU 显示；主站商品价不可代替分站成本价。
+- **必测用例**: 统一代理价 45、125，本分站覆盖为 38.67、120.33，售价 50、135 → 列表成本价 `38.67 - 120.33`、售价 `50.00 - 135.00`；隐藏或停用 SKU 不参与范围；其他分销商仍读到统一代理价。
 
 
 #### RSL-01 多次部分退款累计超扣分销利润
@@ -3120,3 +3127,9 @@ dujiao-next 在约 7 个月内迭代了支付（10+ 网关）、订单/库存、
 
 - **对我们实现的要求**: 所有 `Vec` 配置（`cors.allowed_origins`、`server.trusted_proxies`、`upload.allowed_types/extensions`、`reseller.main_hosts`）都按逗号分隔解析。
 - **必测用例**: `zs-server settings::tests::qa_a27_list_values_from_env`。
+
+#### RESELLER-PICKER-01 Safari 搜索候选项无法用鼠标选中（P2）
+
+- **问题现象**: 分销商品配置的分销商和商品搜索结果显示后，鼠标点击候选项会先触发失焦，列表立即关闭，选择事件没有执行。
+- **修复要点**: 在候选项按下指针时完成选择，避免失焦卸载列表抢在点击事件之前；保留键盘 Enter 选择。候选列表和选项需有足够的可点击高度；带 `backdrop-filter` 的筛选卡片会形成独立层叠上下文，须让它盖过下面的表格，防止列表下半部分被遮住。
+- **必测用例**: admin `SearchPicker.test.ts` 中 `reseller_picker_01`：指针按下候选项即更新所选记录和输入文字，列表关闭。

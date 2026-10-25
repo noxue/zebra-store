@@ -118,7 +118,7 @@ export default defineComponent({
                 </div>
                 {w.qrUploadError.value && <p class="mt-2 text-xs text-danger-text">{w.qrUploadError.value}</p>}
               </Field>
-              <Button type="submit" block loading={w.submittingWithdraw.value} disabled={!w.withdrawEnabled.value || w.amountExceeded.value}>
+              <Button type="submit" block loading={w.submittingWithdraw.value} disabled={!w.withdrawEnabled.value || w.amountExceeded.value || w.qrUploading.value}>
                 <Send class="size-4" />
                 {w.submittingWithdraw.value ? k('withdrawing') : k('withdrawSubmit')}
               </Button>

@@ -41,8 +41,12 @@ export function usePersonalCenter(sectionGetter: () => string) {
   const loadError = ref('')
 
   const canAccessResellerConsole = computed(() => appStore.canAccessResellerConsole)
+  const affiliateEnabled = computed(() => appStore.config?.affiliate?.enabled === true)
   const navItems = computed<PersonalNavItem[]>(() =>
-    SECTIONS.filter((s) => s.key !== 'reseller' || canAccessResellerConsole.value).map((s) => ({
+    SECTIONS.filter((s) =>
+      (s.key !== 'reseller' || canAccessResellerConsole.value)
+      && (s.key !== 'affiliate' || affiliateEnabled.value),
+    ).map((s) => ({
       ...s,
       label: t(`personalCenter.tabs.${s.key}`),
     })),
@@ -52,6 +56,7 @@ export function usePersonalCenter(sectionGetter: () => string) {
     const raw = sectionGetter()
     if (!KNOWN.has(raw)) return 'overview'
     if (raw === 'reseller' && !canAccessResellerConsole.value) return 'overview'
+    if (raw === 'affiliate' && !affiliateEnabled.value) return 'overview'
     return raw as PersonalSection
   })
 

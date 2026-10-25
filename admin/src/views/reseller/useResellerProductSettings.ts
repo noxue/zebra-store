@@ -12,7 +12,7 @@ import { useListPage } from '@/composables/useListPage'
 import { useListRefresh } from '@/composables/useListRefresh'
 import { confirmAction } from '@/utils/confirm'
 import { cleanParams } from '@/utils/format'
-import { notifySuccess } from '@/utils/notify'
+import { notifyError, notifySuccess } from '@/utils/notify'
 import { blankSettingForm, queryString, seedPreviewEntries, settingFormFromRule, type PreviewEntry } from './resellerUtils'
 
 const PREVIEW_DEBOUNCE_MS = 350
@@ -51,6 +51,7 @@ export function useResellerProductSettings() {
   const operatingId = ref<number | null>(null)
   const saving = ref(false)
   const showEditor = ref(false)
+  const showPicker = ref(false)
   const scope = ref<{ resellerId: number; productId: number } | null>(null)
   const detail = ref<AdminResellerProductSettingDetail | null>(null)
   const productForm = ref<AdminResellerProductSettingPayloadItem>(blankSettingForm(0))
@@ -68,7 +69,10 @@ export function useResellerProductSettings() {
   }
 
   const buildPayload = (): AdminResellerProductSettingUpdatePayload => ({
-    settings: [productForm.value, ...(detail.value?.skus ?? []).map((sku) => skuForm(sku.id))],
+    settings: [productForm.value, ...(detail.value?.skus ?? []).map((sku) => skuForm(sku.id))].map((row) => ({
+      ...row,
+      agent_price_amount: String(row.agent_price_amount ?? '').trim() || null,
+    })),
   })
 
   const runPreview = async () => {
@@ -126,6 +130,20 @@ export function useResellerProductSettings() {
       scope.value = null
     } finally {
       operatingId.value = null
+    }
+  }
+
+  const openBySelection = async (resellerId: number, productId: number) => {
+    scope.value = { resellerId, productId }
+    try {
+      const res = await adminAPI.getResellerProductSetting(resellerId, productId)
+      if (!res.data) return
+      applyDetail(res.data)
+      showPicker.value = false
+      showEditor.value = true
+    } catch {
+      scope.value = null
+      notifyError(t('admin.resellerProductSettings.actions.loadFailed'))
     }
   }
 
@@ -194,12 +212,14 @@ export function useResellerProductSettings() {
     operatingId,
     saving,
     showEditor,
+    showPicker,
     scope,
     detail,
     productForm,
     skuForm,
     preview,
     openEditor,
+    openBySelection,
     closeEditor,
     save,
     reset,

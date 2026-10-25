@@ -1,10 +1,10 @@
 import { defineComponent, onMounted, type FunctionalComponent } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink, useRouter } from 'vue-router'
-import { Bot, ExternalLink, KeyRound, RefreshCw, Send, ShieldAlert, Wifi, WifiOff } from 'lucide-vue-next'
+import { Bot, ExternalLink, RefreshCw, Send, Wifi, WifiOff } from 'lucide-vue-next'
 import { Badge, Button, Card, PageHeader } from '@/components/ui'
 import { formatLicenseStatus, formatWarnings, formatWebhookStatus } from './telegramUtils'
-import { LICENSE_PURCHASE_URL, formatRuntimeDate, useTelegramRuntimeStatus } from './useTelegramRuntimeStatus'
+import { formatRuntimeDate, useTelegramRuntimeStatus } from './useTelegramRuntimeStatus'
 
 const InfoItem: FunctionalComponent<{ label: string; value: string | number; mono?: boolean; wide?: boolean }> = (props) => (
   <div class={props.wide ? 'md:col-span-2 xl:col-span-3' : ''}>
@@ -34,34 +34,6 @@ export default defineComponent({
       return (
         <div class="space-y-6">
           <PageHeader title={t('telegramBot.overview.title')} subtitle={t('telegramBot.overview.subtitle')} />
-
-          {/* License purchase notice */}
-          <section class="rounded-zs-lg border border-line bg-warning-soft p-4 shadow-zs-sm sm:p-5">
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div class="flex items-start gap-3">
-                <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface-solid text-warning-text">
-                  <KeyRound class="h-5 w-5" />
-                </span>
-                <div class="space-y-1.5">
-                  <p class="text-sm font-semibold text-warning-text">{t('telegramBot.licensePurchase.title')}</p>
-                  <p class="text-sm text-fg/80">{t('telegramBot.licensePurchase.desc')}</p>
-                  <p class="flex items-start gap-1.5 text-xs text-danger-text">
-                    <ShieldAlert class="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                    <span>{t('telegramBot.licensePurchase.securityNote')}</span>
-                  </p>
-                </div>
-              </div>
-              <a
-                href={LICENSE_PURCHASE_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                class="zs-gradient-bg zs-text-shadow inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-full px-4 text-sm font-medium text-on-primary shadow-zs-sm transition hover:-translate-y-0.5"
-              >
-                {t('telegramBot.licensePurchase.action')}
-                <ExternalLink class="h-3.5 w-3.5" />
-              </a>
-            </div>
-          </section>
 
           {/* Connection status */}
           <Card>

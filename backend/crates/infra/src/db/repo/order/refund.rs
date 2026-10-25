@@ -93,6 +93,7 @@ pub(crate) async fn reserve_gateway_refund_in<C: ConnectionTrait>(
             gateway_refund_status::MANUAL_PREPARING,
             gateway_refund_status::MANUAL_LOCKING,
             gateway_refund_status::MANUAL_AWAITING,
+            gateway_refund_status::MANUAL_CANCELING,
         ]))
         .order_by_desc(gateway_refund_attempts::Column::Id)
         .lock_exclusive()
@@ -207,6 +208,41 @@ pub(crate) async fn claim_manual_refund_preparation_in<C: ConnectionTrait>(
     Ok(changed == 1)
 }
 
+pub(crate) async fn claim_manual_refund_cancellation_in<C: ConnectionTrait>(
+    conn: &C,
+    attempt_id: Id,
+    now: DateTime<Utc>,
+) -> Result<bool> {
+    let stale = now - chrono::Duration::seconds(30);
+    let changed = gateway_refund_attempts::Entity::update_many()
+        .col_expr(
+            gateway_refund_attempts::Column::Status,
+            Expr::value(gateway_refund_status::MANUAL_CANCELING),
+        )
+        .col_expr(gateway_refund_attempts::Column::UpdatedAt, Expr::value(now))
+        .filter(gateway_refund_attempts::Column::Id.eq(attempt_id))
+        .filter(
+            Condition::any()
+                .add(
+                    gateway_refund_attempts::Column::Status
+                        .eq(gateway_refund_status::MANUAL_AWAITING),
+                )
+                .add(
+                    Condition::all()
+                        .add(
+                            gateway_refund_attempts::Column::Status
+                                .eq(gateway_refund_status::MANUAL_CANCELING),
+                        )
+                        .add(gateway_refund_attempts::Column::UpdatedAt.lte(stale)),
+                ),
+        )
+        .exec(conn)
+        .await
+        .dom()?
+        .rows_affected;
+    Ok(changed == 1)
+}
+
 pub(crate) async fn get_gateway_refund_attempt_in<C: ConnectionTrait>(
     conn: &C,
     id: Id,
@@ -244,6 +280,7 @@ pub(crate) async fn unfinished_gateway_refund_attempts_in<C: ConnectionTrait>(
                     gateway_refund_status::PENDING,
                     gateway_refund_status::MANUAL_PREPARING,
                     gateway_refund_status::MANUAL_LOCKING,
+                    gateway_refund_status::MANUAL_CANCELING,
                 ]))
                 .add(
                     Condition::all()
@@ -393,6 +430,11 @@ pub(crate) async fn refund_in<C: ConnectionTrait>(
             return Err(Error::invalid());
         }
         if attempt.refund_no.starts_with("MR") {
+            if attempt.refund_record_id.is_none()
+                && attempt.status != gateway_refund_status::MANUAL_AWAITING
+            {
+                return Err(Error::bad_request("error.gateway_refund_pending"));
+            }
             let transfer_ref = req.gateway_refund_provider_ref.trim();
             if transfer_ref.is_empty() {
                 return Err(Error::invalid());
@@ -436,6 +478,7 @@ pub(crate) async fn refund_in<C: ConnectionTrait>(
                 gateway_refund_status::MANUAL_PREPARING,
                 gateway_refund_status::MANUAL_LOCKING,
                 gateway_refund_status::MANUAL_AWAITING,
+                gateway_refund_status::MANUAL_CANCELING,
             ]))
             .one(conn)
             .await
@@ -445,13 +488,10 @@ pub(crate) async fn refund_in<C: ConnectionTrait>(
         }
         None
     };
-    if gateway_attempt.is_none()
-        && parent
-            .as_ref()
-            .unwrap_or(&order)
-            .online_paid_amount
-            .is_positive()
-    {
+    // A child keeps the checkout split snapshot. The successful payment and
+    // wallet/online split belong to its parent.
+    let paid_order = parent.as_ref().unwrap_or(&order);
+    if gateway_attempt.is_none() && paid_order.online_paid_amount.is_positive() {
         return Err(Error::bad_request("error.gateway_refund_pending"));
     }
     if req.to_wallet && order.user_id == 0 {

@@ -127,6 +127,7 @@ struct SettingRequest {
     markup_percent: Option<Num>,
     fixed_markup_amount: Option<Num>,
     fixed_price_amount: Option<Num>,
+    agent_price_amount: Option<Num>,
     sort_order: i32,
     content: Option<serde_json::Map<String, serde_json::Value>>,
     instructions: Option<serde_json::Map<String, serde_json::Value>>,
@@ -139,10 +140,13 @@ struct SettingsRequest {
 }
 
 impl SettingsRequest {
-    fn inputs(&self) -> Result<Vec<SettingInput>, ApiError> {
+    fn inputs(&self, admin: bool) -> Result<Vec<SettingInput>, ApiError> {
         self.settings
             .iter()
             .map(|s| {
+                if !admin && s.agent_price_amount.is_some() {
+                    return Err(Error::forbidden(keys::FORBIDDEN).into());
+                }
                 Ok(SettingInput {
                     sku_id: s.sku_id,
                     is_listed: s.is_listed,
@@ -150,6 +154,11 @@ impl SettingsRequest {
                     markup_percent: num(s.markup_percent.as_ref())?.decimal(),
                     fixed_markup_amount: num(s.fixed_markup_amount.as_ref())?.decimal(),
                     fixed_price_amount: num(s.fixed_price_amount.as_ref())?.decimal(),
+                    agent_price_amount: s
+                        .agent_price_amount
+                        .as_ref()
+                        .map(|value| num(Some(value)))
+                        .transpose()?,
                     sort_order: s.sort_order,
                     content: s.content.clone(),
                     instructions: s.instructions.clone(),

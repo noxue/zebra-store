@@ -1,14 +1,14 @@
 import { computed, defineComponent, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { LucideIcon } from 'lucide-vue-next'
-import { CircleCheck, Compass, ExternalLink, LifeBuoy, Lock, Megaphone, Palette, Plus, RotateCcw, Save, Store, Trash2 } from 'lucide-vue-next'
+import { CircleCheck, Code2, Compass, ExternalLink, LifeBuoy, Lock, Megaphone, Palette, Plus, RotateCcw, Save, Store, Trash2 } from 'lucide-vue-next'
 import { useResellerSiteConfig, type SiteSection } from '@/composables/reseller/useResellerSiteConfig'
 import { RichContent } from '@/components/common/RichContent'
 import { ResellerAlert, ResellerPageHeader, ResellerPageState } from '@/components/reseller/ConsoleParts'
 import { LocalizedInput, ResellerImageField, ResellerLocaleTabs } from '@/components/reseller/ResellerFormParts'
-import { Alert, Badge, Button, Card, Field, Input, Select, Switch, cn } from '@/components/ui'
+import { Alert, Badge, Button, Card, Field, Input, Select, Switch, Textarea, cn } from '@/components/ui'
 
-const sectionIcons: Record<SiteSection, LucideIcon> = { brand: Store, appearance: Palette, support: LifeBuoy, content: Megaphone, navigation: Compass }
+const sectionIcons: Record<SiteSection, LucideIcon> = { brand: Store, appearance: Palette, support: LifeBuoy, content: Megaphone, navigation: Compass, scripts: Code2 }
 
 export default defineComponent({
   name: 'ResellerSite',
@@ -17,7 +17,7 @@ export default defineComponent({
     const s = useResellerSiteConfig()
     onMounted(() => void s.load())
     const k = (key: string) => t(`personalCenter.reseller.siteConfig.${key}`)
-    const sections: SiteSection[] = ['brand', 'appearance', 'support', 'content', 'navigation']
+    const sections: SiteSection[] = ['brand', 'appearance', 'support', 'content', 'navigation', 'scripts']
     const templateOptions = ['classic', 'vault', 'aurora', 'atelier', 'noir'].map((value) => ({ value, label: value[0].toUpperCase() + value.slice(1) }))
     const colorKeys = ['primary_color', 'secondary_color', 'accent_color', 'background_color', 'surface_color', 'text_color'] as const
     const announcementTypes = computed(() => ['info', 'success', 'warning'].map((v) => ({ value: v, label: k(`announcementTypes.${v}`) })))
@@ -26,6 +26,9 @@ export default defineComponent({
       { key: 'whatsapp' as const, label: 'fields.whatsapp', placeholder: 'https://wa.me/1234567890' },
       { key: 'email' as const, label: 'fields.email', placeholder: 'support@example.com' },
       { key: 'support_url' as const, label: 'fields.supportUrl', placeholder: 'https://example.com/support' },
+      { key: 'wechat_id' as const, label: 'fields.wechatId', placeholder: 'WeChat ID' },
+      { key: 'qq_number' as const, label: 'fields.qqNumber', placeholder: 'QQ' },
+      { key: 'qq_group' as const, label: 'fields.qqGroup', placeholder: 'QQ group' },
     ]
     const disabled = computed(() => !s.canEdit.value || s.saving.value)
 
@@ -91,6 +94,12 @@ export default defineComponent({
             <Input v-model={s.form.support[f.key]} placeholder={f.placeholder} disabled={disabled.value} />
           </Field>
         ))}
+        <Field label={k('fields.wechatQrCode')} hint={k('imageHint')}>
+          <ResellerImageField v-model={s.form.support.wechat_qr_code} disabled={disabled.value} />
+        </Field>
+        <Field label={k('fields.wechatGroupQrCode')} hint={k('imageHint')}>
+          <ResellerImageField v-model={s.form.support.wechat_group_qr_code} disabled={disabled.value} />
+        </Field>
       </div>
     )
 
@@ -206,6 +215,27 @@ export default defineComponent({
       </div>
     )
 
+    const scriptsSection = () => (
+      <div class="space-y-4">
+        <p class="text-sm text-muted">{k('scriptsHint')}</p>
+        <Button size="sm" variant="soft" disabled={disabled.value || s.form.scripts.length >= 20} onClick={s.addScript}>
+          <Plus class="size-4" />{k('actions.addScript')}
+        </Button>
+        {s.form.scripts.map((script, index) => (
+          <div key={index} class="space-y-3 rounded-zs border border-line p-4">
+            <div class="flex justify-end"><Button size="sm" variant="ghost" disabled={disabled.value} onClick={() => s.removeScript(index)}>{k('actions.remove')}</Button></div>
+            <Field label={k('fields.scriptName')}><Input v-model={script.name} disabled={disabled.value} /></Field>
+            <Field label={k('fields.scriptPosition')}><Select v-model={script.position} disabled={disabled.value} options={[
+              { label: k('fields.scriptHead'), value: 'head' },
+              { label: k('fields.scriptBodyEnd'), value: 'body_end' },
+            ]} /></Field>
+            <Switch v-model={script.enabled} disabled={disabled.value} label={k('fields.scriptEnabled')} />
+            <Field label={k('fields.scriptCode')}><Textarea v-model={script.code} disabled={disabled.value} rows={7} /></Field>
+          </div>
+        ))}
+      </div>
+    )
+
     const renderSection = () => {
       switch (s.activeSection.value) {
         case 'appearance':
@@ -216,6 +246,8 @@ export default defineComponent({
           return contentSection()
         case 'navigation':
           return navigationSection()
+        case 'scripts':
+          return scriptsSection()
         default:
           return brandSection()
       }

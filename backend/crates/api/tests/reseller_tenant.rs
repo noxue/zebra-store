@@ -8,6 +8,145 @@ use reseller_common::{App, BASE, config, data, err};
 use serde_json::json;
 use zs_domain::content::public::Tenant;
 
+async fn public_config_at(app: &App, host: &str) -> serde_json::Value {
+    let (status, body) = app
+        .raw(
+            "GET",
+            "/api/v1/public/config",
+            None,
+            None,
+            &[("host", host)],
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    data(&body).clone()
+}
+
+// RSL-06: support QR codes and IDs belong only to the reseller that saved them.
+#[tokio::test]
+async fn rsl06_customer_support_isolated_between_main_and_resellers() {
+    let app = App::new().await;
+    let saved_main = app.admin_call("PUT", "/api/v1/admin/settings", Some(json!({
+        "key": "site_config", "value": {"contact": {"wechat_id": "main-id", "wechat_qr_code": "/uploads/main.png", "qq_number": "10001"}}
+    }))).await;
+    data(&saved_main);
+    let (_, first_token, first_id) = app.reseller("support-one@example.test", "0").await;
+    let (_, second_token, second_id) = app.reseller("support-two@example.test", "0").await;
+    let saved_first = app.call("PUT", "/api/v1/reseller/site-config", Some(json!({
+        "support": {"wechat_id": "seller-one", "wechat_qr_code": "/uploads/reseller/one.png", "qq_group": "20002"}
+    })), Some(&first_token)).await;
+    data(&saved_first);
+    let saved_second = app.call("PUT", "/api/v1/reseller/site-config", Some(json!({
+        "support": {"wechat_id": "seller-two", "wechat_group_qr_code": "/uploads/reseller/two.png"}
+    })), Some(&second_token)).await;
+    data(&saved_second);
+
+    let config = &app.services.content.public_config;
+    let main = config
+        .get(&Tenant {
+            reseller_id: None,
+            host: "main.example.com".into(),
+        })
+        .await
+        .unwrap();
+    let first = config
+        .get(&Tenant {
+            reseller_id: Some(first_id),
+            host: "one.shop.example.com".into(),
+        })
+        .await
+        .unwrap();
+    let second = config
+        .get(&Tenant {
+            reseller_id: Some(second_id),
+            host: "two.shop.example.com".into(),
+        })
+        .await
+        .unwrap();
+    assert_eq!(main["contact"]["wechat_id"], "main-id");
+    assert_eq!(first["contact"]["wechat_id"], "seller-one");
+    assert_eq!(
+        first["contact"]["wechat_qr_code"],
+        "/uploads/reseller/one.png"
+    );
+    assert!(first["contact"].get("qq_number").is_none());
+    assert_eq!(second["contact"]["wechat_id"], "seller-two");
+    assert_eq!(
+        second["contact"]["wechat_group_qr_code"],
+        "/uploads/reseller/two.png"
+    );
+    assert!(second["contact"].get("wechat_qr_code").is_none());
+    assert_eq!(main["contact"]["wechat_qr_code"], "/uploads/main.png");
+}
+
+#[tokio::test]
+async fn reseller_script_scope_isolated_even_without_site_config() {
+    let app = App::new().await;
+    let (_, token, pid) = app.reseller("scripts@example.test", "0").await;
+    let host = app.system_domain(pid, "scripts").await;
+    data(
+        &app.admin_call(
+            "PUT",
+            "/api/v1/admin/settings",
+            Some(json!({
+                "key": "site_config", "value": {"scripts": [
+                    {"name": "global", "enabled": true, "code": "global()", "scope": "global"},
+                    {"name": "main", "enabled": true, "code": "main()", "scope": "main"},
+                    {"name": "legacy", "enabled": true, "code": "legacy()"},
+                ]}
+            })),
+        )
+        .await,
+    );
+    let main_response = app.call("GET", "/api/v1/public/config", None, None).await;
+    let main = data(&main_response);
+    assert_eq!(main["scripts"].as_array().unwrap().len(), 3);
+    let (_, body) = app
+        .raw(
+            "GET",
+            "/api/v1/public/config",
+            None,
+            None,
+            &[("host", host.as_str())],
+        )
+        .await;
+    let reseller = data(&body);
+    assert_eq!(reseller["scripts"].as_array().unwrap().len(), 1);
+    assert_eq!(reseller["scripts"][0]["name"], "global");
+
+    data(&app.call("PUT", "/api/v1/reseller/site-config", Some(json!({
+        "site_name": "Scripts", "scripts": [{"name": "own", "enabled": true, "code": "own()", "scope": "main"}]
+    })), Some(&token)).await);
+    let (_, body) = app
+        .raw(
+            "GET",
+            "/api/v1/public/config",
+            None,
+            None,
+            &[("host", host.as_str())],
+        )
+        .await;
+    let reseller = data(&body);
+    assert_eq!(reseller["scripts"].as_array().unwrap().len(), 2);
+    assert_eq!(reseller["scripts"][1]["name"], "own");
+    assert_eq!(reseller["scripts"][1]["scope"], "reseller");
+
+    let (_, _, other_id) = app.reseller("other-scripts@example.test", "0").await;
+    let other_host = app.system_domain(other_id, "other-scripts").await;
+    let (_, body) = app
+        .raw(
+            "GET",
+            "/api/v1/public/config",
+            None,
+            None,
+            &[("host", other_host.as_str())],
+        )
+        .await;
+    let other = data(&body);
+    assert_eq!(other["scripts"].as_array().unwrap().len(), 1);
+    assert_eq!(other["scripts"][0]["name"], "global");
+}
+
 // RSL-06: host normalisation + unknown / unverified hosts are 404 "site unavailable".
 #[tokio::test]
 async fn rsl06_resolves_hosts_and_rejects_unknown_sites() {
@@ -351,6 +490,7 @@ async fn rsl06_public_config_endpoint_serves_reseller_branding() {
     assert_ne!(d["theme"]["primary_color"], "#abcdef");
 }
 
+// RSL-06: tenant-aware appearance and cached host URL stay isolated.
 #[tokio::test]
 async fn reseller_appearance_is_isolated_from_main_and_other_resellers() {
     let app = App::new().await;
@@ -358,40 +498,10 @@ async fn reseller_appearance_is_isolated_from_main_and_other_resellers() {
     let (_, second_token, second_id) = app.reseller("appearance-two@example.test", "0").await;
     let first_host = app.system_domain(first_id, "appearance-one").await;
     let second_host = app.system_domain(second_id, "appearance-two").await;
-    let first_alias = "appearance-alias.example.test".to_owned();
-    let alias = app
-        .call(
-            "POST",
-            "/api/v1/reseller/domains",
-            Some(json!({"domain": first_alias})),
-            Some(&first_token),
-        )
-        .await;
-    let alias_id = data(&alias)["id"].as_i64().unwrap();
-    data(
-        &app.admin_call(
-            "POST",
-            &format!("/api/v1/admin/resellers/domains/{alias_id}/approve"),
-            None,
-        )
-        .await,
-    );
+    let first_alias = "appearance-alias.shop.example.com";
 
-    let read = async |host: &str| {
-        let (status, body) = app
-            .raw(
-                "GET",
-                "/api/v1/public/config",
-                None,
-                None,
-                &[("host", host)],
-            )
-            .await;
-        assert_eq!(status, StatusCode::OK, "{body}");
-        data(&body).clone()
-    };
-    let main_before = read("localhost").await;
-    let second_before = read(&second_host).await;
+    let main_before = public_config_at(&app, "localhost").await;
+    let second_before = public_config_at(&app, &second_host).await;
     data(
         &app.call(
             "PUT",
@@ -405,10 +515,19 @@ async fn reseller_appearance_is_isolated_from_main_and_other_resellers() {
         .await,
     );
 
-    let first = read(&first_host).await;
-    let alias = read(&first_alias).await;
-    let main_after = read("localhost").await;
-    let second_after = read(&second_host).await;
+    let first = public_config_at(&app, &first_host).await;
+    let alias = app
+        .services
+        .content
+        .public_config
+        .get(&Tenant {
+            reseller_id: Some(first_id),
+            host: first_alias.into(),
+        })
+        .await
+        .unwrap_or_else(|e| panic!("{e}"));
+    let main_after = public_config_at(&app, "localhost").await;
+    let second_after = public_config_at(&app, &second_host).await;
     assert_eq!(first["storefront_template"], "noir");
     assert_eq!(first["theme"]["primary_color"], "#123abc");
     assert_eq!(first["brand"]["site_url"], format!("https://{first_host}"));
@@ -436,8 +555,8 @@ async fn reseller_appearance_is_isolated_from_main_and_other_resellers() {
         )
         .await,
     );
-    let first_after = read(&first_host).await;
-    let second_after = read(&second_host).await;
+    let first_after = public_config_at(&app, &first_host).await;
+    let second_after = public_config_at(&app, &second_host).await;
     assert_eq!(first_after["storefront_template"], "noir");
     assert_eq!(first_after["theme"]["primary_color"], "#123abc");
     assert_eq!(second_after["storefront_template"], "aurora");

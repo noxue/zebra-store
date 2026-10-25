@@ -370,7 +370,8 @@ pub fn normalize_sku_inputs(
         if !input.price_amount.is_positive()
             || input
                 .agent_price_amount
-                .is_some_and(|price| !price.is_positive())
+                .is_some_and(|price| !price.is_positive() || price < input.cost_price_amount)
+            || input.agent_price_amount.unwrap_or(input.price_amount) < input.cost_price_amount
             || input.cost_price_amount.is_negative()
         {
             return Err(Error::bad_request(keys::PRICE_INVALID));
@@ -1105,6 +1106,15 @@ mod tests {
         invalid.agent_price_amount = Some(Amount::ZERO);
         assert_eq!(
             normalize_sku_inputs(&[invalid], FulfillmentType::Auto, None)
+                .unwrap_err()
+                .key(),
+            keys::PRICE_INVALID
+        );
+        let mut below_cost = input("DEFAULT", 40, 0, None);
+        below_cost.cost_price_amount = Amount::from(30);
+        below_cost.agent_price_amount = Some(Amount::from(29));
+        assert_eq!(
+            normalize_sku_inputs(&[below_cost], FulfillmentType::Auto, None)
                 .unwrap_err()
                 .key(),
             keys::PRICE_INVALID

@@ -86,6 +86,7 @@ describe('product settings', () => {
       markup_percent: '0.00',
       fixed_markup_amount: '0.00',
       fixed_price_amount: '0.00',
+      agent_price_amount: '',
       sort_order: 0,
     })
     const f = settingFormFromRule(
@@ -97,6 +98,7 @@ describe('product settings', () => {
         markup_percent: '',
         fixed_markup_amount: 0,
         fixed_price_amount: '12.00',
+        agent_price_amount: '8.50',
         sort_order: 2,
       },
       0,
@@ -105,6 +107,7 @@ describe('product settings', () => {
     expect(f.fixed_price_amount).toBe('12.00')
     expect(f.markup_percent).toBe('0.00')
     expect(f.fixed_markup_amount).toBe('0')
+    expect(f.agent_price_amount).toBe('8.50')
   })
   it('seeds preview entries from saved effective prices', () => {
     const detail = {
@@ -162,8 +165,9 @@ describe('site config form', () => {
       theme: { primary_color: '#aabbcc' },
       logo: '',
       favicon: '',
+      scripts: [{ name: ' Chat ', enabled: true, position: 'body_end', code: ' chat() ' }],
       announcement: { enabled: true, type: '', title: { 'zh-CN': 'Hi' } },
-      support: { email: ' a@b.c ' },
+      support: { email: ' a@b.c ', wechat_id: ' seller ', wechat_qr_code: '/uploads/reseller/support.png', qq_number: ' 123 ', qq_group: ' 456 ', wechat_group_qr_code: '/uploads/reseller/group.png' },
       seo: {},
       nav_config: { builtin: { blog: false } },
       footer_links: [
@@ -191,7 +195,11 @@ describe('site config form', () => {
     expect(payload.theme?.primary_color).toBe('#aabbcc')
     expect(payload.announcement?.type).toBe('info')
     expect(payload.support?.email).toBe('a@b.c')
+    expect(payload.support?.wechat_id).toBe('seller')
+    expect(payload.support?.qq_number).toBe('123')
+    expect(payload.support?.wechat_group_qr_code).toBe('/uploads/reseller/group.png')
     expect(payload.footer_links).toHaveLength(1)
+    expect(payload.scripts).toEqual([{ name: 'Chat', enabled: true, position: 'body_end', code: 'chat()' }])
     expect(payload.nav_config).toEqual({
       builtin: { blog: false, notice: true, about: true },
       custom_items: [],

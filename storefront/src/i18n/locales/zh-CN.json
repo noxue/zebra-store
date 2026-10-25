@@ -220,7 +220,14 @@
     "service3": "快速响应的客户支持",
     "service4": "定期更新的产品信息",
     "contactUs": "联系我们",
-    "contactText": "如果您对我们的产品或服务有任何疑问，欢迎通过以下方式联系我们："
+    "contactText": "如果您对我们的产品或服务有任何疑问，欢迎通过以下方式联系我们：",
+    "wechatId": "微信号",
+    "wechatQrCode": "微信客服二维码",
+    "qqNumber": "QQ 号",
+    "qqGroup": "QQ 群号",
+    "wechatGroupQrCode": "微信群二维码",
+    "supportLink": "客服链接",
+    "supportEmail": "客服邮箱"
   },
   "navbar": {
     "cart": "购物车",
@@ -658,6 +665,7 @@
         "saveFailed": "站点配置保存失败，请检查输入后重试",
         "inactive": "分销商身份启用后才能编辑站点配置。",
         "emptyLinks": "暂无页脚链接",
+        "scriptsHint": "脚本仅在你的分站的隔离区域运行，无法读取主页面、登录令牌或 Cookie；未配置时不会继承主站专属脚本。某些要求直接修改页面的客服插件可能无法在隔离区域使用。",
         "sections": {
           "brand": "品牌基础",
           "support": "客服联系方式",
@@ -681,6 +689,8 @@
           "contentDescription": "公告与 SEO",
           "navigation": "导航",
           "navigationDescription": "页脚与导航",
+          "scripts": "脚本",
+          "scriptsDescription": "独立客服代码",
           "appearance": "外观",
           "appearanceDescription": "模板与配色"
         },
@@ -736,6 +746,7 @@
         },
         "actions": {
           "addLink": "添加链接",
+          "addScript": "添加脚本",
           "remove": "移除"
         },
         "fields": {
@@ -746,6 +757,11 @@
           "whatsapp": "WhatsApp",
           "email": "客服邮箱",
           "supportUrl": "客服链接",
+          "wechatId": "微信号",
+          "wechatQrCode": "微信客服二维码",
+          "qqNumber": "QQ 号",
+          "qqGroup": "QQ 群号",
+          "wechatGroupQrCode": "微信群二维码",
           "announcementEnabled": "启用公告",
           "announcementType": "公告类型",
           "announcementTitle": "公告标题",
@@ -756,7 +772,13 @@
           "ogImage": "分享图地址",
           "footerLinks": "页脚链接",
           "linkName": "链接名称",
-          "navVisibility": "导航显示"
+          "navVisibility": "导航显示",
+          "scriptName": "脚本名称",
+          "scriptPosition": "加载位置",
+          "scriptHead": "页面头部",
+          "scriptBodyEnd": "页面底部",
+          "scriptEnabled": "启用脚本",
+          "scriptCode": "客服代码或 JS 片段"
         },
         "appearance": {
           "inherit": "跟随主站",
@@ -776,10 +798,10 @@
       },
       "productSettings": {
         "title": "商品售价配置",
-        "subtitle": "选择分销站可售商品，并设置商品或 SKU 的售价规则。",
+        "subtitle": "查看成本价和售价，按商品或 SKU 调整售价。",
         "searchPlaceholder": "搜索商品名称、Slug 或商品 ID",
         "empty": "暂无可配置商品",
-        "basePrice": "主站基准价",
+        "basePrice": "成本价",
         "edit": "编辑售价",
         "editorTitle": "售价规则",
         "productLevelRule": "商品级规则",
@@ -793,7 +815,7 @@
         "markupPercentField": "加价比例",
         "fixedMarkupField": "固定加价金额",
         "fixedPriceField": "固定售价金额",
-        "effectivePrice": "预计展示价",
+        "effectivePrice": "售价",
         "listedSkuCount": "已展示 SKU",
         "displayed": "展示中",
         "hidden": "已隐藏",
@@ -805,7 +827,7 @@
         "resetSuccess": "规则已重置",
         "resetFailed": "重置规则失败",
         "loadFailed": "商品售价配置加载失败，请稍后重试",
-        "priceInvalidHint": "售价需不低于基准价与成本价",
+        "priceInvalidHint": "售价需不低于成本价",
         "markupExceededHint": "超出最高加价比例",
         "contentOverrides": "分站内容覆盖",
         "overrideContent": "覆盖商品详情",
@@ -905,6 +927,8 @@
         "withdrawCurrencyRequired": "请选择或输入提现币种",
         "withdrawChannelRequired": "请输入提现渠道",
         "withdrawAccountRequired": "请输入提现账号",
+        "withdrawPayeeRequired": "请输入收款人姓名",
+        "withdrawQrRequired": "请上传收款二维码",
         "withdrawFailed": "提现申请提交失败，请稍后重试"
       }
     },
@@ -1461,7 +1485,8 @@
         "support": "客服",
         "seo": "SEO",
         "announcement": "公告"
-      }
+      },
+      "appearanceEntry": "模板与配色"
     },
     "products": {
       "title": "商品定价",
@@ -1472,7 +1497,7 @@
       "focusDescription": "先处理高转化商品，再逐步细化 SKU 价格和隐藏规则。",
       "cards": {
         "defaultMarkup": "默认加价",
-        "defaultMarkupDescription": "未单独配置商品时，系统会使用默认加价比例生成分销价。",
+        "defaultMarkupDescription": "默认加价为 0 时沿用主站售价；设置加价后按成本价计算售价。",
         "maxMarkup": "最高加价",
         "maxMarkupDescription": "封顶为 0 表示不限制；超过后台上限的价格配置会被拒绝保存。",
         "storefront": "分销站",
@@ -1483,7 +1508,7 @@
         "listing": "上架范围",
         "listingDescription": "按商品或 SKU 隐藏不适合分销的商品。",
         "pricing": "价格策略",
-        "pricingDescription": "继承、百分比加价、固定加价和固定售价按需组合。",
+        "pricingDescription": "以成本价为起点，可按百分比、固定金额加价或直接设置售价。",
         "sku": "SKU 覆盖",
         "skuDescription": "优先为高价或高库存 SKU 设置精细规则。"
       }
@@ -1507,7 +1532,7 @@
       "noCurrency": "暂无可提现币种",
       "confirmTitle": "确认提现",
       "confirmMessage": "确认对 {amount} {currency} 发起提现申请？",
-      "channels": { "alipay": "支付宝", "wechat": "微信" },
+      "channels": {"alipay": "支付宝", "wechat": "微信"},
       "payeeName": "收款人姓名",
       "payeeNamePlaceholder": "请输入与收款账号一致的姓名",
       "qrCode": "收款二维码",
@@ -1525,7 +1550,7 @@
       "status": "状态",
       "domain": "来源域名",
       "totalAmount": "成交金额",
-      "baseAmount": "基准金额",
+      "baseAmount": "成本金额",
       "profitAmount": "利润",
       "profitStatus": "利润状态",
       "buyer": "买家",
@@ -1811,6 +1836,7 @@
     "mascotEmpty": "这里空空的呢…",
     "poweredBy": "由 Zebra Store 驱动",
     "loadingText": "加载中，请稍候～",
+    "configLoadFailed": "站点加载失败，请重试",
     "retry": "重试",
     "copy": "复制",
     "copied": "已复制",

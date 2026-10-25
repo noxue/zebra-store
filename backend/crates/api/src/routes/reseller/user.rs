@@ -6,6 +6,7 @@ use axum::extract::{DefaultBodyLimit, Multipart, Path, State};
 use axum::handler::Handler;
 use serde::Deserialize;
 use serde_json::{Value, json};
+use zs_app::reseller::finance::PayoutDetails;
 use zs_app::reseller::product_setting::{Owner, ProductQuery};
 use zs_domain::reseller::ports::{FinanceFilter, OrderFilter};
 use zs_domain::reseller::site::SiteConfigInput;
@@ -310,7 +311,7 @@ async fn preview_product(
         .svc
         .reseller
         .product_settings
-        .preview(Owner::User(uid), pid, &req.inputs()?)
+        .preview(Owner::User(uid), pid, &req.inputs(false)?)
         .await
         .map_err(user_fetch)?;
     ok(dto::preview(&items))
@@ -327,7 +328,7 @@ async fn save_product(
         .svc
         .reseller
         .product_settings
-        .save(Owner::User(uid), pid, &req.inputs()?)
+        .save(Owner::User(uid), pid, &req.inputs(false)?)
         .await
         .map_err(save_failed)?;
     ok(dto::setting_detail(&view))
@@ -506,8 +507,10 @@ async fn apply_withdraw(
             &req.currency,
             &req.channel,
             &req.account,
-            &req.payee_name,
-            &req.qr_code_url,
+            PayoutDetails {
+                payee_name: &req.payee_name,
+                qr_code_url: &req.qr_code_url,
+            },
         )
         .await
         .map_err(|e| finance(e, "error.save_failed"))?;

@@ -1036,6 +1036,7 @@ export interface AdminResellerSiteConfigPayload {
   theme?: Partial<Record<'primary_color' | 'secondary_color' | 'accent_color' | 'background_color' | 'surface_color' | 'text_color', string>>
   logo?: string
   favicon?: string
+  scripts?: Array<{ name: string; enabled: boolean; position: 'head' | 'body_end'; code: string }>
   announcement?: {
     enabled?: boolean
     type?: string
@@ -1047,6 +1048,11 @@ export interface AdminResellerSiteConfigPayload {
     whatsapp?: string
     email?: string
     support_url?: string
+    wechat_id?: string
+    wechat_qr_code?: string
+    qq_number?: string
+    qq_group?: string
+    wechat_group_qr_code?: string
   }
   seo?: {
     title?: AdminResellerLocalizedText
@@ -1068,7 +1074,7 @@ export interface AdminResellerSiteConfigPayload {
   }
 }
 
-export interface AdminResellerSiteConfig extends Required<Pick<AdminResellerSiteConfigPayload, 'announcement' | 'support' | 'seo' | 'nav_config'>> {
+export interface AdminResellerSiteConfig extends Required<Pick<AdminResellerSiteConfigPayload, 'announcement' | 'support' | 'seo' | 'nav_config' | 'scripts'>> {
   id: number
   storefront_template?: string
   template_mode?: string
@@ -1104,6 +1110,7 @@ export interface AdminResellerProductSetting {
   markup_percent: string | number
   fixed_markup_amount: string | number
   fixed_price_amount: string | number
+  agent_price_amount?: string | number | null
   sort_order: number
   created_at: string
   updated_at: string
@@ -1120,6 +1127,7 @@ export interface AdminResellerProductSettingRule {
   markup_percent: string | number
   fixed_markup_amount: string | number
   fixed_price_amount: string | number
+  agent_price_amount?: string | number | null
   effective_price_amount?: string | number
   rule_source?: string
   sort_order: number
@@ -1133,6 +1141,7 @@ export interface AdminResellerProductSettingSKU {
   sku_code: string
   spec_values: Record<string, string>
   base_price_amount: string | number
+  shared_agent_price_amount?: string | number
   is_active: boolean
   setting?: AdminResellerProductSettingRule
   effective_price_amount?: string | number
@@ -1151,6 +1160,7 @@ export interface AdminResellerProductSettingPayloadItem {
   markup_percent: string
   fixed_markup_amount: string
   fixed_price_amount: string
+  agent_price_amount: string | null
   sort_order: number
   content?: LocalizedText | null
   instructions?: LocalizedText | null
@@ -1806,6 +1816,7 @@ export interface PublicConfig {
     site_url?: string
     site_icon?: string
     site_logo?: string
+    site_logo_dark?: string
     site_description?: LocalizedText
   }
   captcha?: {

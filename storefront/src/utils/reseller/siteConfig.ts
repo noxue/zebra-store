@@ -37,8 +37,9 @@ export interface ResellerSiteConfigForm {
   theme: Record<'primary_color' | 'secondary_color' | 'accent_color' | 'background_color' | 'surface_color' | 'text_color', string>
   logo: string
   favicon: string
+  scripts: Array<{ name: string; enabled: boolean; position: 'head' | 'body_end'; code: string }>
   announcement: { enabled: boolean; type: string; title: ResellerLocalizedText; content: ResellerLocalizedText }
-  support: { telegram: string; whatsapp: string; email: string; support_url: string }
+  support: { telegram: string; whatsapp: string; email: string; support_url: string; wechat_id: string; wechat_qr_code: string; qq_number: string; qq_group: string; wechat_group_qr_code: string }
   seo: { title: ResellerLocalizedText; keywords: ResellerLocalizedText; description: ResellerLocalizedText; default_og_image: string }
   footer_links: Array<{ name: ResellerLocalizedText; url: string }>
   nav_config: { builtin: Record<string, boolean>; custom_items: Array<{ name: ResellerLocalizedText; url: string }> }
@@ -51,8 +52,9 @@ export const createBlankSiteConfigForm = (): ResellerSiteConfigForm => ({
   theme: { primary_color: '', secondary_color: '', accent_color: '', background_color: '', surface_color: '', text_color: '' },
   logo: '',
   favicon: '',
+  scripts: [],
   announcement: { enabled: false, type: 'info', title: blankLocalizedText(), content: blankLocalizedText() },
-  support: { telegram: '', whatsapp: '', email: '', support_url: '' },
+  support: { telegram: '', whatsapp: '', email: '', support_url: '', wechat_id: '', wechat_qr_code: '', qq_number: '', qq_group: '', wechat_group_qr_code: '' },
   seo: { title: blankLocalizedText(), keywords: blankLocalizedText(), description: blankLocalizedText(), default_og_image: '' },
   footer_links: [],
   nav_config: { builtin: { blog: true, notice: true, about: true }, custom_items: [] },
@@ -67,6 +69,10 @@ export const siteConfigToForm = (config?: ResellerSiteConfigData | null): Resell
   for (const key of Object.keys(next.theme) as Array<keyof typeof next.theme>) next.theme[key] = config.theme?.[key] || ''
   next.logo = config.logo || ''
   next.favicon = config.favicon || ''
+  next.scripts = Array.isArray(config.scripts) ? config.scripts.map((script) => ({
+    name: String(script.name || ''), enabled: script.enabled === true,
+    position: script.position === 'body_end' ? 'body_end' : 'head', code: String(script.code || ''),
+  })) : []
   next.announcement = {
     enabled: config.announcement?.enabled === true,
     type: config.announcement?.type || 'info',
@@ -78,6 +84,11 @@ export const siteConfigToForm = (config?: ResellerSiteConfigData | null): Resell
     whatsapp: config.support?.whatsapp || '',
     email: config.support?.email || '',
     support_url: config.support?.support_url || '',
+    wechat_id: config.support?.wechat_id || '',
+    wechat_qr_code: config.support?.wechat_qr_code || '',
+    qq_number: config.support?.qq_number || '',
+    qq_group: config.support?.qq_group || '',
+    wechat_group_qr_code: config.support?.wechat_group_qr_code || '',
   }
   next.seo = {
     title: normalizeLocalizedTextForForm(config.seo?.title),
@@ -100,6 +111,7 @@ export const siteConfigFormToPayload = (form: ResellerSiteConfigForm): ResellerS
   theme: Object.fromEntries(Object.entries(form.theme).map(([key, color]) => [key, color.trim()])),
   logo: form.logo.trim(),
   favicon: form.favicon.trim(),
+  scripts: form.scripts.filter((script) => script.code.trim()).slice(0, MAX_SITE_SCRIPTS).map((script) => ({ ...script, name: script.name.trim(), code: script.code.trim() })),
   announcement: { ...form.announcement },
   support: { ...form.support },
   seo: { ...form.seo },
@@ -112,3 +124,4 @@ export const siteConfigFormToPayload = (form: ResellerSiteConfigForm): ResellerS
 
 /** Max footer / custom nav links (same as original UI). */
 export const MAX_SITE_LINKS = 10
+export const MAX_SITE_SCRIPTS = 20

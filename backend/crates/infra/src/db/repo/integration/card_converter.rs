@@ -178,7 +178,7 @@ impl ConverterRepo for SeaCardConverterRepo {
         }))
     }
 
-    async fn local_card_notes(&self, order_id: Id) -> Result<Vec<(String, String)>> {
+    async fn local_card_notes(&self, order_id: Id) -> Result<Vec<(String, String, bool)>> {
         let cards = card_secrets::Entity::find()
             .filter(card_secrets::Column::OrderId.eq(order_id))
             .filter(card_secrets::Column::Status.eq("used"))
@@ -202,17 +202,27 @@ impl ConverterRepo for SeaCardConverterRepo {
         };
         let notes = batches
             .into_iter()
-            .map(|batch| (batch.id, batch.note))
+            .map(|batch| {
+                (
+                    batch.id,
+                    (
+                        batch.note,
+                        zs_domain::catalog::card_secret::BatchSource::is_preconverted(
+                            &batch.source,
+                        ),
+                    ),
+                )
+            })
             .collect::<std::collections::HashMap<_, _>>();
         Ok(cards
             .into_iter()
             .map(|card| {
-                let note = card
+                let (note, preconverted) = card
                     .batch_id
                     .and_then(|id| notes.get(&id))
                     .cloned()
                     .unwrap_or_default();
-                (card.secret, note)
+                (card.secret, note, preconverted)
             })
             .collect())
     }

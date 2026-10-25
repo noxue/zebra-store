@@ -41,8 +41,9 @@ async fn sku_agent_price_round_trips_and_can_be_cleared() {
     assert_eq!(sku["price_amount"], "40.00");
     assert_eq!(sku["agent_price_amount"], "35.00");
     assert_eq!(
-        sku_rows(&app, id).await[0].agent_price_amount,
-        Some(sea_orm::prelude::Decimal::from(35))
+        zs_shared::money::Amount::new(sku_rows(&app, id).await[0].agent_price_amount.unwrap())
+            .to_string(),
+        "35.00"
     );
 
     let updated = app

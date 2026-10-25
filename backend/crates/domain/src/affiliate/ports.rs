@@ -30,6 +30,8 @@ pub struct CommissionItem {
     pub product_id: Id,
     pub total_price: Amount,
     pub coupon_discount: Amount,
+    pub cost_price: Amount,
+    pub quantity: i64,
     /// `products.is_affiliate_enabled` of the item's product.
     pub affiliate_enabled: bool,
 }
@@ -42,6 +44,9 @@ pub struct CommissionOrder {
     pub paid_at: Option<DateTime<Utc>>,
     pub affiliate_profile_id: Option<Id>,
     pub affiliate_code: String,
+    pub total_amount: Amount,
+    pub payment_fee: Amount,
+    pub reseller_profit: Amount,
     /// Items of the child orders, or of the order itself when it has no children.
     pub items: Vec<CommissionItem>,
 }

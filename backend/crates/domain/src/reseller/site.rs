@@ -8,6 +8,7 @@ use serde_json::{Map, Value, json};
 
 use super::keys;
 use super::model::SiteConfig;
+use crate::settings::schema::site::normalize_scripts;
 use crate::{Error, Result};
 
 /// Locales of localized fields, in the original order (`constants.SupportedLocales`).
@@ -41,6 +42,11 @@ pub struct SupportInput {
     pub whatsapp: String,
     pub email: String,
     pub support_url: String,
+    pub wechat_id: String,
+    pub wechat_qr_code: String,
+    pub qq_number: String,
+    pub qq_group: String,
+    pub wechat_group_qr_code: String,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -78,6 +84,7 @@ pub struct SiteConfigInput {
     pub seo: SeoInput,
     pub footer_links: Vec<LinkInput>,
     pub nav_config: NavConfigInput,
+    pub scripts: Value,
     pub storefront_template: String,
     pub template_mode: String,
     pub theme: ThemeInput,
@@ -160,6 +167,7 @@ pub struct SiteConfigDraft {
     pub footer_links: Value,
     pub nav_config: Value,
     pub theme: Value,
+    pub scripts: Value,
 }
 
 /// Trims and truncates to `max` characters (`trimLimit`).
@@ -276,7 +284,21 @@ pub fn normalize_support(input: &SupportInput) -> Result<Value> {
         return Err(field(keys::SUPPORT_EMAIL_INVALID));
     }
     let url = support_url(&input.support_url).ok_or_else(|| field(keys::SUPPORT_URL_INVALID))?;
-    Ok(json!({"telegram": telegram, "whatsapp": whatsapp, "email": email, "support_url": url}))
+    let wechat_qr_code =
+        http_or_upload(&input.wechat_qr_code).ok_or_else(|| field(keys::IMAGE_INVALID))?;
+    let wechat_group_qr_code =
+        http_or_upload(&input.wechat_group_qr_code).ok_or_else(|| field(keys::IMAGE_INVALID))?;
+    Ok(json!({
+        "telegram": telegram,
+        "whatsapp": whatsapp,
+        "email": email,
+        "support_url": url,
+        "wechat_id": trim_limit(&input.wechat_id, 100),
+        "wechat_qr_code": wechat_qr_code,
+        "qq_number": trim_limit(&input.qq_number, 100),
+        "qq_group": trim_limit(&input.qq_group, 100),
+        "wechat_group_qr_code": wechat_group_qr_code,
+    }))
 }
 
 fn normalize_announcement(input: &AnnouncementInput) -> Value {
@@ -345,6 +367,7 @@ pub fn normalize_site_config(input: &SiteConfigInput) -> Result<SiteConfigDraft>
         footer_links,
         nav_config,
         theme: normalize_visual(input)?,
+        scripts: normalize_scripts(Some(&input.scripts), true),
     })
 }
 
@@ -474,6 +497,10 @@ pub fn overlay_public_config(
     };
     brand.insert("site_url".into(), Value::String(site_url));
     if let Some(cfg) = site {
+        if !cfg.logo.is_empty() {
+            // A reseller's own logo must not inherit the main site's dark variant.
+            brand.remove("site_logo_dark");
+        }
         for (key, value) in [
             ("site_name", &cfg.site_name),
             ("site_logo", &cfg.logo),
@@ -485,17 +512,41 @@ pub fn overlay_public_config(
         }
     }
     out.insert("brand".into(), Value::Object(brand));
+    let mut scripts = out
+        .remove("scripts")
+        .and_then(|value| value.as_array().cloned())
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|script| script.get("scope").and_then(Value::as_str) == Some("global"))
+        .collect::<Vec<_>>();
+    if let Some(cfg) = site {
+        scripts.extend(
+            cfg.scripts
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|script| script.get("scope").and_then(Value::as_str) == Some("reseller"))
+                .cloned(),
+        );
+    }
+    out.insert("scripts".into(), Value::Array(scripts));
     let Some(cfg) = site else {
+        // A reseller without its own support settings must not expose the main site's contacts.
+        out.insert("contact".into(), json!({}));
         return Value::Object(out);
     };
-    let mut contact = out
-        .remove("contact")
-        .and_then(|c| match c {
-            Value::Object(m) => Some(m),
-            _ => None,
-        })
-        .unwrap_or_default();
-    for key in ["telegram", "whatsapp", "email", "support_url"] {
+    let mut contact = Map::new();
+    for key in [
+        "telegram",
+        "whatsapp",
+        "email",
+        "support_url",
+        "wechat_id",
+        "wechat_qr_code",
+        "qq_number",
+        "qq_group",
+        "wechat_group_qr_code",
+    ] {
         if let Some(v) = cfg
             .support
             .get(key)
@@ -712,6 +763,7 @@ mod tests {
             footer_links: json!({"items": [{"url": "https://a.test"}]}),
             nav_config: json!({"builtin": {"blog": false}}),
             theme: json!({}),
+            scripts: json!([]),
             created_at: at(0),
             updated_at: at(0),
             profile: None,
@@ -720,11 +772,20 @@ mod tests {
 
     fn base() -> Value {
         json!({
-            "brand": {"site_name": "Main", "site_logo": "/m.png"},
+            "brand": {"site_name": "Main", "site_logo": "/m.png", "site_logo_dark": "/m-dark.png"},
             "contact": {"telegram": "https://t.me/main", "whatsapp": "https://wa.me/1"},
             "announcement": {"type": "info", "version": "main0000", "content": {"zh-CN": "main"}},
             "nav_config": {"builtin": {"blog": true}},
         })
+    }
+
+    #[test]
+    fn custom_reseller_logo_does_not_inherit_main_dark_logo() {
+        let mut reseller = site(json!({"enabled": false}));
+        reseller.logo = "/r.png".into();
+        let out = overlay_public_config(base(), "r.test", "r.test", Some(&reseller));
+        assert_eq!(out["brand"]["site_logo"], "/r.png");
+        assert!(out["brand"].get("site_logo_dark").is_none());
     }
 
     // RSL-08: disabled reseller announcement removes the main-site one.
@@ -746,7 +807,7 @@ mod tests {
         assert_eq!(out["brand"]["site_icon"], "/uploads/f.ico");
         assert_eq!(out["brand"]["site_url"], "https://r.test");
         assert_eq!(out["contact"]["telegram"], "https://t.me/r");
-        assert_eq!(out["contact"]["whatsapp"], "https://wa.me/1");
+        assert!(out["contact"].get("whatsapp").is_none());
         assert_eq!(out["footer_links"], json!([{"url": "https://a.test"}]));
         assert_eq!(out["nav_config"], json!({"builtin": {"blog": false}}));
     }
@@ -780,7 +841,27 @@ mod tests {
         let out = overlay_public_config(base(), "", "p.test", None);
         assert_eq!(out["brand"]["site_name"], "Main");
         assert_eq!(out["brand"]["site_url"], "https://p.test");
+        assert_eq!(out["contact"], json!({}));
         assert_eq!(out["announcement"]["version"], "main0000");
+    }
+
+    #[test]
+    fn reseller_scripts_include_global_and_own_only() {
+        let mut base = base();
+        base["scripts"] = json!([
+            {"name": "global", "scope": "global", "code": "a()"},
+            {"name": "main", "scope": "main", "code": "b()"},
+            {"name": "legacy", "code": "legacy()"},
+        ]);
+        let without_config = overlay_public_config(base.clone(), "r.test", "r.test", None);
+        assert_eq!(without_config["scripts"].as_array().unwrap().len(), 1);
+        assert_eq!(without_config["scripts"][0]["name"], "global");
+
+        let mut reseller = site(json!({}));
+        reseller.scripts = json!([{"name": "own", "scope": "reseller", "code": "c()"}]);
+        let with_config = overlay_public_config(base, "r.test", "r.test", Some(&reseller));
+        assert_eq!(with_config["scripts"].as_array().unwrap().len(), 2);
+        assert_eq!(with_config["scripts"][1]["name"], "own");
     }
 
     #[test]

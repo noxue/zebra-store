@@ -49,7 +49,10 @@ pub fn normalize_site(value: &Value) -> Value {
         localized_block(input.get("legal"), &["terms", "privacy"]),
     );
     out.insert("about".into(), normalize_about(input.get("about")));
-    out.insert("scripts".into(), normalize_scripts(input.get("scripts")));
+    out.insert(
+        "scripts".into(),
+        normalize_scripts(input.get("scripts"), false),
+    );
     out.insert(
         "footer_links".into(),
         normalize_footer_links(input.get("footer_links")),
@@ -84,15 +87,31 @@ fn normalize_brand(raw: Option<&Value>) -> Value {
         "site_url": get("site_url").trim_end_matches('/'),
         "site_icon": get("site_icon"),
         "site_logo": get("site_logo"),
+        "site_logo_dark": get("site_logo_dark"),
         "site_description": localized_field(b.and_then(|o| o.get("site_description"))),
     })
 }
 
 fn normalize_contact(raw: Option<&Value>) -> Value {
     let c = as_obj(raw);
+    let image = |key: &str| {
+        let value = safe_url(c.and_then(|o| o.get(key)));
+        if (value.starts_with("/uploads/") && !value.contains(".."))
+            || value.starts_with("https://")
+        {
+            value
+        } else {
+            String::new()
+        }
+    };
     json!({
         "telegram": text(c.and_then(|o| o.get("telegram"))),
         "whatsapp": text(c.and_then(|o| o.get("whatsapp"))),
+        "wechat_id": text_limit(c.and_then(|o| o.get("wechat_id")), 100),
+        "wechat_qr_code": image("wechat_qr_code"),
+        "qq_number": text_limit(c.and_then(|o| o.get("qq_number")), 100),
+        "qq_group": text_limit(c.and_then(|o| o.get("qq_group")), 100),
+        "wechat_group_qr_code": image("wechat_group_qr_code"),
     })
 }
 
@@ -126,7 +145,7 @@ fn localized_list(raw: Option<&Value>, max: usize) -> Value {
     Value::Array(list)
 }
 
-fn normalize_scripts(raw: Option<&Value>) -> Value {
+pub fn normalize_scripts(raw: Option<&Value>, reseller: bool) -> Value {
     let items = raw.and_then(Value::as_array).cloned().unwrap_or_default();
     let mut out = Vec::new();
     for item in items.iter().filter_map(Value::as_object) {
@@ -143,6 +162,7 @@ fn normalize_scripts(raw: Option<&Value>) -> Value {
             "enabled": parse_bool(item.get("enabled")),
             "position": position,
             "code": code,
+            "scope": if reseller { "reseller" } else if text(item.get("scope")) == "global" { "global" } else { "main" },
         }));
         if out.len() >= SCRIPTS_MAX {
             break;
@@ -648,7 +668,8 @@ mod tests {
             .map(|i| json!({"name": format!("s{i}"), "code": "console.log(1)", "position": "x", "enabled": "true"}))
             .collect();
         let out = normalize_site(&json!({
-            "brand": {"site_name": " Zebra ", "site_url": "https://a.com///", "site_logo": "/uploads/l.png"},
+            "brand": {"site_name": " Zebra ", "site_url": "https://a.com///", "site_logo": "/uploads/l.png", "site_logo_dark": "/uploads/d.png"},
+            "contact": {"wechat_id": " main ", "wechat_qr_code": "/uploads/wechat.png", "qq_number": "12345", "qq_group": "67890", "wechat_group_qr_code": "javascript:alert(1)"},
             "scripts": scripts,
             "footer_links": [{"name": "", "url": "x"}, {"name": "A", "url": " /a "}],
             "currency": "usd",
@@ -660,10 +681,16 @@ mod tests {
         assert_eq!(out["brand"]["site_url"], "https://a.com");
         // CNT-11: logo is kept independent of the favicon
         assert_eq!(out["brand"]["site_logo"], "/uploads/l.png");
+        assert_eq!(out["brand"]["site_logo_dark"], "/uploads/d.png");
         assert_eq!(out["brand"]["site_icon"], "");
+        assert_eq!(out["contact"]["wechat_id"], "main");
+        assert_eq!(out["contact"]["wechat_qr_code"], "/uploads/wechat.png");
+        assert_eq!(out["contact"]["qq_group"], "67890");
+        assert_eq!(out["contact"]["wechat_group_qr_code"], "");
         assert_eq!(out["scripts"].as_array().unwrap().len(), SCRIPTS_MAX);
         assert_eq!(out["scripts"][0]["position"], "head");
         assert_eq!(out["scripts"][0]["enabled"], true);
+        assert_eq!(out["scripts"][0]["scope"], "main");
         assert_eq!(out["footer_links"], json!([{"name": "A", "url": "/a"}]));
         assert_eq!(out["currency"], "USD");
         assert_eq!(out["template_mode"], "card");
@@ -672,6 +699,16 @@ mod tests {
         assert_eq!(out["seo"]["title"]["en-US"], "");
         assert!(out.get("languages").is_none());
         assert_eq!(out["theme"]["primary_color"], THEME_PRIMARY_DEFAULT);
+    }
+
+    #[test]
+    fn script_scope_is_limited_to_global_or_main() {
+        let out = normalize_site(&json!({"scripts": [
+            {"name": "main", "code": "a()", "scope": "main"},
+            {"name": "forged", "code": "b()", "scope": "reseller"},
+        ]}));
+        assert_eq!(out["scripts"][0]["scope"], "main");
+        assert_eq!(out["scripts"][1]["scope"], "main");
     }
 
     #[test]

@@ -1,13 +1,15 @@
 import { defineComponent, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Search } from 'lucide-vue-next'
+import { Plus, Search } from 'lucide-vue-next'
 import { Badge, Button, Card, DataTable, Dialog, FilterBar, IdCell, Input, ListPagination, PageHeader, Select, Switch, type DataTableColumn } from '@/components/ui'
 import { RichEditor } from '@/components/RichEditor'
-import type { AdminResellerProductSetting } from '@/api/types'
+import type { AdminResellerProductSetting, AdminResellerProfile } from '@/api/types'
+import { adminAPI } from '@/api/admin'
 import { formatDate, getLocalizedText } from '@/utils/format'
 import { getAdminResellerProductSettingOwnerLabel } from '@/utils/resellerProductSettings'
 import { RefreshButton } from './components/RefreshButton'
 import { SettingRuleRow } from './components/SettingRuleRow'
+import { SearchPicker, type SearchOption } from './components/SearchPicker'
 import { RESELLER_PRICING_MODES, pricingModeKey, pricingValue, skuLabel } from './resellerUtils'
 import { useResellerProductSettings } from './useResellerProductSettings'
 
@@ -17,10 +19,47 @@ export default defineComponent({
     const { t } = useI18n()
     const s = useResellerProductSettings()
     const editLocale = ref<'zh-CN' | 'zh-TW' | 'en-US'>('zh-CN')
+    const selectedReseller = ref<SearchOption | null>(null)
+    const selectedProduct = ref<SearchOption | null>(null)
+    const filterReseller = ref<SearchOption | null>(null)
+    const filterProduct = ref<SearchOption | null>(null)
+    const pickerLoading = ref(false)
     const { filters, list } = s
-    onMounted(() => void list.fetchData(1))
+    onMounted(() => {
+      void list.fetchData(1)
+      if (filters.resellerId) {
+        void adminAPI.getResellerProfile(filters.resellerId).then((res) => {
+          if (res.data?.profile) filterReseller.value = profileOption(res.data.profile)
+        }).catch(() => { /* the list still uses the route's reseller filter */ })
+      }
+    })
 
     const modeLabel = (m?: string) => t(`admin.resellerProductSettings.modes.${pricingModeKey(m)}`)
+    const pickerText = (key: string) => t(`admin.resellerProductSettings.picker.${key}`)
+    const profileOption = (profile: AdminResellerProfile): SearchOption => ({
+      id: profile.id,
+      label: `${profile.user?.display_name || profile.user?.username || profile.user?.email || `R#${profile.id}`} · ${profile.user?.email || `R#${profile.id}`} (R#${profile.id})`,
+    })
+    const searchResellers = async (query: string): Promise<SearchOption[]> => {
+      const res = await adminAPI.getResellerProfiles({ page: 1, page_size: 20, keyword: query })
+      return (res.data ?? []).map(profileOption)
+    }
+    const searchProducts = async (query: string): Promise<SearchOption[]> => {
+      const res = await adminAPI.getProducts({ page: 1, page_size: 20, search: query })
+      return (res.data ?? []).map((product) => ({
+        id: product.id,
+        label: `${getLocalizedText(product.title) || product.slug} · #${product.id}`,
+      }))
+    }
+    const picker = (value: SearchOption | null, search: (query: string) => Promise<SearchOption[]>, placeholder: string, update: (option: SearchOption | null) => void) => (
+      <SearchPicker modelValue={value} search={search} placeholder={placeholder} emptyText={pickerText('noResults')} loadingText={pickerText('loading')} onUpdate:modelValue={update} />
+    )
+    const openSelected = async () => {
+      if (!selectedReseller.value || !selectedProduct.value) return
+      pickerLoading.value = true
+      try { await s.openBySelection(selectedReseller.value.id, selectedProduct.value.id) }
+      finally { pickerLoading.value = false }
+    }
     const productTitle = (r: AdminResellerProductSetting) => getLocalizedText(r.product?.title) || `#${r.product_id}`
     const detailTitle = () => {
       const d = s.detail.value
@@ -171,6 +210,7 @@ export default defineComponent({
                     <SettingRuleRow
                       label={t('admin.resellerProductSettings.columns.sku')}
                       name={skuLabel(sku)}
+                      sharedBase={String(sku.shared_agent_price_amount ?? sku.base_price_amount)}
                       form={s.skuForm(sku.id)}
                       preview={s.preview[sku.id]}
                       hint={previewHint(sku.id)}
@@ -189,7 +229,7 @@ export default defineComponent({
     return () => (
       <div class="space-y-6">
         <PageHeader title={t('admin.resellerProductSettings.title')} subtitle={t('admin.resellerProductSettings.subtitle')} />
-        <FilterBar cols={6}>
+        <FilterBar cols={6} class="relative z-10">
           {{
             default: () => (
               <>
@@ -199,17 +239,17 @@ export default defineComponent({
                   placeholder={t('admin.resellerProductSettings.filters.keyword')}
                   onUpdate:modelValue={list.debouncedSearch}
                 />
-                <Input
-                  v-model={filters.resellerId}
-                  placeholder={t('admin.resellerProductSettings.filters.resellerId')}
-                  onUpdate:modelValue={list.debouncedSearch}
-                />
-                <Input v-model={filters.userId} placeholder={t('admin.resellerProductSettings.filters.userId')} onUpdate:modelValue={list.debouncedSearch} />
-                <Input
-                  v-model={filters.productId}
-                  placeholder={t('admin.resellerProductSettings.filters.productId')}
-                  onUpdate:modelValue={list.debouncedSearch}
-                />
+                {picker(filterReseller.value, searchResellers, pickerText('resellerSearch'), (option) => {
+                  filterReseller.value = option
+                  filters.resellerId = option ? String(option.id) : ''
+                  filters.userId = ''
+                  list.handleSearch()
+                })}
+                {picker(filterProduct.value, searchProducts, pickerText('productSearch'), (option) => {
+                  filterProduct.value = option
+                  filters.productId = option ? String(option.id) : ''
+                  list.handleSearch()
+                })}
                 <Select
                   v-model={filters.pricingMode}
                   onChange={list.handleSearch}
@@ -244,7 +284,12 @@ export default defineComponent({
                 />
               </>
             ),
-            actions: () => <RefreshButton loading={s.refreshing.value} onClick={s.refresh} />,
+            actions: () => (
+              <div class="flex gap-2">
+                <Button variant="primary" onClick={() => (s.showPicker.value = true)}><Plus class="size-4" />{pickerText('configure')}</Button>
+                <RefreshButton loading={s.refreshing.value} onClick={s.refresh} />
+              </div>
+            ),
           }}
         </FilterBar>
         <div>
@@ -259,6 +304,22 @@ export default defineComponent({
           <ListPagination pagination={list.pagination.value} onChangePage={list.changePage} onChangePageSize={list.changePageSize} />
         </div>
 
+        <Dialog modelValue={s.showPicker.value} onUpdate:modelValue={(value: boolean) => (s.showPicker.value = value)} title={pickerText('title')}>
+          {{
+            default: () => <div class="space-y-4">
+              <div class="space-y-1.5"><label class="text-sm font-medium text-fg">{pickerText('reseller')}</label>
+                {picker(selectedReseller.value, searchResellers, pickerText('resellerSearch'), (option) => (selectedReseller.value = option))}
+              </div>
+              <div class="space-y-1.5"><label class="text-sm font-medium text-fg">{pickerText('product')}</label>
+                {picker(selectedProduct.value, searchProducts, pickerText('productSearch'), (option) => (selectedProduct.value = option))}
+              </div>
+            </div>,
+            footer: () => <>
+              <Button onClick={() => (s.showPicker.value = false)}>{t('admin.common.cancel')}</Button>
+              <Button variant="primary" disabled={!selectedReseller.value || !selectedProduct.value} loading={pickerLoading.value} onClick={openSelected}>{pickerText('continue')}</Button>
+            </>,
+          }}
+        </Dialog>
         <Dialog
           modelValue={s.showEditor.value}
           onUpdate:modelValue={(v: boolean) => !v && s.closeEditor()}

@@ -43,18 +43,28 @@ fn sku_model(m: skus::Model) -> PricedSku {
         id: m.id,
         sku_code: m.sku_code,
         spec_values: m.spec_values_json.unwrap_or(Value::Null),
-        price: Amount::new(m.price_amount),
+        price: Amount::new(m.agent_price_amount.unwrap_or(m.price_amount)),
+        retail_price: Amount::new(m.price_amount),
         cost_price: Amount::new(m.cost_price_amount),
         is_active: m.is_active,
     }
 }
 
 fn product_model(m: products::Model, skus: Vec<PricedSku>) -> PricedProduct {
+    let base = skus
+        .first()
+        .map(|sku| sku.price)
+        .unwrap_or(Amount::new(m.price_amount));
+    let retail = skus
+        .first()
+        .map(|sku| sku.retail_price)
+        .unwrap_or(Amount::new(m.price_amount));
     PricedProduct {
         id: m.id,
         slug: m.slug,
         title: m.title_json.unwrap_or(Value::Null),
-        price: Amount::new(m.price_amount),
+        price: base,
+        retail_price: retail,
         cost_price: Amount::new(m.cost_price_amount),
         is_active: m.is_active,
         skus,
@@ -268,6 +278,7 @@ impl ProductSettingRepo for SeaResellerStore {
         reseller_id: Id,
         product_id: Id,
         rows: &[ProductSetting],
+        agent_price_writable: bool,
         now: DateTime<Utc>,
     ) -> Result<()> {
         let txn = self.db.begin().await.dom()?;
@@ -289,6 +300,14 @@ impl ProductSettingRepo for SeaResellerStore {
                 markup_percent: Set(row.markup_percent.decimal()),
                 fixed_markup_amount: Set(row.fixed_markup_amount.decimal()),
                 fixed_price_amount: Set(row.fixed_price_amount.decimal()),
+                agent_price_amount: Set(if agent_price_writable {
+                    row.agent_price_amount.map(Amount::decimal)
+                } else {
+                    existing
+                        .as_ref()
+                        .filter(|e| e.deleted_at.is_none())
+                        .and_then(|e| e.agent_price_amount)
+                }),
                 sort_order: Set(row.sort_order),
                 content_json: Set(row.content.clone().map(Value::Object)),
                 instructions_json: Set(row.instructions.clone().map(Value::Object)),
@@ -315,8 +334,45 @@ impl ProductSettingRepo for SeaResellerStore {
         reseller_id: Id,
         product_id: Id,
         sku_id: Id,
+        agent_price_writable: bool,
         now: DateTime<Utc>,
     ) -> Result<()> {
+        if !agent_price_writable {
+            let txn = self.db.begin().await.dom()?;
+            let existing = settings::Entity::find()
+                .filter(settings::Column::ResellerId.eq(reseller_id))
+                .filter(settings::Column::ProductId.eq(product_id))
+                .filter(settings::Column::SkuId.eq(sku_id))
+                .filter(settings::Column::DeletedAt.is_null())
+                .lock_exclusive()
+                .one(&txn)
+                .await
+                .dom()?;
+            if let Some(existing) = existing.filter(|row| row.agent_price_amount.is_some()) {
+                let mut reset: settings::ActiveModel = existing.into();
+                reset.is_listed = Set(true);
+                reset.pricing_mode = Set("inherit".to_owned());
+                reset.markup_percent = Set(rust_decimal::Decimal::ZERO);
+                reset.fixed_markup_amount = Set(rust_decimal::Decimal::ZERO);
+                reset.fixed_price_amount = Set(rust_decimal::Decimal::ZERO);
+                reset.content_json = Set(None);
+                reset.instructions_json = Set(None);
+                reset.updated_at = Set(now);
+                reset.update(&txn).await.dom()?;
+                return txn.commit().await.dom();
+            }
+            settings::Entity::update_many()
+                .col_expr(settings::Column::DeletedAt, Expr::value(now))
+                .col_expr(settings::Column::UpdatedAt, Expr::value(now))
+                .filter(settings::Column::ResellerId.eq(reseller_id))
+                .filter(settings::Column::ProductId.eq(product_id))
+                .filter(settings::Column::SkuId.eq(sku_id))
+                .filter(settings::Column::DeletedAt.is_null())
+                .exec(&txn)
+                .await
+                .dom()?;
+            return txn.commit().await.dom();
+        }
         settings::Entity::update_many()
             .col_expr(settings::Column::DeletedAt, Expr::value(now))
             .col_expr(settings::Column::UpdatedAt, Expr::value(now))

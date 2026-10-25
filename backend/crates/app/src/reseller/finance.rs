@@ -26,6 +26,13 @@ pub struct Dashboard {
     pub withdraw_disabled_reason: &'static str,
 }
 
+/// Optional recipient details for an uploaded payout code.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct PayoutDetails<'a> {
+    pub payee_name: &'a str,
+    pub qr_code_url: &'a str,
+}
+
 /// Finance use cases.
 #[derive(Clone)]
 pub struct FinanceService {
@@ -130,15 +137,18 @@ impl FinanceService {
         channel: &str,
         account: &str,
     ) -> Result<WithdrawRequest> {
-        self.apply_withdraw_with_payout(user_id, amount, currency, channel, account, "", "")
-            .await
+        self.apply_withdraw_with_payout(
+            user_id,
+            amount,
+            currency,
+            channel,
+            account,
+            PayoutDetails::default(),
+        )
+        .await
     }
 
     /// Requests a withdrawal with optional payee name and uploaded QR code.
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "keeps the existing withdrawal arguments and adds the two payout fields"
-    )]
     pub async fn apply_withdraw_with_payout(
         &self,
         user_id: Id,
@@ -146,8 +156,7 @@ impl FinanceService {
         currency: &str,
         channel: &str,
         account: &str,
-        payee_name: &str,
-        qr_code_url: &str,
+        payout: PayoutDetails<'_>,
     ) -> Result<WithdrawRequest> {
         let profile = profile_of_user(self.profiles.as_ref(), user_id).await?;
         require_settleable(&profile)?;
@@ -156,8 +165,8 @@ impl FinanceService {
             currency,
             channel,
             account,
-            payee_name,
-            qr_code_url,
+            payout.payee_name,
+            payout.qr_code_url,
         )?;
         self.ledger
             .apply_withdraw(profile.id, &draft, self.clock.now())

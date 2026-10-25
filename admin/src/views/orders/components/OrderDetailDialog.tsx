@@ -407,6 +407,9 @@ export default defineComponent({
               <Button type="submit" variant="primary" loading={d.manual.submitting} disabled={d.manual.submitting}>
                 {t('admin.orders.manualRefundConfirmTransfer')}
               </Button>
+              <Button type="button" variant="secondary" disabled={d.manual.submitting} onClick={() => void d.cancelManual()}>
+                {t('admin.orders.manualRefundCancel')}
+              </Button>
             </form>
           ) : (
             <form
@@ -466,6 +469,9 @@ export default defineComponent({
       const fee = orderPaymentFee(o)
       return (
         <div class="space-y-5">
+          {o.payments?.some((payment) => payment.exception_code === 'stock_insufficient') && (
+            <Alert tone="danger">{t('admin.orders.stockShortageAfterPayment')}</Alert>
+          )}
           {/* basic info */}
           <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
             <Tile label={t('admin.orders.table.id')}>

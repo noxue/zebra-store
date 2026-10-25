@@ -73,6 +73,7 @@ export interface CustomScript {
   enabled?: boolean
   position?: 'head' | 'body_end' | string
   code?: string
+  scope?: 'global' | 'main' | 'reseller'
 }
 
 export interface ThemeEffects {
@@ -118,6 +119,7 @@ export interface SiteConfig {
   brand?: {
     site_name?: string
     site_logo?: string
+    site_logo_dark?: string
     site_icon?: string
     site_description?: LocalizedText
     site_url?: string
@@ -129,7 +131,7 @@ export interface SiteConfig {
   storefront_template?: string
   nav_config?: NavConfig
   footer_links?: FooterLink[]
-  contact?: { telegram?: string; whatsapp?: string }
+  contact?: { telegram?: string; whatsapp?: string; email?: string; support_url?: string; wechat_id?: string; wechat_qr_code?: string; qq_number?: string; qq_group?: string; wechat_group_qr_code?: string }
   support?: { telegram?: string; whatsapp?: string; email?: string; support_url?: string }
   announcement?: AnnouncementConfig | null
   about?: AboutConfig
@@ -152,6 +154,7 @@ export interface SiteConfig {
     min_withdraw_amount?: number | string
     withdraw_channels?: string[]
   }
+  reseller_enabled?: boolean
   seo?: SeoConfig
   scripts?: CustomScript[]
   tenant?: { mode?: string; host?: string }
@@ -958,6 +961,7 @@ export interface ResellerSiteConfigPayload {
   theme?: Partial<Record<'primary_color' | 'secondary_color' | 'accent_color' | 'background_color' | 'surface_color' | 'text_color', string>>
   logo?: string
   favicon?: string
+  scripts?: Array<{ name: string; enabled: boolean; position: 'head' | 'body_end'; code: string }>
   announcement?: {
     enabled: boolean
     type: string
@@ -969,6 +973,11 @@ export interface ResellerSiteConfigPayload {
     whatsapp?: string
     email?: string
     support_url?: string
+    wechat_id?: string
+    wechat_qr_code?: string
+    qq_number?: string
+    qq_group?: string
+    wechat_group_qr_code?: string
   }
   seo?: {
     title: ResellerLocalizedText
@@ -1010,6 +1019,7 @@ export interface ResellerProductSettingData {
   markup_percent: string
   fixed_markup_amount: string
   fixed_price_amount: string
+  agent_price_amount?: string
   effective_price_amount?: string
   rule_source?: string
   sort_order: number
@@ -1023,6 +1033,7 @@ export interface ResellerProductSettingSKUData {
   sku_code: string
   spec_values: Record<string, unknown>
   base_price_amount: string
+  shared_agent_price_amount?: string
   is_active: boolean
   setting?: ResellerProductSettingData
   effective_price_amount?: string
