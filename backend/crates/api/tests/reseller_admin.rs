@@ -6,6 +6,75 @@ mod reseller_common;
 use reseller_common::{App, config, data, err};
 use serde_json::json;
 
+// MISC-02: agreements and real-world identities are administrator-only metadata.
+#[tokio::test]
+async fn misc02_profile_metadata_persists_clears_and_stays_private() {
+    let app = App::new().await;
+    let (_, token, pid) = app.reseller("metadata@example.test", "0").await;
+    let url = format!("/api/v1/admin/resellers/profiles/{pid}");
+    let saved = app
+        .admin_call(
+            "PUT",
+            &url,
+            Some(json!({
+                "tags": [" 张三 ", "朋友", "张三", " "],
+                "admin_note": " 每月结算一次\n周五核对订单 "
+            })),
+        )
+        .await;
+    assert_eq!(data(&saved)["tags"], json!(["张三", "朋友"]));
+    assert_eq!(data(&saved)["admin_note"], "每月结算一次\n周五核对订单");
+    let detail = app.admin_call("GET", &url, None).await;
+    assert_eq!(
+        data(&detail)["profile"]["admin_note"],
+        "每月结算一次\n周五核对订单"
+    );
+    let list = app
+        .admin_call("GET", "/api/v1/admin/resellers/profiles", None)
+        .await;
+    assert_eq!(data(&list)[0]["tags"], json!(["张三", "朋友"]));
+    // Older clients may update operating parameters without sending metadata.
+    let unchanged = app
+        .admin_call("PUT", &url, Some(json!({"settlement_status": "normal"})))
+        .await;
+    assert_eq!(data(&unchanged)["tags"], json!(["张三", "朋友"]));
+    assert_eq!(data(&unchanged)["admin_note"], "每月结算一次\n周五核对订单");
+    let public = app
+        .call("GET", "/api/v1/reseller/profile", None, Some(&token))
+        .await;
+    let serialized = public.to_string();
+    for secret in ["tags", "admin_note", "张三", "每月结算"] {
+        assert!(!serialized.contains(secret), "{serialized}");
+    }
+    assert_eq!(
+        app.call(
+            "PUT",
+            &url,
+            Some(json!({"admin_note": "tampered"})),
+            Some(&token)
+        )
+        .await["status_code"],
+        401
+    );
+    for bad in [
+        json!({"tags": ["长".repeat(51)]}),
+        json!({"tags": (0..21).map(|i| i.to_string()).collect::<Vec<_>>()}),
+        json!({"admin_note": "长".repeat(5001)}),
+    ] {
+        assert_eq!(
+            app.admin_call("PUT", &url, Some(bad)).await["status_code"],
+            400
+        );
+    }
+    let cleared = app
+        .admin_call("PUT", &url, Some(json!({"tags": [], "admin_note": ""})))
+        .await;
+    assert_eq!(data(&cleared)["tags"], json!([]));
+    assert_eq!(data(&cleared)["admin_note"], "");
+    let detail = app.admin_call("GET", &url, None).await;
+    assert_eq!(data(&detail)["profile"]["admin_note"], "");
+}
+
 #[tokio::test]
 async fn requires_admin_without_compliance_prompt() {
     let app = App::new().await;

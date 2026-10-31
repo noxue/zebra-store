@@ -9,7 +9,7 @@ import { ResellerAlert, ResellerPageHeader } from '@/components/reseller/Console
 import { LocalizedInput, ResellerLocaleTabs, ResellerRuleEditor } from '@/components/reseller/ResellerFormParts'
 import { Badge, Button, Card, DataTable, Input, Modal, Pagination, PetalLoader, Switch, columns } from '@/components/ui'
 import { blankLocalizedText, type ResellerLocale } from '@/utils/reseller/siteConfig'
-import { countActiveSkus, countListedSkus, summarizeProductBasePrice, summarizeProductEffectivePrice } from '@/utils/reseller/productSettings'
+import { countActiveSkus, countListedSkus, summarizeProductBasePrice, summarizeProductEffectivePrice, summarizeProductRecommendedPrice } from '@/utils/reseller/productSettings'
 import { formatSkuSpecValues } from '@/utils/sku'
 
 export default defineComponent({
@@ -46,6 +46,7 @@ export default defineComponent({
         ),
       },
       { key: 'base', title: k('basePrice'), align: 'right', render: (row) => <span class="whitespace-nowrap zs-num">{summarizeProductBasePrice(row)}</span> },
+      { key: 'recommended', title: k('recommendedPrice'), align: 'right', render: (row) => <span class="whitespace-nowrap zs-num">{summarizeProductRecommendedPrice(row)}</span> },
       { key: 'effective', title: k('effectivePrice'), align: 'right', render: (row) => <span class="whitespace-nowrap zs-num font-bold text-primary-text">{summarizeProductEffectivePrice(row)}</span> },
       {
         key: 'listed',

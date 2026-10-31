@@ -19,13 +19,16 @@ use zs_domain::dashboard::inventory::{
     FULFILLMENT_AUTO, FULFILLMENT_UPSTREAM, InvProduct, InvSku, InventorySnapshot, UpstreamSku,
 };
 use zs_domain::dashboard::stats::{
-    DashboardRepo, ItemFact, OrderFact, PROVIDER_WALLET, PaymentFact, RefundFact, is_profit_status,
+    DashboardRepo, ItemFact, OrderFact, PROVIDER_WALLET, PaymentFact, RefundFact,
+    ResellerProfitFact, is_profit_status,
 };
+use zs_domain::reseller::accounting::allocate_profit;
 use zs_domain::{Id, Result};
 
 use crate::db::entity::{
     card_secrets, order_items, order_refund_records, orders, payment_channels, payments,
-    product_mappings, product_skus, products, sku_mappings, users, wallet_accounts,
+    product_mappings, product_skus, products, reseller_ledger_entries, reseller_order_snapshots,
+    sku_mappings, users, wallet_accounts,
 };
 use crate::db::repo::support::DbResultExt;
 
@@ -109,6 +112,73 @@ impl SeaDashboardRepo {
             );
         }
         Ok(out)
+    }
+
+    /// Ranking shares follow its existing gross item-margin basis: earned
+    /// commissions, before refund/fee adjustments (overview/trends are net).
+    async fn item_profit_shares(
+        &self,
+        items: &[order_items::Model],
+    ) -> Result<HashMap<Id, Decimal>> {
+        let ids = unique(items.iter().map(|i| i.order_id));
+        let mut order_rows = HashMap::new();
+        for chunk in ids.chunks(CHUNK) {
+            for row in orders::Entity::find()
+                .filter(orders::Column::Id.is_in(chunk.to_vec()))
+                .all(&self.db)
+                .await
+                .dom()?
+            {
+                order_rows.insert(row.id, row);
+            }
+        }
+        let roots = unique(order_rows.values().map(|o| o.parent_id.unwrap_or(o.id)));
+        let mut earned = HashMap::<Id, Decimal>::new();
+        for chunk in roots.chunks(CHUNK) {
+            for row in reseller_ledger_entries::Entity::find()
+                .filter(reseller_ledger_entries::Column::OrderId.is_in(chunk.to_vec()))
+                .filter(reseller_ledger_entries::Column::Type.eq("order_profit"))
+                .filter(reseller_ledger_entries::Column::Status.ne("canceled"))
+                .filter(reseller_ledger_entries::Column::DeletedAt.is_null())
+                .all(&self.db)
+                .await
+                .dom()?
+            {
+                if let Some(order_id) = row.order_id {
+                    *earned.entry(order_id).or_default() += row.amount;
+                }
+            }
+        }
+        // Child snapshots split the exact earning captured at checkout. A missing
+        // ledger entry means no commission was earned (e.g. a reseller's own buy).
+        let mut by_order: HashMap<Id, Vec<&order_items::Model>> = HashMap::new();
+        for item in items {
+            by_order.entry(item.order_id).or_default().push(item);
+        }
+        let mut result = HashMap::new();
+        for (id, lines) in by_order {
+            let Some(order) = order_rows.get(&id) else {
+                continue;
+            };
+            let root = order.parent_id.unwrap_or(id);
+            let amount = if order.parent_id.is_some() {
+                if earned.get(&root).is_some_and(|v| *v > Decimal::ZERO) {
+                    order.reseller_profit_amount
+                } else {
+                    Decimal::ZERO
+                }
+            } else {
+                earned.get(&root).copied().unwrap_or_default()
+            };
+            let weights: Vec<_> = lines
+                .iter()
+                .map(|i| i.total_price - i.coupon_discount)
+                .collect();
+            for (item, share) in lines.iter().zip(allocate_profit(amount, &weights)) {
+                result.insert(item.id, share);
+            }
+        }
+        Ok(result)
     }
 
     /// Item cost (`cost_price × quantity`) per order.
@@ -224,6 +294,7 @@ impl DashboardRepo for SeaDashboardRepo {
         let orders = self.profit_orders(start, end).await?;
         let order_ids: Vec<Id> = orders.keys().copied().collect();
         let items = self.items_of(&order_ids).await?;
+        let shares = self.item_profit_shares(&items).await?;
         let sku_ids = unique(items.iter().map(|i| i.sku_id).filter(|id| *id > 0));
         let mut skus: HashMap<Id, (String, Option<Value>)> = HashMap::new();
         for chunk in sku_ids.chunks(CHUNK) {
@@ -248,6 +319,7 @@ impl DashboardRepo for SeaDashboardRepo {
                 Some(ItemFact {
                     order_id: i.order_id,
                     order_status: status,
+                    reseller_profit: shares.get(&i.id).copied().unwrap_or_default(),
                     order_created_at: created_at,
                     product_id: i.product_id,
                     sku_id: i.sku_id,
@@ -329,6 +401,58 @@ impl DashboardRepo for SeaDashboardRepo {
                 order_total: totals.get(&order_id).copied().unwrap_or_default(),
                 cost_basis: basis.get(&order_id).copied().unwrap_or_default(),
                 created_at,
+            })
+            .collect())
+    }
+
+    async fn reseller_profits(
+        &self,
+        start: DateTime<Utc>,
+        end: DateTime<Utc>,
+    ) -> Result<Vec<ResellerProfitFact>> {
+        use reseller_ledger_entries::Column as L;
+        let rows = reseller_ledger_entries::Entity::find()
+            .filter(L::DeletedAt.is_null())
+            .filter(L::Type.is_in(["order_profit", "refund_deduct"]))
+            .filter(L::IdempotencyKey.not_like("split:%"))
+            .filter(L::Status.ne("canceled"))
+            .filter(L::CreatedAt.gte(start))
+            .filter(L::CreatedAt.lt(end))
+            .all(&self.db)
+            .await
+            .dom()?;
+        let ids = unique(
+            rows.iter()
+                .filter(|r| r.type_ == "order_profit")
+                .filter_map(|r| r.order_id),
+        );
+        let mut original = HashMap::new();
+        for chunk in ids.chunks(CHUNK) {
+            for snapshot in reseller_order_snapshots::Entity::find()
+                .filter(reseller_order_snapshots::Column::OrderId.is_in(chunk.to_vec()))
+                .all(&self.db)
+                .await
+                .dom()?
+            {
+                original.insert(snapshot.order_id, snapshot.profit_amount);
+            }
+        }
+        // Withdrawals can shrink the original ledger amount and create a remainder
+        // dated later. Use the immutable checkout snapshot once at the original
+        // posting date; split allocation rows never create a second earning.
+        Ok(rows
+            .into_iter()
+            .map(|entry| ResellerProfitFact {
+                amount: if entry.type_ == "order_profit" {
+                    entry
+                        .order_id
+                        .and_then(|id| original.get(&id))
+                        .copied()
+                        .unwrap_or(entry.amount)
+                } else {
+                    entry.amount
+                },
+                created_at: entry.created_at,
             })
             .collect())
     }

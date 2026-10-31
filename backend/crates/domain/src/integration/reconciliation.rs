@@ -166,7 +166,7 @@ pub fn is_status_consistent(local: &str, upstream: &str) -> bool {
     let up = upstream.trim().to_lowercase();
     let any = |xs: &[&str]| xs.contains(&up.as_str());
     match local.as_str() {
-        "completed" | "fulfilled" => any(&[
+        "completed" | "fulfilled" | "stock_recovered" => any(&[
             "completed",
             "delivered",
             "fulfilled",
@@ -309,6 +309,7 @@ mod tests {
             status,
             upstream_amount: upstream_amount.parse().unwrap(),
             upstream_currency: "CNY".into(),
+            reseller_profit_amount: None,
             local_sell_amount: "12".parse().unwrap(),
             currency: "CNY".into(),
             error_message: String::new(),

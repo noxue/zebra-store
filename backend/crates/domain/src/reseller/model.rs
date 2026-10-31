@@ -180,6 +180,10 @@ pub struct Profile {
     pub status: ProfileStatus,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub apply_reason: String,
+    /// Internal administrator labels; never exposed through reseller DTOs.
+    pub tags: Vec<String>,
+    /// Persistent agreements and notes for administrators.
+    pub admin_note: String,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub reject_reason: String,
     pub default_markup_percent: Amount,

@@ -3133,3 +3133,18 @@ dujiao-next 在约 7 个月内迭代了支付（10+ 网关）、订单/库存、
 - **问题现象**: 分销商品配置的分销商和商品搜索结果显示后，鼠标点击候选项会先触发失焦，列表立即关闭，选择事件没有执行。
 - **修复要点**: 在候选项按下指针时完成选择，避免失焦卸载列表抢在点击事件之前；保留键盘 Enter 选择。候选列表和选项需有足够的可点击高度；带 `backdrop-filter` 的筛选卡片会形成独立层叠上下文，须让它盖过下面的表格，防止列表下半部分被遮住。
 - **必测用例**: admin `SearchPicker.test.ts` 中 `reseller_picker_01`：指针按下候选项即更新所选记录和输入文字，列表关闭。
+
+#### RFD-05 / RFD-06 上游采购与退款资金必须一致
+
+- **修复要点**：强制退款也不能跳过采购状态；未采购任务先确认停单，未知或执行中保持处理中。采购提交、退款预占/资金入账、交付共用父子单锁，网络请求前持久化 submitted。历史退款后晚到的原卡只在数量、SKU、唯一性和从未披露均已核对时回本地库存，保留原凭证与独立审计。
+- **必测用例**：`order_admin_force_refund.rs` 的 `rfd05_`、`rfd06_`：钱包/原路/买家/强退、取消确认成功与失败、提交竞争、退款后交付拦截、回库再次售出及重启重放不重复入库。SQLite 与独立 PostgreSQL 测试均使用模拟供应商，不消费余额。
+
+#### DASH-01 站长利润扣除代理净分成
+
+- **修复要点**：保留原总利润口径，站长利润扣除代理账本净分成；提现拆账不应改变历史收益日期或金额，商品分配依据不可变快照并精确到分。
+- **必测用例**：`dashboard_reports.rs` 的 `owner_profit_deducts_net_reseller_earnings_and_buckets_refunds_by_local_day` 与 `withdrawal_splits_preserve_historical_profit_and_admin_item_allocations`，覆盖日切、退款扣回、提现拆分、订单和采购分配。
+
+#### RFD-07 回库必须有跨服务的明确确认
+
+- **修复要点**：只在管理员原订单明确暴露回库能力、原供应商号匹配且没有既有交付时发送原生加密回库事件。使用独立稳定事件号，读回 recovered 与原批次 SHA256 才确认，不能把 HTTP 成功当作库存完成；已披露或不明确的卡保持人工核查。交付文字中嵌有卡密也属于披露歧义。
+- **必测用例**：`order_admin_force_refund.rs::rfd06_native_recovery_event_is_authenticated_idempotent_and_acknowledged`、`rfd06_recovery_acknowledgement_requires_full_refund_and_supplier_reference` 和既有 `rfd06_ambiguous_or_previously_disclosed_cards_are_held_for_review` 的 embedded-disclosure 分支；配套上游 delivery 测试覆盖旧版本、重复、响应丢失、假成功、原号/摘要不符及交付中退款。

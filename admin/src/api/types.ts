@@ -176,9 +176,12 @@ export interface AdminFulfillment {
 }
 
 export interface AdminOrder {
+  reseller_item_profit_amounts?: Record<string, Money>
+  upstream_stock_recovery?: Record<string, { procurement_order_id: number; upstream_order_no: string; status: 'pending' | 'recovered' | 'review'; payload_sha256?: string }>
   id: number
   order_no: string
-  refund_mode?: 'none' | 'automatic' | 'contact_support'
+  original_refund_supported?: boolean
+  refund_mode?: 'none' | 'automatic' | 'contact_support' | 'processing'
   refund_state?: 'none' | 'checking' | 'processing' | 'awaiting_support' | 'syncing' | 'succeeded' | 'needs_review'
   refund_attempt?: { id: number; status: string; amount: Money; remark: string; payment_fee_refunded: boolean } | null
   parent_id?: number
@@ -739,6 +742,7 @@ export interface AdminProcurementOrder {
   status: string
   upstream_amount: Money
   upstream_currency: string
+  reseller_profit_amount?: Money
   local_sell_amount: Money
   local_sell_currency: string
   error_message?: string
@@ -982,6 +986,8 @@ export interface AdminResellerProfileRef {
 }
 
 export interface AdminResellerProfile {
+  tags?: string[]
+  admin_note?: string
   id: number
   user_id: number
   status: string
@@ -1050,6 +1056,7 @@ export interface AdminResellerSiteConfigPayload {
     support_url?: string
     wechat_id?: string
     wechat_qr_code?: string
+    telegram_qr_code?: string
     qq_number?: string
     qq_group?: string
     wechat_group_qr_code?: string
@@ -1189,6 +1196,8 @@ export interface AdminResellerProfileApprovePayload {
 }
 
 export interface AdminResellerProfileUpdatePayload {
+  tags?: string[]
+  admin_note?: string
   default_markup_percent?: string
   max_markup_percent?: string
   settlement_status?: string
@@ -1599,6 +1608,11 @@ export interface AdminManualRefundPayload {
   payment_fee_refunded?: boolean
 }
 
+export interface AdminOriginalRefundPayload extends AdminManualRefundPayload {
+  force_refund?: boolean
+  restock_cards?: boolean
+}
+
 export interface AdminOriginalRefundResponse {
   attempt: { status: 'preparing' | 'pending' | 'succeeded' | 'failed'; id: number }
 }
@@ -1705,6 +1719,8 @@ export interface DashboardKpi {
   total_cost: string
   payment_fee: string
   total_profit: string
+  owner_profit: string
+  reseller_profit: string
   profit_margin: string
   payments_total: number
   payments_success: number
@@ -1740,6 +1756,7 @@ export interface DashboardTrendPoint {
   payments_failed: number
   gmv_paid: string
   profit: string
+  owner_profit: string
 }
 
 export interface DashboardTrends {
@@ -1761,6 +1778,7 @@ export interface DashboardProductRanking {
   paid_amount: string
   total_cost: string
   profit: string
+  owner_profit: string
 }
 
 export interface DashboardChannelRanking {

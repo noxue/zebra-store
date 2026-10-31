@@ -89,10 +89,15 @@ async fn detail(State(s): State<AppState>, Path(id): Path<String>) -> ApiResult<
         .buyer_refund_mode(&detail.order)
         .await
         .unwrap_or("contact_support");
+    let original_refund_supported = svc.original_refund_supported(&detail.order).await?;
     let detail_order_id = detail.order.id;
     let mut value = serde_json::to_value(detail).map_err(Error::from)?;
     if let Some(object) = value.as_object_mut() {
         object.insert("refund_mode".into(), mode.into());
+        object.insert(
+            "original_refund_supported".into(),
+            original_refund_supported.into(),
+        );
         object.insert(
             "refund_state".into(),
             svc.public_refund_state(detail_order_id)
@@ -263,21 +268,40 @@ async fn cancel_manual_refund(
     ok(json!({"attempt": attempt}))
 }
 
+#[derive(Debug, Deserialize)]
+struct OriginalRefundBody {
+    #[serde(flatten)]
+    refund: RefundBody,
+    #[serde(default)]
+    force_refund: bool,
+    #[serde(default)]
+    restock_cards: bool,
+}
+impl BindRules for OriginalRefundBody {
+    const FIELDS: &'static [BindField] = &[req("amount", "Amount")];
+}
+
 async fn original_refund(
     State(s): State<AppState>,
     Path(id): Path<String>,
-    Bind(req): Bind<RefundBody>,
+    CurrentAdmin(admin): CurrentAdmin,
+    Bind(req): Bind<OriginalRefundBody>,
 ) -> ApiResult<Data<Value>> {
     let result = s
         .svc
         .order
         .service
-        .original_refund(
+        .original_refund_with_options(
             order_id(&id)?,
-            &amount_text(&req.amount)?,
-            &req.remark,
-            req.payment_fee_refunded,
+            &amount_text(&req.refund.amount)?,
+            &req.refund.remark,
+            req.refund.payment_fee_refunded,
             "",
+            zs_domain::payment::refund::AdminRefundOptions {
+                admin_id: req.force_refund.then_some(admin.id),
+                force_refund: req.force_refund,
+                restock_cards: req.restock_cards,
+            },
         )
         .await?;
     ok(json!({

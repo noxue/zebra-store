@@ -39,7 +39,7 @@ export interface ResellerSiteConfigForm {
   favicon: string
   scripts: Array<{ name: string; enabled: boolean; position: 'head' | 'body_end'; code: string }>
   announcement: { enabled: boolean; type: string; title: ResellerLocalizedText; content: ResellerLocalizedText }
-  support: { telegram: string; whatsapp: string; email: string; support_url: string; wechat_id: string; wechat_qr_code: string; qq_number: string; qq_group: string; wechat_group_qr_code: string }
+  support: { telegram: string; whatsapp: string; email: string; support_url: string; wechat_id: string; wechat_qr_code: string; telegram_qr_code: string; qq_number: string; qq_group: string; wechat_group_qr_code: string }
   seo: { title: ResellerLocalizedText; keywords: ResellerLocalizedText; description: ResellerLocalizedText; default_og_image: string }
   footer_links: Array<{ name: ResellerLocalizedText; url: string }>
   nav_config: { builtin: Record<string, boolean>; custom_items: Array<{ name: ResellerLocalizedText; url: string }> }
@@ -54,7 +54,7 @@ export const createBlankSiteConfigForm = (): ResellerSiteConfigForm => ({
   favicon: '',
   scripts: [],
   announcement: { enabled: false, type: 'info', title: blankLocalizedText(), content: blankLocalizedText() },
-  support: { telegram: '', whatsapp: '', email: '', support_url: '', wechat_id: '', wechat_qr_code: '', qq_number: '', qq_group: '', wechat_group_qr_code: '' },
+  support: { telegram: '', whatsapp: '', email: '', support_url: '', wechat_id: '', wechat_qr_code: '', telegram_qr_code: '', qq_number: '', qq_group: '', wechat_group_qr_code: '' },
   seo: { title: blankLocalizedText(), keywords: blankLocalizedText(), description: blankLocalizedText(), default_og_image: '' },
   footer_links: [],
   nav_config: { builtin: { blog: true, notice: true, about: true }, custom_items: [] },
@@ -86,6 +86,7 @@ export const siteConfigToForm = (config?: ResellerSiteConfigData | null): Resell
     support_url: config.support?.support_url || '',
     wechat_id: config.support?.wechat_id || '',
     wechat_qr_code: config.support?.wechat_qr_code || '',
+    telegram_qr_code: config.support?.telegram_qr_code || '',
     qq_number: config.support?.qq_number || '',
     qq_group: config.support?.qq_group || '',
     wechat_group_qr_code: config.support?.wechat_group_qr_code || '',

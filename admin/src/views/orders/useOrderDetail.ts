@@ -3,6 +3,7 @@ import { useI18n } from 'vue-i18n'
 import { adminAPI } from '@/api/admin'
 import type { AdminOrder, AdminProcurementOrder } from '@/api/types'
 import { errorMessage } from '@/api/client'
+import { confirmAction } from '@/utils/confirm'
 import { downloadBlob } from '@/utils/download'
 import { canManualRefund, canRefundToWallet, checkRefundAmount, refundableAmountValue } from './orderUtils'
 
@@ -20,16 +21,16 @@ export function useOrderDetail(opts: { maxRefundDays: () => number; onChanged: (
 
   const refundTab = ref<RefundTab>('wallet')
   const wallet = reactive({ amount: '', remark: '', submitting: false, error: '', success: '' })
-  const original = reactive({ amount: '', remark: '', submitting: false, error: '', success: '' })
+  const original = reactive({ amount: '', remark: '', forceRefund: false, restockCards: false, submitting: false, error: '', success: '' })
   const manual = reactive({ amount: '', reason: '', transferRef: '', paymentFeeRefunded: true, submitting: false, error: '', success: '' })
   const downloading = ref(false)
 
   const defaultRefundTab = (o: AdminOrder | null): RefundTab =>
-    o?.refund_mode === 'automatic' ? 'original' : o?.user_id && Number(o?.online_paid_amount ?? 0) === 0 ? 'wallet' : 'manual'
+    (o?.original_refund_supported || o?.refund_mode === 'automatic') ? 'original' : o?.user_id && Number(o?.online_paid_amount ?? 0) === 0 ? 'wallet' : 'manual'
 
   const resetForms = () => {
     Object.assign(wallet, { amount: '', remark: '', error: '', success: '' })
-    Object.assign(original, { amount: '', remark: '', error: '', success: '' })
+    Object.assign(original, { amount: '', remark: '', forceRefund: false, restockCards: false, error: '', success: '' })
     Object.assign(manual, { amount: '', reason: '', transferRef: '', paymentFeeRefunded: true, error: '', success: '' })
   }
 
@@ -196,7 +197,7 @@ export function useOrderDetail(opts: { maxRefundDays: () => number; onChanged: (
     if (!o) return
     original.error = ''
     original.success = ''
-    if (!canManualRefund(o, opts.maxRefundDays())) {
+    if (!canManualRefund(o, original.forceRefund ? 0 : opts.maxRefundDays())) {
       original.error = t('admin.orders.refundNoRemaining')
       return
     }
@@ -205,15 +206,27 @@ export function useOrderDetail(opts: { maxRefundDays: () => number; onChanged: (
       original.error = invalid
       return
     }
+    if (original.restockCards && (!original.forceRefund || Number(original.amount) !== Number(o.total_amount) || Number(o.refunded_amount || 0) !== 0)) {
+      original.error = t('admin.orders.restockFullOnly')
+      return
+    }
+    if (original.forceRefund && !await confirmAction({
+      title: t('admin.orders.forceRefund'),
+      description: t(original.restockCards ? 'admin.orders.forceRefundConfirmRestock' : 'admin.orders.forceRefundConfirm'),
+      variant: 'destructive',
+    })) return
     original.submitting = true
     try {
       const response = await adminAPI.originalRefundOrder(o.id, {
         amount: original.amount.trim(),
         remark: original.remark.trim() || undefined,
         payment_fee_refunded: false,
+        force_refund: original.forceRefund,
+        restock_cards: original.forceRefund && original.restockCards,
       })
       await fetchDetail(o.id, true)
-      original.success = response.data?.attempt?.status === 'succeeded'
+      if (response.data?.attempt?.status === 'failed') original.error = t('admin.orders.refundFailed')
+      else original.success = response.data?.attempt?.status === 'succeeded'
         ? t('admin.orders.originalRefundSuccess')
         : t('admin.orders.originalRefundPending')
       opts.onChanged()

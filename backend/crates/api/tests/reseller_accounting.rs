@@ -459,6 +459,7 @@ async fn withdrawal_payout_qr_roundtrip_and_validation() {
 #[tokio::test]
 async fn rsl02_paid_withdrawal_caches() {
     let shop = shop().await;
+    let (_, other_token, _) = shop.app.reseller("other-ledger@example.test", "0").await;
     shop.available_profit("160.00").await; // profit 60
     let w = shop.withdraw("25").await;
     let wid = data(&w)["id"].as_i64().unwrap();
@@ -474,6 +475,42 @@ async fn rsl02_paid_withdrawal_caches() {
             None,
         )
         .await;
+    // RSL-13: payout history is an actual debit, linked to the withdrawal.
+    let history = shop
+        .app
+        .call(
+            "GET",
+            "/api/v1/reseller/ledger-entries?type=withdraw_paid",
+            None,
+            Some(&shop.token),
+        )
+        .await;
+    assert_eq!(history["pagination"]["total"], 1);
+    assert_eq!(data(&history)[0]["amount"], "-25.00");
+    assert_eq!(data(&history)[0]["status"], "withdrawn");
+    assert_eq!(data(&history)[0]["withdraw_request_id"], wid);
+    let admin_history = shop
+        .app
+        .admin_call(
+            "GET",
+            &format!(
+                "/api/v1/admin/resellers/ledger-entries?type=withdraw_paid&reseller_id={}",
+                shop.pid
+            ),
+            None,
+        )
+        .await;
+    assert_eq!(data(&admin_history)[0]["amount"], "-25.00");
+    let other = shop
+        .app
+        .call(
+            "GET",
+            "/api/v1/reseller/ledger-entries?type=withdraw_paid",
+            None,
+            Some(&other_token),
+        )
+        .await;
+    assert_eq!(other["pagination"]["total"], 0);
     assert_eq!(data(&paid)["status"], "paid");
     assert!(data(&paid)["processed_by"].is_number());
     assert_eq!(
@@ -493,6 +530,19 @@ async fn rsl02_paid_withdrawal_caches() {
         "请求参数错误",
     );
 
+    let history = shop
+        .app
+        .call(
+            "GET",
+            "/api/v1/reseller/ledger-entries?type=withdraw_paid",
+            None,
+            Some(&shop.token),
+        )
+        .await;
+    assert_eq!(
+        history["pagination"]["total"], 1,
+        "repeated pay must not duplicate the debit"
+    );
     let w = shop.withdraw("35").await;
     let wid = data(&w)["id"].as_i64().unwrap();
     data(
@@ -582,6 +632,17 @@ async fn rsl05_withdraw_split_and_reject() {
         Shop::cache(&shop.balance().await),
         (s("80.00"), s("0.00"), s("0.00"), s("normal"))
     );
+    // RSL-13: rejection returns the allocation without recording a payout.
+    let history = shop
+        .app
+        .call(
+            "GET",
+            "/api/v1/reseller/ledger-entries?type=withdraw_paid",
+            None,
+            Some(&shop.token),
+        )
+        .await;
+    assert_eq!(history["pagination"]["total"], 0);
     let unlocked = ledger::Entity::find()
         .filter(ledger::Column::ResellerId.eq(shop.pid))
         .filter(ledger::Column::Status.eq("available"))

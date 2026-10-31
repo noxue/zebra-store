@@ -117,6 +117,9 @@ export const SiteFooter = defineComponent({
                 <Github class="size-4" />
                 github.com/noxue/zebra-store
               </a>}
+              <RouterLink to="/contact" class="hover:text-primary-text">
+                {t('customerSupport.title')}
+              </RouterLink>
               <RouterLink to="/privacy" class="hover:text-primary-text">
                 {t('footer.privacy')}
               </RouterLink>

@@ -257,6 +257,7 @@
     "dismissToday": "Don't show today",
     "dismissForever": "Don't show again"
   },
+  "customerSupport": {"title": "Contact support", "empty": "Support contact details have not been configured for this shop."},
   "about": {
     "title": "About Us",
     "subtitle": "Learn about Zebra Store",
@@ -269,6 +270,7 @@
     "contactUs": "Contact Us",
     "contactText": "If you have any questions about our products or services, please feel free to contact us via:",
     "wechatId": "WeChat ID",
+    "telegramQrCode": "Telegram support QR code",
     "wechatQrCode": "WeChat support QR code",
     "qqNumber": "QQ number",
     "qqGroup": "QQ group",
@@ -805,6 +807,7 @@
           "email": "Support Email",
           "supportUrl": "Support URL",
           "wechatId": "WeChat ID",
+          "telegramQrCode": "Telegram support QR code",
           "wechatQrCode": "WeChat support QR code",
           "qqNumber": "QQ number",
           "qqGroup": "QQ group",
@@ -845,10 +848,11 @@
       },
       "productSettings": {
         "title": "Product pricing",
-        "subtitle": "View cost and sale prices, then set sale prices by product or SKU.",
+        "subtitle": "View costs, main-site recommended prices and your sale prices; adjust by product or SKU.",
         "searchPlaceholder": "Search product name, slug, or product ID",
         "empty": "No configurable products",
         "basePrice": "Cost price",
+        "recommendedPrice": "Recommended price",
         "edit": "Edit pricing",
         "editorTitle": "Pricing rules",
         "productLevelRule": "Product-level rule",
@@ -949,6 +953,7 @@
         "paid": "Paid"
       },
       "ledgerTable": {
+        "withdrawRequestId": "Withdrawal ID",
         "type": "Type",
         "amount": "Amount",
         "status": "Status",
@@ -1610,6 +1615,8 @@
       "currencyKinds": "Currencies",
       "statusAll": "All statuses",
       "statusMap": {
+        "fulfilling": "Processing",
+        "partially_delivered": "Partially delivered",
         "pending_payment": "Pending payment",
         "paid": "Paid",
         "completed": "Completed",
@@ -1702,6 +1709,7 @@
     "paymentTitle": "Payment Info"
   },
   "orderDetail": {
+    "refundProcessing": "Upstream procurement is processing or its result is uncertain. Refunds require a confirmed final result.",
     "title": "Order Detail",
     "refundNotice": "Bought the wrong item or no longer need it? Request a refund to the original payment method. Used cards require manual review.",
     "requestRefund": "Request Refund",
@@ -1796,7 +1804,6 @@
     "passwordPlaceholder": "Order password",
     "orderNoPlaceholder": "Order No (optional)",
     "savedHint": "Saved email: {email}",
-    "clearSaved": "Clear saved info",
     "tip": "Use the email and order password from checkout",
     "search": "Search orders",
     "searching": "Searching...",

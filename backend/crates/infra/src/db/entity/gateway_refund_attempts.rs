@@ -29,6 +29,12 @@ pub struct Model {
     pub payment_fee_refunded: bool,
     #[sea_orm(default_value = false)]
     pub card_confirmed: bool,
+    #[sea_orm(nullable)]
+    pub admin_refund_by: Option<i64>,
+    #[sea_orm(default_value = false)]
+    pub force_refund: bool,
+    #[sea_orm(default_value = false)]
+    pub restock_cards: bool,
     #[sea_orm(column_type = "Json", nullable)]
     pub payload: Option<Json>,
     #[sea_orm(column_type = "Text")]

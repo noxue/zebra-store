@@ -176,6 +176,8 @@ impl ProfileRepo for SeaResellerStore {
             status: Set(next.status.as_str().to_owned()),
             apply_reason: Set(next.apply_reason.clone()),
             reject_reason: Set(next.reject_reason.clone()),
+            tags: Set(Some(serde_json::json!(next.tags))),
+            admin_note: Set(Some(next.admin_note.clone())),
             default_markup_percent: Set(next.default_markup_percent.decimal()),
             max_markup_percent: Set(next.max_markup_percent.decimal()),
             settlement_status: Set(next.settlement_status.as_str().to_owned()),

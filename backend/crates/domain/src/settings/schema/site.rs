@@ -109,6 +109,7 @@ fn normalize_contact(raw: Option<&Value>) -> Value {
         "whatsapp": text(c.and_then(|o| o.get("whatsapp"))),
         "wechat_id": text_limit(c.and_then(|o| o.get("wechat_id")), 100),
         "wechat_qr_code": image("wechat_qr_code"),
+        "telegram_qr_code": image("telegram_qr_code"),
         "qq_number": text_limit(c.and_then(|o| o.get("qq_number")), 100),
         "qq_group": text_limit(c.and_then(|o| o.get("qq_group")), 100),
         "wechat_group_qr_code": image("wechat_group_qr_code"),
@@ -669,7 +670,7 @@ mod tests {
             .collect();
         let out = normalize_site(&json!({
             "brand": {"site_name": " Zebra ", "site_url": "https://a.com///", "site_logo": "/uploads/l.png", "site_logo_dark": "/uploads/d.png"},
-            "contact": {"wechat_id": " main ", "wechat_qr_code": "/uploads/wechat.png", "qq_number": "12345", "qq_group": "67890", "wechat_group_qr_code": "javascript:alert(1)"},
+            "contact": {"wechat_id": " main ", "wechat_qr_code": "/uploads/wechat.png", "telegram_qr_code": "/uploads/tg.png", "qq_number": "12345", "qq_group": "67890", "wechat_group_qr_code": "javascript:alert(1)"},
             "scripts": scripts,
             "footer_links": [{"name": "", "url": "x"}, {"name": "A", "url": " /a "}],
             "currency": "usd",
@@ -685,6 +686,7 @@ mod tests {
         assert_eq!(out["brand"]["site_icon"], "");
         assert_eq!(out["contact"]["wechat_id"], "main");
         assert_eq!(out["contact"]["wechat_qr_code"], "/uploads/wechat.png");
+        assert_eq!(out["contact"]["telegram_qr_code"], "/uploads/tg.png");
         assert_eq!(out["contact"]["qq_group"], "67890");
         assert_eq!(out["contact"]["wechat_group_qr_code"], "");
         assert_eq!(out["scripts"].as_array().unwrap().len(), SCRIPTS_MAX);

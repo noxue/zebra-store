@@ -16,6 +16,7 @@ import {
   PROCUREMENT_STATUSES,
   priceRange,
   procurementProfit,
+  procurementOwnerProfit,
   procurementStatusTone,
   relativeTimeParts,
   retryIntervalsToText,
@@ -169,6 +170,9 @@ describe('procurement helpers', () => {
     expect(localCostAmount(order)).toBe('60.00')
     // 100 + 10*2 - 60 - 5
     expect(procurementProfit(order)).toBe('55.00')
+    expect(procurementOwnerProfit({ ...order, reseller_profit_amount: '7.50' })).toBe('47.50')
+    expect(procurementOwnerProfit({ ...order, reseller_profit_amount: '-2.00' })).toBe('57.00')
+    expect(procurementOwnerProfit(order)).toBeNull()
     expect(procurementProfit({ local_sell_amount: '0.00' })).toBeNull()
   })
 
@@ -184,11 +188,13 @@ describe('procurement helpers', () => {
     expect(parseProcurementStats(undefined).total).toBe(0)
   })
 
-  it('surfaces manual review with retry and cancel actions', () => {
+  it('keeps uncertain purchases under review without offering cancellation', () => {
     expect(PROCUREMENT_STATUSES).toContain('manual_review')
     expect(procurementStatusTone('manual_review')).toBe('warning')
     expect(canRetryProcurement('manual_review')).toBe(true)
-    expect(canCancelProcurement('manual_review')).toBe(true)
+    expect(canCancelProcurement('manual_review')).toBe(false)
+    for (const status of ['submitted', 'stock_recovered']) expect(canCancelProcurement(status)).toBe(false)
+    for (const status of ['pending', 'accepted', 'rejected', 'failed']) expect(canCancelProcurement(status)).toBe(true)
     expect(canRetryProcurement('accepted')).toBe(false)
     expect(canCancelProcurement('fulfilled')).toBe(false)
   })

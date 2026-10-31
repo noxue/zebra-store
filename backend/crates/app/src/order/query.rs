@@ -1,13 +1,13 @@
 //! Storefront order reads, cancellation and the timeout job (`order_service_query.go`,
 //! `order_service_child.go`).
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use zs_domain::order::guest::{hash_credential, normalize_email};
-use zs_domain::order::model::{Order, OrderStatus, keys};
+use zs_domain::order::model::{Order, OrderStatus, fulfillment_type, keys};
 use zs_domain::order::ports::{CancelReason, Owner, Scope};
 use zs_domain::order::status::{calc_parent_status, expected_refund_status};
-use zs_domain::order::view::{OrderDetail, RefundView};
+use zs_domain::order::view::{OrderDetail, OrderSummary, RefundView};
 use zs_domain::payment::eligibility::{decode_channel_ids, product_channel_intersection};
 use zs_domain::reseller::tenant::ResellerTenant;
 use zs_domain::{Error, Id, Result};
@@ -247,9 +247,31 @@ impl OrderService {
         Ok(product_channel_intersection(&lists))
     }
 
-    /// Detail DTO with the channel whitelist and refund records (`enrichOrderWith*`).
+    async fn delivery_types(&self, orders: &[Order]) -> Result<HashMap<Id, String>> {
+        let ids: Vec<Id> = orders
+            .iter()
+            .flat_map(|o| o.all_items())
+            .filter(|i| i.fulfillment_type == fulfillment_type::UPSTREAM)
+            .map(|i| i.product_id)
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect();
+        self.deps.repo.upstream_delivery_types(&ids).await
+    }
+
+    /// Resolve delivery types once for the entire buyer-facing list, including children.
+    pub async fn order_summaries(&self, orders: &[Order]) -> Result<Vec<OrderSummary>> {
+        let types = self.delivery_types(orders).await?;
+        Ok(orders
+            .iter()
+            .map(|order| OrderSummary::with_delivery_types(order, &types))
+            .collect())
+    }
+
+    /// Detail DTO with supplier delivery types, channel whitelist and refund records.
     pub async fn order_detail(&self, order: &Order, truncate: bool) -> Result<OrderDetail> {
-        let mut detail = OrderDetail::new(order, truncate);
+        let types = self.delivery_types(std::slice::from_ref(order)).await?;
+        let mut detail = OrderDetail::with_delivery_types(order, truncate, &types);
         let product_ids: Vec<Id> = order.all_items().iter().map(|i| i.product_id).collect();
         detail.allowed_payment_channel_ids = self.allowed_channel_ids(&product_ids).await?;
         if matches!(

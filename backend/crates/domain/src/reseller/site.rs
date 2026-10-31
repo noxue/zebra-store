@@ -44,6 +44,7 @@ pub struct SupportInput {
     pub support_url: String,
     pub wechat_id: String,
     pub wechat_qr_code: String,
+    pub telegram_qr_code: String,
     pub qq_number: String,
     pub qq_group: String,
     pub wechat_group_qr_code: String,
@@ -286,6 +287,8 @@ pub fn normalize_support(input: &SupportInput) -> Result<Value> {
     let url = support_url(&input.support_url).ok_or_else(|| field(keys::SUPPORT_URL_INVALID))?;
     let wechat_qr_code =
         http_or_upload(&input.wechat_qr_code).ok_or_else(|| field(keys::IMAGE_INVALID))?;
+    let telegram_qr_code =
+        http_or_upload(&input.telegram_qr_code).ok_or_else(|| field(keys::IMAGE_INVALID))?;
     let wechat_group_qr_code =
         http_or_upload(&input.wechat_group_qr_code).ok_or_else(|| field(keys::IMAGE_INVALID))?;
     Ok(json!({
@@ -295,6 +298,7 @@ pub fn normalize_support(input: &SupportInput) -> Result<Value> {
         "support_url": url,
         "wechat_id": trim_limit(&input.wechat_id, 100),
         "wechat_qr_code": wechat_qr_code,
+        "telegram_qr_code": telegram_qr_code,
         "qq_number": trim_limit(&input.qq_number, 100),
         "qq_group": trim_limit(&input.qq_group, 100),
         "wechat_group_qr_code": wechat_group_qr_code,
@@ -512,6 +516,9 @@ pub fn overlay_public_config(
         }
     }
     out.insert("brand".into(), Value::Object(brand));
+    // Main-site introductions and legacy support are private to the main shop.
+    out.remove("about");
+    out.remove("support");
     let mut scripts = out
         .remove("scripts")
         .and_then(|value| value.as_array().cloned())
@@ -543,6 +550,7 @@ pub fn overlay_public_config(
         "support_url",
         "wechat_id",
         "wechat_qr_code",
+        "telegram_qr_code",
         "qq_number",
         "qq_group",
         "wechat_group_qr_code",
@@ -776,6 +784,8 @@ mod tests {
             "contact": {"telegram": "https://t.me/main", "whatsapp": "https://wa.me/1"},
             "announcement": {"type": "info", "version": "main0000", "content": {"zh-CN": "main"}},
             "nav_config": {"builtin": {"blog": true}},
+            "about": {"introduction": {"zh-CN": "main only"}},
+            "support": {"email": "main@example.test"},
         })
     }
 
@@ -842,6 +852,8 @@ mod tests {
         assert_eq!(out["brand"]["site_name"], "Main");
         assert_eq!(out["brand"]["site_url"], "https://p.test");
         assert_eq!(out["contact"], json!({}));
+        assert!(out.get("about").is_none());
+        assert!(out.get("support").is_none());
         assert_eq!(out["announcement"]["version"], "main0000");
     }
 

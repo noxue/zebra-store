@@ -206,6 +206,75 @@ async fn refund_reverses_cost_setting() {
     );
 }
 
+/// MISC-03-REFUND-01: reproduce the 2026-10-30 dashboard, including a refunded parent
+/// whose 121.00 cost lives on its child. Unreturned payment fees must remain expenses.
+#[tokio::test]
+async fn refunded_parent_reverses_child_cost_and_invalidates_cached_profit() {
+    let app = TestApp::new().await;
+    let db = &app.db;
+    let c = channel(db, "refund regression").await;
+    let p = product(db, "refund-regression", "auto", 0).await;
+    for (no, status, amount, cost, fee) in [
+        ("NET-1", "completed", "128", "107", "0.64"),
+        ("NET-2", "delivered", "117", "107", "0.59"),
+        ("NET-3", "refunded", "131", "121", "0.66"),
+    ] {
+        let parent = order(db, no, None, status, amount, "2026-09-01T01:00:00Z").await;
+        let child = order(
+            db,
+            &format!("{no}-01"),
+            Some(parent),
+            status,
+            amount,
+            "2026-09-01T01:00:00Z",
+        )
+        .await;
+        item(db, child, p, 0, "refund regression", 1, amount, "0", cost).await;
+        payment(
+            db,
+            parent,
+            c,
+            "huifu",
+            "success",
+            amount,
+            fee,
+            "merchant_absorbed",
+            "2026-09-01T01:00:01Z",
+        )
+        .await;
+        if status == "refunded" {
+            refund(db, parent, amount, "0", "2026-09-01T02:00:00Z").await;
+        }
+    }
+    let path = format!("/api/v1/admin/dashboard/overview?{WINDOW}");
+    setting(
+        db,
+        "dashboard_config",
+        json!({"accounting":{"refund_reverses_cost":false}}),
+    )
+    .await;
+    let before = app.get(&path).await;
+    assert_eq!(data(&before)["kpi"]["total_profit"], "-91.89");
+    setting(
+        db,
+        "dashboard_config",
+        json!({"accounting":{"refund_reverses_cost":true}}),
+    )
+    .await;
+    // Reusing the same URL must not reuse the old accounting mode's cached response.
+    let after = app.get(&path).await;
+    let k = &data(&after)["kpi"];
+    assert_eq!(k["gmv_paid"], "245.00");
+    assert_eq!(k["payment_fee"], "1.89");
+    assert_eq!(k["total_cost"], "215.89");
+    assert_eq!(k["total_profit"], "29.11");
+    assert_eq!(k["profit_margin"], "11.88");
+    let trends = app
+        .get(&format!("/api/v1/admin/dashboard/trends?{WINDOW}"))
+        .await;
+    assert_eq!(data(&trends)["points"][0]["profit"], "29.11");
+}
+
 #[tokio::test]
 async fn trends_bucket_by_requested_zone() {
     let app = TestApp::new().await;
@@ -219,9 +288,9 @@ async fn trends_bucket_by_requested_zone() {
         d["points"],
         json!([
             {"date": "2026-09-01", "orders_total": 4, "orders_paid": 2, "payments_success": 2,
-             "payments_failed": 1, "gmv_paid": "180.00", "profit": "77.00"},
+             "payments_failed": 1, "gmv_paid": "180.00", "profit": "77.00", "owner_profit": "77.00"},
             {"date": "2026-09-02", "orders_total": 1, "orders_paid": 1, "payments_success": 1,
-             "payments_failed": 0, "gmv_paid": "50.00", "profit": "1.00"}
+             "payments_failed": 0, "gmv_paid": "50.00", "profit": "1.00", "owner_profit": "1.00"}
         ])
     );
     // The same data bucketed in UTC moves O1 (08-31 16:30Z) out of the window.
@@ -383,4 +452,212 @@ async fn invalid_queries_and_permissions() {
         .call("GET", "/api/v1/admin/dashboard/overview", None, None)
         .await;
     assert_eq!(anon["status_code"], 401);
+}
+
+/// DASH-01: signed sales ledger, not balances/withdrawals, splits existing profit.
+#[tokio::test]
+async fn owner_profit_deducts_net_reseller_earnings_and_buckets_refunds_by_local_day() {
+    use dashboard_common::{at, dec};
+    use sea_orm::{ActiveModelTrait, Set};
+    use zs_infra::db::entity::reseller_ledger_entries;
+    let app = TestApp::new().await;
+    seed(&app).await;
+    let entries = [
+        (
+            "order_profit",
+            "pending_confirm",
+            "20",
+            "2026-08-31T16:45:00Z",
+        ),
+        (
+            "refund_deduct",
+            "pending_confirm",
+            "-5",
+            "2026-09-02T01:00:00Z",
+        ),
+        ("order_profit", "available", "7", "2026-09-02T10:10:00Z"),
+        ("withdraw_paid", "withdrawn", "-100", "2026-09-02T10:11:00Z"),
+        ("manual_adjust", "available", "500", "2026-09-02T10:12:00Z"),
+        ("order_profit", "canceled", "300", "2026-09-02T10:13:00Z"),
+        ("order_profit", "available", "200", "2026-09-02T16:00:00Z"),
+    ];
+    for (idx, (kind, status, amount, when)) in entries.iter().enumerate() {
+        reseller_ledger_entries::ActiveModel {
+            reseller_id: Set(1),
+            order_id: Set(None),
+            type_: Set((*kind).into()),
+            amount: Set(dec(amount)),
+            currency: Set("CNY".into()),
+            idempotency_key: Set(format!("dashboard-fixture-{idx}")),
+            status: Set((*status).into()),
+            remark: Set(String::new()),
+            created_at: Set(at(when)),
+            updated_at: Set(at(when)),
+            ..Default::default()
+        }
+        .insert(&app.db)
+        .await
+        .unwrap();
+    }
+    let overview = app
+        .get(&format!("/api/v1/admin/dashboard/overview?{WINDOW}"))
+        .await;
+    let kpi = &data(&overview)["kpi"];
+    assert_eq!(kpi["total_profit"], "78.00");
+    assert_eq!(kpi["reseller_profit"], "22.00");
+    assert_eq!(kpi["owner_profit"], "56.00");
+    let trend = app
+        .get(&format!("/api/v1/admin/dashboard/trends?{WINDOW}"))
+        .await;
+    let points = data(&trend)["points"].as_array().unwrap().clone();
+    assert_eq!(points[0]["profit"], "77.00");
+    assert_eq!(points[0]["owner_profit"], "57.00");
+    assert_eq!(points[1]["profit"], "1.00");
+    assert_eq!(points[1]["owner_profit"], "-1.00");
+}
+
+/// DASH-01: partial withdrawals must not move earnings into a later period.
+#[tokio::test]
+async fn withdrawal_splits_preserve_historical_profit_and_admin_item_allocations() {
+    use dashboard_common::{at, dec};
+    use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
+    use zs_infra::db::entity::{
+        order_items, orders, reseller_ledger_entries as ledger,
+        reseller_order_snapshots as snapshots,
+    };
+    let app = TestApp::new().await;
+    let when = "2026-09-01T01:00:00Z";
+    let p = product(&app.db, "Earning fixture", "auto", 0).await;
+    let root = order(&app.db, "SHARE-ROOT", None, "paid", "200", when).await;
+    let mut item_ids = Vec::new();
+    let mut child_ids = Vec::new();
+    for (index, commission) in [(1, "20"), (2, "40")] {
+        let child = order(
+            &app.db,
+            &format!("SHARE-{index}"),
+            Some(root),
+            "paid",
+            "100",
+            when,
+        )
+        .await;
+        child_ids.push(child);
+        orders::Entity::update_many()
+            .col_expr(
+                orders::Column::ResellerProfitAmount,
+                sea_orm::sea_query::Expr::value(dec(commission)),
+            )
+            .filter(orders::Column::Id.eq(child))
+            .exec(&app.db)
+            .await
+            .unwrap();
+        item(
+            &app.db,
+            child,
+            p,
+            index,
+            "Earning fixture",
+            1,
+            "100",
+            "0",
+            "30",
+        )
+        .await;
+        let id = order_items::Entity::find()
+            .filter(order_items::Column::OrderId.eq(child))
+            .one(&app.db)
+            .await
+            .unwrap()
+            .unwrap()
+            .id;
+        item_ids.push(id);
+    }
+    snapshots::ActiveModel {
+        order_id: Set(root),
+        reseller_id: Set(1),
+        reseller_user_id: Set(2),
+        domain: Set("fixture.example.test".into()),
+        currency: Set("CNY".into()),
+        base_amount: Set(dec("140")),
+        reseller_amount: Set(dec("200")),
+        profit_amount: Set(dec("60")),
+        profit_eligible: Set(true),
+        profit_block_reason: Set(String::new()),
+        pricing_snapshot_json: Set(Some(json!({"items":[
+            {"order_item_id":item_ids[0],"profit_amount":"20"},
+            {"order_item_id":item_ids[1],"profit_amount":"40"}
+        ]}))),
+        created_at: Set(at(when)),
+        updated_at: Set(at(when)),
+        ..Default::default()
+    }
+    .insert(&app.db)
+    .await
+    .unwrap();
+    // A 60 earning was split on 09-03 into withdrawn 20 and available 40.
+    for (key, amount, status, date) in [
+        (format!("order_profit:{root}"), "20", "withdrawn", when),
+        (
+            "split:1:fixture".into(),
+            "40",
+            "available",
+            "2026-09-03T01:00:00Z",
+        ),
+        (
+            "refund_deduct:fixture".into(),
+            "-30",
+            "available",
+            "2026-09-02T01:00:00Z",
+        ),
+    ] {
+        ledger::ActiveModel {
+            reseller_id: Set(1),
+            order_id: Set(Some(root)),
+            type_: Set(if amount.starts_with('-') {
+                "refund_deduct"
+            } else {
+                "order_profit"
+            }
+            .into()),
+            amount: Set(dec(amount)),
+            currency: Set("CNY".into()),
+            idempotency_key: Set(key),
+            status: Set(status.into()),
+            remark: Set(String::new()),
+            created_at: Set(at(date)),
+            updated_at: Set(at(date)),
+            ..Default::default()
+        }
+        .insert(&app.db)
+        .await
+        .unwrap();
+    }
+    let overview = app
+        .get(&format!("/api/v1/admin/dashboard/overview?{WINDOW}"))
+        .await;
+    assert_eq!(data(&overview)["kpi"]["total_profit"], "140.00");
+    assert_eq!(data(&overview)["kpi"]["reseller_profit"], "30.00");
+    assert_eq!(data(&overview)["kpi"]["owner_profit"], "110.00");
+    let ranking = app
+        .get(&format!("/api/v1/admin/dashboard/rankings?{WINDOW}"))
+        .await;
+    let rows = data(&ranking)["top_products"].as_array().unwrap().clone();
+    assert_eq!(rows[0]["profit"], "70.00");
+    assert_eq!(rows[0]["owner_profit"], "50.00");
+    assert_eq!(rows[1]["owner_profit"], "30.00");
+    let detail = app.get(&format!("/api/v1/admin/orders/{root}")).await;
+    assert_eq!(
+        data(&detail)["reseller_item_profit_amounts"][item_ids[0].to_string()],
+        "10.00"
+    );
+    assert_eq!(
+        data(&detail)["reseller_item_profit_amounts"][item_ids[1].to_string()],
+        "20.00"
+    );
+    use zs_domain::integration::procurement::ProcurementRepo;
+    let procurement =
+        zs_infra::db::repo::integration::procurement::SeaProcurementRepo::new(app.db.clone());
+    let shares = procurement.reseller_profits(&child_ids).await.unwrap();
+    assert_eq!(shares[&child_ids[0]].to_string(), "10.00");
+    assert_eq!(shares[&child_ids[1]].to_string(), "20.00");
 }

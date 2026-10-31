@@ -131,6 +131,36 @@ pub async fn live_unique_indexes(db: &DatabaseConnection) -> Result<(), DbErr> {
     Ok(())
 }
 
+/// Backfills audit debits for payouts made before RSL-13. Withdrawn entries
+/// never participate in available/locked balance sums; this does not move money.
+pub async fn backfill_paid_withdrawals(db: &DatabaseConnection) -> Result<(), DbErr> {
+    db.execute_unprepared(&paid_withdrawals_sql(db.get_database_backend()))
+        .await?;
+    Ok(())
+}
+
+/// Dialect-specific string concatenation / conflict handling for the data backfill.
+pub fn paid_withdrawals_sql(backend: DbBackend) -> String {
+    let (kind, key, conflict) = match backend {
+        DbBackend::MySql => (
+            "`type`",
+            "CONCAT('withdraw_paid:', w.id)",
+            "ON DUPLICATE KEY UPDATE idempotency_key = idempotency_key",
+        ),
+        _ => (
+            "\"type\"",
+            "'withdraw_paid:' || CAST(w.id AS TEXT)",
+            "ON CONFLICT (idempotency_key) DO NOTHING",
+        ),
+    };
+    format!(
+        "INSERT INTO reseller_ledger_entries (reseller_id, {kind}, amount, currency, idempotency_key, status, withdraw_request_id, remark, created_at, updated_at) \
+         SELECT w.reseller_id, 'withdraw_paid', -w.amount, w.currency, {key}, 'withdrawn', w.id, '', COALESCE(w.processed_at, w.updated_at), COALESCE(w.processed_at, w.updated_at) \
+         FROM reseller_withdraw_requests w WHERE w.status = 'paid' AND w.deleted_at IS NULL \
+         AND NOT EXISTS (SELECT 1 FROM reseller_ledger_entries e WHERE e.withdraw_request_id = w.id AND e.{kind} = 'withdraw_paid') {conflict}"
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

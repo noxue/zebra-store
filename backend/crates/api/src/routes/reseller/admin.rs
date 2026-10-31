@@ -287,6 +287,8 @@ struct MarkupRequest {
     default_markup_percent: String,
     max_markup_percent: String,
     settlement_status: String,
+    tags: Option<Vec<String>>,
+    admin_note: Option<String>,
     reason: String,
 }
 
@@ -328,6 +330,8 @@ async fn update_profile(
         default_markup_percent: decimal(&req.default_markup_percent)?.decimal(),
         max_markup_percent: decimal(&req.max_markup_percent)?.decimal(),
         settlement_status: req.settlement_status.clone(),
+        tags: req.tags,
+        admin_note: req.admin_note,
     };
     let p = s
         .svc

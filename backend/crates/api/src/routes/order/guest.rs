@@ -205,7 +205,7 @@ async fn list(
         };
         return match svc.get_order(&viewer, &tenant.0, &order_no).await {
             Ok(order) => Ok(Paged(
-                vec![OrderSummary::from(&order)],
+                svc.order_summaries(std::slice::from_ref(&order)).await?,
                 Pagination {
                     total_page: 1,
                     ..Pagination::new(one, 1)
@@ -224,7 +224,7 @@ async fn list(
     let page = page_of(&q);
     let result = svc.list_orders(&viewer, &tenant.0, "", "", page).await?;
     Ok(Paged(
-        result.items.iter().map(OrderSummary::from).collect(),
+        svc.order_summaries(&result.items).await?,
         Pagination::new(page, result.total),
     ))
 }

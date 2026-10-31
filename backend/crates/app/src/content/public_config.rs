@@ -49,7 +49,7 @@ fn defaults() -> Map<String, Value> {
         "storefront_template".into(),
         json!(STOREFRONT_TEMPLATE_DEFAULT),
     );
-    m.insert("contact".into(), json!({"telegram": "", "whatsapp": "", "wechat_id": "", "wechat_qr_code": "", "qq_number": "", "qq_group": "", "wechat_group_qr_code": ""}));
+    m.insert("contact".into(), json!({"telegram": "", "whatsapp": "", "wechat_id": "", "wechat_qr_code": "", "telegram_qr_code": "", "qq_number": "", "qq_group": "", "wechat_group_qr_code": ""}));
     m.insert("scripts".into(), json!([]));
     m
 }

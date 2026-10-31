@@ -383,6 +383,8 @@ pub(crate) mod fixtures {
             user_id: 9,
             status,
             apply_reason: String::new(),
+            tags: Vec::new(),
+            admin_note: String::new(),
             reject_reason: String::new(),
             default_markup_percent: Amount::ZERO,
             max_markup_percent: Amount::ZERO,

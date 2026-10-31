@@ -73,6 +73,7 @@ export const routes: RouteRecordRaw[] = [
   { path: '/blog', name: 'blog', component: () => import('@/views/Blog') },
   { path: '/blog/:slug', name: 'blog-detail', component: () => import('@/views/BlogDetail') },
   { path: '/notice', name: 'notice', component: () => import('@/views/Notice') },
+  { path: '/contact', name: 'contact', component: () => import('@/views/Contact') },
   { path: '/about', name: 'about', component: () => import('@/views/About') },
   { path: '/terms', name: 'terms', component: () => import('@/views/Legal'), props: { type: 'terms' } },
   { path: '/privacy', name: 'privacy', component: () => import('@/views/Legal'), props: { type: 'privacy' } },
@@ -101,6 +102,7 @@ router.beforeEach(async (to) => {
   const auth = useUserAuthStore()
   void captureAffiliateFromRoute(to)
   if (!appStore.config) await appStore.loadConfig()
+  if (to.name === 'about' && appStore.isResellerTenant) return '/contact'
   if (to.meta.requiresUserAuth) {
     if (!auth.isAuthenticated) return `/auth/login?redirect=${encodeURIComponent(to.fullPath)}`
     if (to.path === '/me/affiliate' && appStore.config?.affiliate?.enabled !== true) return '/me'

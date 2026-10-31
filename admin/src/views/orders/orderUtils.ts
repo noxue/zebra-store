@@ -171,6 +171,21 @@ export const orderProfit = (order: AdminOrder | null | undefined) => {
   return round2(itemTotal - orderPaymentFee(order))
 }
 
+/** Actual net reseller ledger allocation supplied only by the admin detail API. */
+export const itemOwnerProfit = (order: AdminOrder | null | undefined, item: AdminOrderItem, index: number, shares = order?.reseller_item_profit_amounts) =>
+  round2(itemProfit(order, item, index) - parseMoneyValue(shares?.[String(item.id)]))
+
+export const ownerOrderProfit = (order: AdminOrder | null | undefined) => {
+  const allItems = [...(order?.items ?? []), ...(order?.children ?? []).flatMap((child) => child.items ?? [])]
+  const seen = new Set<number>()
+  const commission = allItems.reduce((sum, item) => {
+    if (seen.has(item.id)) return sum
+    seen.add(item.id)
+    return sum + parseMoneyValue(order?.reseller_item_profit_amounts?.[String(item.id)])
+  }, 0)
+  return round2(orderProfit(order) - commission)
+}
+
 export const formatFeeRate = (payment: Pick<AdminPayment, 'fee_rate' | 'fixed_fee'>) => {
   let display = '-'
   const { fee_rate: feeRate, fixed_fee: fixedFee } = payment

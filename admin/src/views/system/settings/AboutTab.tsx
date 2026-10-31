@@ -65,14 +65,7 @@ export default defineComponent({
                     ),
                   }}
                 </SubSection>
-                <SubSection title={t('admin.settings.about.contactTitle')} description={t('admin.settings.about.contactSubtitle')} bodyClass="space-y-4">
-                  <FormField label={t('admin.settings.about.contactBlockTitle')}>
-                    <Input v-model={about.contact.title[lang]} placeholder={t('admin.settings.about.contactBlockTitlePlaceholder')} />
-                  </FormField>
-                  <FormField label={t('admin.settings.about.contactText')}>
-                    <Textarea v-model={about.contact.text[lang]} rows={4} placeholder={t('admin.settings.about.contactTextPlaceholder')} />
-                  </FormField>
-                </SubSection>
+
               </div>
             ),
           }}

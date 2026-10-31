@@ -3,12 +3,14 @@
 //! transaction whose reads and writes all use the transaction handle (DB-01).
 
 pub mod cart;
+pub(crate) mod consistency;
 pub(crate) mod create;
 pub(crate) mod fulfill;
 pub(crate) mod map;
 pub(crate) mod ops;
 pub(crate) mod pay;
 pub mod read;
+pub(crate) mod recovery;
 pub(crate) mod refund;
 pub(crate) mod risk;
 pub(crate) mod wallet;
@@ -281,6 +283,18 @@ impl OrderStore for SeaOrderStore {
         .await)
     }
 
+    async fn recover_refunded_upstream(
+        &self,
+        order_id: Id,
+        delivery: &UpstreamDelivery,
+        now: DateTime<Utc>,
+    ) -> Result<bool> {
+        in_txn!(self, |txn| recovery::recover_in(
+            &txn, order_id, delivery, now
+        )
+        .await)
+    }
+
     async fn upstream_deliver(
         &self,
         order_id: Id,
@@ -302,6 +316,13 @@ impl OrderStore for SeaOrderStore {
             now
         )
         .await)
+    }
+
+    async fn ensure_procurement_refundable(&self, order_id: Id) -> Result<()> {
+        let order = map::load(&self.db, order_id)
+            .await?
+            .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
+        consistency::ensure_refundable(&self.db, &order).await
     }
 
     async fn refund(&self, request: &RefundRequest) -> Result<RefundDone> {

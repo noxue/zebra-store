@@ -119,8 +119,25 @@ impl OrderApp {
         .await
     }
 
-    async fn with_converter_policy(transport: Arc<dyn HttpTransport>, allow_private: bool) -> Self {
+    pub async fn with_converter_policy(
+        transport: Arc<dyn HttpTransport>,
+        allow_private: bool,
+    ) -> Self {
         let mut cfg = config();
+        if let Ok(url) = std::env::var("ZS_REFUND_TEST_DATABASE_URL") {
+            // Explicitly local disposable test databases only; never production.
+            assert!(url.starts_with("postgres://zebra_test:") && url.contains("@127.0.0.1:18942/"));
+            use sea_orm::ConnectionTrait;
+            let admin = sea_orm::Database::connect(&url).await.unwrap();
+            let schema = format!("rfd05_{}", uuid::Uuid::new_v4().simple());
+            admin
+                .execute_unprepared(&format!("CREATE SCHEMA {schema}"))
+                .await
+                .unwrap();
+            admin.close().await.unwrap();
+            cfg.database.url = format!("{url}?options=-c%20search_path%3D{schema}");
+            cfg.database.max_connections = 8;
+        }
         cfg.integration.allow_private_addresses = allow_private;
         let db = zs_infra::db::connect(&cfg.database).await.unwrap();
         zs_infra::db::sync_schema(&db).await.unwrap();

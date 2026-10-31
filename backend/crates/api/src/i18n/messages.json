@@ -1,5 +1,7 @@
 {
   "en-US": {
+    "error.upstream_recovery_needs_review": "Late upstream delivery requires review: stock recovery cannot confirm that these credentials were never disclosed or duplicated.",
+    "error.order_procurement_processing": "Upstream procurement is still processing or unresolved. Refunds are unavailable until it is settled.",
     "email.order_status.body": "Order No: %s\nStatus: %s\nAmount: %s %s\n\nThank you for your purchase.\n\n%s's Site URL: %s",
     "email.order_status.body_delivered": "Order No: %s\nStatus: %s\nAmount: %s %s\n\nDelivery content:\n%s\n\nThank you for your purchase.\n\n%s's Site URL: %s",
     "email.order_status.body_delivered_simple": "Order No: %s\nStatus: %s\nAmount: %s %s\n\nDelivery completed. Thank you for your purchase.\n\n%s's Site URL: %s",
@@ -428,9 +430,13 @@
     "validation.rule.url": "must be a valid URL",
     "error.api_key_invalid": "Invalid or revoked API key",
     "error.api_key_exists": "An API key already exists; use rotate",
-    "error.api_key_missing": "No API key exists; generate one first"
+    "error.api_key_missing": "No API key exists; generate one first",
+    "error.refund_restock_full_required": "Card restocking requires a first full refund.",
+    "error.refund_restock_unavailable": "This delivery cannot be mapped to card stock. Refund without restocking and review it manually."
   },
   "zh-CN": {
+    "error.upstream_recovery_needs_review": "退款后的上游交付需要人工核查：无法确认卡密从未交付、数量正确且未重复，暂不自动回库。",
+    "error.order_procurement_processing": "上游采购仍在处理中或结果未确定，任务结束并核实前无法退款。",
     "email.order_status.body": "订单号：%s\n状态：%s\n金额：%s %s\n\n感谢您的购买。\n\n%s 的网址：%s",
     "email.order_status.body_delivered": "订单号：%s\n状态：%s\n金额：%s %s\n\n交付内容：\n%s\n\n感谢您的购买。\n\n%s 的网址：%s",
     "email.order_status.body_delivered_simple": "订单号：%s\n状态：%s\n金额：%s %s\n\n交付已完成，感谢您的购买。\n\n%s 的网址：%s",
@@ -859,9 +865,13 @@
     "validation.rule.url": "必须是有效的 URL",
     "error.api_key_invalid": "API Key 无效或已撤销",
     "error.api_key_exists": "已有 API Key，请使用轮换功能",
-    "error.api_key_missing": "尚未生成 API Key"
+    "error.api_key_missing": "尚未生成 API Key",
+    "error.refund_restock_full_required": "卡密回库仅支持首次全额退款。",
+    "error.refund_restock_unavailable": "此交付内容无法明确对应卡密库存，请选择不回库退款后人工处理。"
   },
   "zh-TW": {
+    "error.upstream_recovery_needs_review": "退款後的上游交付需要人工核查：無法確認卡密從未交付、數量正確且未重複，暫不自動回庫。",
+    "error.order_procurement_processing": "上游採購仍在處理中或結果未確定，任務結束並核實前無法退款。",
     "email.order_status.body": "訂單號：%s\n狀態：%s\n金額：%s %s\n\n感謝您的購買。\n\n%s 的網址：%s",
     "email.order_status.body_delivered": "訂單號：%s\n狀態：%s\n金額：%s %s\n\n交付內容：\n%s\n\n感謝您的購買。\n\n%s 的網址：%s",
     "email.order_status.body_delivered_simple": "訂單號：%s\n狀態：%s\n金額：%s %s\n\n交付已完成，感謝您的購買。\n\n%s 的網址：%s",
@@ -1290,6 +1300,8 @@
     "validation.rule.url": "必須是有效的 URL",
     "error.api_key_invalid": "API Key 無效或已撤銷",
     "error.api_key_exists": "已有 API Key，請使用輪換功能",
-    "error.api_key_missing": "尚未產生 API Key"
+    "error.api_key_missing": "尚未產生 API Key",
+    "error.refund_restock_full_required": "卡密回庫僅支援首次全額退款。",
+    "error.refund_restock_unavailable": "此交付內容無法明確對應卡密庫存，請選擇不回庫退款後人工處理。"
   }
 }

@@ -210,6 +210,7 @@
     "dismissToday": "今日不再提示",
     "dismissForever": "不再提示"
   },
+  "customerSupport": {"title": "联系客服", "empty": "本站暂未配置客服联系方式"},
   "about": {
     "title": "关于我们",
     "subtitle": "了解斑马小铺",
@@ -222,6 +223,7 @@
     "contactUs": "联系我们",
     "contactText": "如果您对我们的产品或服务有任何疑问，欢迎通过以下方式联系我们：",
     "wechatId": "微信号",
+    "telegramQrCode": "Telegram 客服二维码",
     "wechatQrCode": "微信客服二维码",
     "qqNumber": "QQ 号",
     "qqGroup": "QQ 群号",
@@ -758,6 +760,7 @@
           "email": "客服邮箱",
           "supportUrl": "客服链接",
           "wechatId": "微信号",
+          "telegramQrCode": "Telegram 客服二维码",
           "wechatQrCode": "微信客服二维码",
           "qqNumber": "QQ 号",
           "qqGroup": "QQ 群号",
@@ -798,10 +801,11 @@
       },
       "productSettings": {
         "title": "商品售价配置",
-        "subtitle": "查看成本价和售价，按商品或 SKU 调整售价。",
+        "subtitle": "查看成本价、主站推荐售价和本站售价，按商品或 SKU 调整售价。",
         "searchPlaceholder": "搜索商品名称、Slug 或商品 ID",
         "empty": "暂无可配置商品",
         "basePrice": "成本价",
+        "recommendedPrice": "推荐售价",
         "edit": "编辑售价",
         "editorTitle": "售价规则",
         "productLevelRule": "商品级规则",
@@ -902,6 +906,7 @@
         "paid": "已打款"
       },
       "ledgerTable": {
+        "withdrawRequestId": "提现单号",
         "type": "类型",
         "amount": "金额",
         "status": "状态",
@@ -1563,6 +1568,8 @@
       "currencyKinds": "币种数量",
       "statusAll": "全部状态",
       "statusMap": {
+        "fulfilling": "处理中",
+        "partially_delivered": "部分交付",
         "pending_payment": "待支付",
         "paid": "已支付",
         "completed": "已完成",
@@ -1655,6 +1662,7 @@
     "paymentTitle": "支付信息"
   },
   "orderDetail": {
+    "refundProcessing": "上游采购处理中或结果尚未确定，完成核实前无法退款。",
     "title": "订单详情",
     "refundNotice": "如果买错或不再需要，可以申请退款；退款成功后，款项将原路返回。已使用的卡密需人工核查。",
     "requestRefund": "申请原路退款",
@@ -1749,7 +1757,6 @@
     "passwordPlaceholder": "订单密码",
     "orderNoPlaceholder": "订单号（可选）",
     "savedHint": "已保存邮箱：{email}",
-    "clearSaved": "清除已保存信息",
     "tip": "请输入下单时的邮箱与订单密码",
     "search": "查询订单",
     "searching": "查询中...",

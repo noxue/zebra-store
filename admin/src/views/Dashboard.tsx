@@ -73,7 +73,11 @@ export default defineComponent({
               {t('admin.dashboard.kpi.paymentFee')}: {formatMoney(k.payment_fee, c)}
             </p>
           </StatCard>
-          <StatCard label={t('admin.dashboard.kpi.totalProfit')} value={formatMoney(k.total_profit, c)} icon={PiggyBank} tone="success" />
+          <StatCard label={t('admin.dashboard.kpi.ownerProfit')} value={formatMoney(k.owner_profit, c)} icon={PiggyBank} tone="success">
+            <p>{t('admin.dashboard.kpi.totalProfit')}: {formatMoney(k.total_profit, c)}</p>
+            <p>{t('admin.dashboard.kpi.resellerProfit')}: {formatMoney(k.reseller_profit, c)}</p>
+            <p>{t('admin.dashboard.kpi.profitBasis')}</p>
+          </StatCard>
           <StatCard label={t('admin.dashboard.kpi.profitMargin')} value={formatPercent(k.profit_margin)} icon={Percent} tone="accent" />
           <StatCard label={t('admin.dashboard.kpi.pendingOrders')} value={k.pending_payment_orders} icon={Clock} tone="gold">
             <p>
@@ -162,6 +166,23 @@ export default defineComponent({
               ]}
             />
           </Card>
+          <Card title={t('admin.dashboard.trends.profitTitle')} class="xl:col-span-2">
+            <p class="mb-3 text-xs text-muted">{t('admin.dashboard.kpi.profitBasis')}</p>
+            <div class="max-h-64 overflow-auto">
+              <table class="w-full text-sm">
+                <thead><tr class="text-left text-muted">
+                  <th>{t('admin.dashboard.period')}</th>
+                  <th>{t('admin.dashboard.kpi.ownerProfit')}</th>
+                  <th>{t('admin.dashboard.kpi.totalProfit')}</th>
+                </tr></thead>
+                <tbody>{pts.map((p) => <tr key={p.date} class="border-t border-line">
+                  <td class="py-2">{p.date}</td>
+                  <td class="zs-num">{formatMoney(p.owner_profit, currency.value)}</td>
+                  <td class="zs-num">{formatMoney(p.profit, currency.value)}</td>
+                </tr>)}</tbody>
+              </table>
+            </div>
+          </Card>
         </div>
       )
     }
@@ -241,7 +262,10 @@ export default defineComponent({
                               {t('admin.dashboard.rankings.paidAmount')}: <b class="text-fg">{formatMoney(p.paid_amount, c)}</b>
                             </span>
                             <span>
-                              {t('admin.dashboard.rankings.profit')}: {formatMoney(p.profit, c)}
+                              {t('admin.dashboard.kpi.ownerProfit')}: {formatMoney(p.owner_profit, c)}
+                            </span>
+                            <span>
+                              {t('admin.dashboard.kpi.totalProfit')}: {formatMoney(p.profit, c)}
                             </span>
                           </div>
                         </div>

@@ -48,8 +48,8 @@ export default defineComponent({
                       </RouterLink>
                     )
                   })}
-                  <RouterLink to="/about" class="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface-strong px-3.5 py-1.5 text-sm text-fg transition hover:border-line-strong hover:text-primary-text">
-                    {t('nav.about')}
+                  <RouterLink to="/contact" class="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface-strong px-3.5 py-1.5 text-sm text-fg transition hover:border-line-strong hover:text-primary-text">
+                    {t('customerSupport.title')}
                   </RouterLink>
                 </div>
               </div>

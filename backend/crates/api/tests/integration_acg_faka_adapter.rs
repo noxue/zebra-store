@@ -1243,7 +1243,7 @@ async fn acg_faka_error_paths() {
     buyer.drain().await;
     assert_eq!(buyer.procurement(p).await.status, "manual_review");
     assert_eq!(mock.lock().unwrap().orders.len(), 1, "never bought twice");
-    // admin cancel = mark failed → canceled (local order rolled back)
+    // RFD-05: an unknown executed purchase cannot be canceled/refunded by relabeling it.
     let canceled = buyer
         .app
         .admin(
@@ -1252,8 +1252,8 @@ async fn acg_faka_error_paths() {
             None,
         )
         .await;
-    assert_eq!(canceled["status_code"], 0, "{canceled}");
-    assert_eq!(buyer.procurement(p).await.status, "canceled");
+    assert_ne!(canceled["status_code"], 0, "{canceled}");
+    assert_eq!(buyer.procurement(p).await.status, "manual_review");
 
     // ---- ACG-04: manual delivery notices are not deliveries ------------------------------
     let manual = buyer.import(conn, 14).await;

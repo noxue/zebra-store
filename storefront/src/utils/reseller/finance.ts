@@ -129,7 +129,7 @@ export type LedgerDirection = 'income' | 'expense' | 'neutral'
 
 export const ledgerDirection = (item: Pick<ResellerLedgerData, 'type' | 'amount'>): LedgerDirection => {
   if (item.type === 'order_profit') return 'income'
-  if (item.type === 'refund_deduct' || item.type === 'withdraw_lock') return 'expense'
+  if (item.type === 'refund_deduct' || item.type === 'withdraw_lock' || item.type === 'withdraw_paid') return 'expense'
   const sign = resellerAmountSign(item.amount)
   if (sign === 'negative') return 'expense'
   if (sign === 'positive') return 'income'

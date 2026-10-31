@@ -37,6 +37,9 @@ pub struct ProfileUpdate {
     pub max_markup_percent: Decimal,
     /// Empty = unchanged; otherwise `normal` / `frozen`.
     pub settlement_status: String,
+    /// Omitted fields preserve existing metadata; empty values clear it.
+    pub tags: Option<Vec<String>>,
+    pub admin_note: Option<String>,
 }
 
 /// Onboarding and domain use cases.
@@ -279,8 +282,37 @@ impl ManagementService {
             "" => None,
             raw => Some(SettlementStatus::parse(raw).ok_or_else(Error::invalid)?),
         };
+        // Keep admin metadata bounded without truncating agreements silently.
+        const MAX_TAGS: usize = 20;
+        const MAX_TAG_CHARS: usize = 50;
+        const MAX_NOTE_CHARS: usize = 5000;
+        let tags = input.tags.map(|values| {
+            let mut normalized = Vec::new();
+            for value in values {
+                let value = value.trim().to_owned();
+                if !value.is_empty() && !normalized.contains(&value) {
+                    normalized.push(value);
+                }
+            }
+            normalized
+        });
+        let note = input.admin_note.map(|v| v.trim().to_owned());
+        if tags.as_ref().is_some_and(|tags| {
+            tags.len() > MAX_TAGS || tags.iter().any(|v| v.chars().count() > MAX_TAG_CHARS)
+        }) || note
+            .as_ref()
+            .is_some_and(|v| v.chars().count() > MAX_NOTE_CHARS)
+        {
+            return Err(Error::invalid());
+        }
         let now = self.clock.now();
         let plan = move |mut p: Profile| {
+            if let Some(tags) = &tags {
+                p.tags.clone_from(tags);
+            }
+            if let Some(note) = &note {
+                p.admin_note.clone_from(note);
+            }
             p.default_markup_percent = Amount::new(input.default_markup_percent);
             p.max_markup_percent = Amount::new(input.max_markup_percent);
             if let Some(s) = settlement {
@@ -596,12 +628,34 @@ mod tests {
             default_markup_percent: Decimal::from(10),
             max_markup_percent: Decimal::from(50),
             settlement_status: "frozen".into(),
+            tags: Some(vec![" 张三 ".into(), "朋友".into(), "张三".into()]),
+            admin_note: Some(" 每月结算\n周五核对 ".into()),
         };
         let p = svc
             .update_operational(1, pid, input.clone())
             .await
             .unwrap_or_else(|e| panic!("{e}"));
         assert_eq!(p.settlement_status, SettlementStatus::Frozen);
+        assert_eq!(p.tags, ["张三", "朋友"]);
+        assert_eq!(p.admin_note, "每月结算\n周五核对");
+        let boundary = ProfileUpdate {
+            tags: Some(vec!["张".repeat(50)]),
+            admin_note: Some("约".repeat(5000)),
+            ..input.clone()
+        };
+        assert!(svc.update_operational(1, pid, boundary).await.is_ok());
+        for invalid in [
+            ProfileUpdate {
+                tags: Some(vec!["长".repeat(51)]),
+                ..input.clone()
+            },
+            ProfileUpdate {
+                admin_note: Some("长".repeat(5001)),
+                ..input.clone()
+            },
+        ] {
+            assert!(svc.update_operational(1, pid, invalid).await.is_err());
+        }
         let bad = ProfileUpdate {
             settlement_status: "weird".into(),
             ..input.clone()

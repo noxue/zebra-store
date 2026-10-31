@@ -196,7 +196,7 @@ async fn site_config_roundtrip_and_field_errors() {
                 "storefront_template": "aurora",
                 "template_mode": "list",
                 "theme": {"primary_color": "#123abc", "background_color": "#eefbf7"},
-                "support": {"wechat_id": "shop_wechat", "wechat_qr_code": "/uploads/reseller/wechat.png", "qq_number": "123456", "qq_group": "654321", "wechat_group_qr_code": "/uploads/reseller/group.png"},
+                "support": {"wechat_id": "shop_wechat", "wechat_qr_code": "/uploads/reseller/wechat.png", "telegram_qr_code": "/uploads/reseller/telegram.png", "qq_number": "123456", "qq_group": "654321", "wechat_group_qr_code": "/uploads/reseller/group.png"},
                 "footer_links": [{"name": {"zh-CN": "帮助"}, "url": "https://help.test"}],
                 "nav_config": {"builtin": {"blog": false}},
                 "scripts": [{"name": "客服", "enabled": true, "position": "body_end", "code": "window.widget=1", "scope": "main"}],
@@ -216,7 +216,7 @@ async fn site_config_roundtrip_and_field_errors() {
     );
     assert_eq!(
         c["support"],
-        json!({"telegram": "", "whatsapp": "", "email": "", "support_url": "", "wechat_id": "shop_wechat", "wechat_qr_code": "/uploads/reseller/wechat.png", "qq_number": "123456", "qq_group": "654321", "wechat_group_qr_code": "/uploads/reseller/group.png"})
+        json!({"telegram": "", "whatsapp": "", "email": "", "support_url": "", "wechat_id": "shop_wechat", "wechat_qr_code": "/uploads/reseller/wechat.png", "telegram_qr_code": "/uploads/reseller/telegram.png", "qq_number": "123456", "qq_group": "654321", "wechat_group_qr_code": "/uploads/reseller/group.png"})
     );
     let snap = app
         .call("GET", "/api/v1/reseller/site-config", None, Some(&token))
@@ -253,7 +253,7 @@ async fn site_config_roundtrip_and_field_errors() {
             "客服邮箱格式不正确，请检查后重试",
         ),
         (
-            json!({"support": {"wechat_qr_code": "javascript:alert(1)"}}),
+            json!({"support": {"telegram_qr_code": "javascript:alert(1)"}}),
             "图片地址无效，请重新上传或填写以 https:// 开头的完整链接",
         ),
         (
@@ -360,25 +360,37 @@ async fn reseller_customer_qr_can_be_uploaded_and_saved() {
             "PUT",
             "/api/v1/reseller/site-config",
             Some(json!({
-                "support": {"wechat_qr_code": url}
+                "support": {"wechat_qr_code": url, "telegram_qr_code": url}
             })),
             Some(&token),
         )
         .await;
     assert_eq!(data(&saved)["support"]["wechat_qr_code"], url);
+    assert_eq!(data(&saved)["support"]["telegram_qr_code"], url);
     std::fs::remove_dir_all(&root).unwrap();
 }
 
 // RSL-11: the reseller list, detail and preview must expose this site's cost,
 // while another reseller continues to receive the shared agent price.
+// RSL-12: recommended prices remain the main-site retail for both resellers.
 #[tokio::test]
 async fn rsl11_site_agent_price_in_console_responses() {
     let app = App::new().await;
     let (_, token, reseller_id) = app.reseller("site-price@example.test", "0").await;
     let (_, other_token, _) = app.reseller("shared-price@example.test", "0").await;
     let (product_id, skus) = app
-        .product("site-price", "45.00", &[("45.00", "33.00")])
+        .product("site-price", "60.00", &[("60.00", "33.00")])
         .await;
+    use sea_orm::{ActiveModelTrait, Set};
+    use zs_infra::db::entity::product_skus;
+    product_skus::ActiveModel {
+        id: Set(skus[0]),
+        agent_price_amount: Set(Some("45.00".parse().unwrap())),
+        ..Default::default()
+    }
+    .update(&app.db)
+    .await
+    .unwrap();
     let url = format!("/api/v1/reseller/product-settings/{product_id}");
     let admin_url = format!("/api/v1/admin/resellers/product-settings/{reseller_id}/{product_id}");
     data(&app.admin_call(
@@ -398,8 +410,13 @@ async fn rsl11_site_agent_price_in_console_responses() {
     let row = &data(&list)[0];
     assert_eq!(row["skus"][0]["base_price_amount"], "38.67");
     assert_eq!(row["skus"][0]["shared_agent_price_amount"], "45.00");
+    assert_eq!(row["product"]["price_amount"], "45.00");
+    assert_eq!(row["product"]["retail_price_amount"], "60.00");
+    assert_eq!(row["skus"][0]["retail_price_amount"], "60.00");
     let detail = app.call("GET", &url, None, Some(&token)).await;
     assert_eq!(data(&detail)["skus"][0]["base_price_amount"], "38.67");
+    assert_eq!(data(&detail)["product"]["retail_price_amount"], "60.00");
+    assert_eq!(data(&detail)["skus"][0]["retail_price_amount"], "60.00");
     let preview = app.call("POST", &format!("{url}/preview"), Some(json!({"settings": [{"sku_id": skus[0], "is_listed": true, "pricing_mode": "inherit"}]})), Some(&token)).await;
     assert_eq!(data(&preview)["items"][1]["base_price_amount"], "38.67");
 
@@ -412,6 +429,7 @@ async fn rsl11_site_agent_price_in_console_responses() {
         )
         .await;
     assert_eq!(data(&other)[0]["skus"][0]["base_price_amount"], "45.00");
+    assert_eq!(data(&other)[0]["skus"][0]["retail_price_amount"], "60.00");
 }
 
 // RSL-07: price floor / cost / markup cap enforced on save; preview matches.

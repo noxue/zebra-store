@@ -84,6 +84,60 @@ pub fn plan_refund(
     })
 }
 
+/// Final delivered cards eligible for an administrator-requested return.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RestockTarget {
+    pub order_id: crate::Id,
+    pub product_id: crate::Id,
+    pub sku_id: crate::Id,
+    pub cards: Vec<String>,
+}
+
+pub fn restock_targets(order: &Order, amount: Amount) -> Result<Vec<RestockTarget>> {
+    if order.refunded_amount != Amount::ZERO || amount != order.total_amount {
+        return Err(Error::bad_request("error.refund_restock_full_required"));
+    }
+    let targets: Vec<&Order> = if order.children.is_empty() {
+        vec![order]
+    } else {
+        order.children.iter().collect()
+    };
+    let mut result = Vec::new();
+    for target in targets {
+        let Some(fulfillment) = &target.fulfillment else {
+            continue;
+        };
+        if fulfillment.status != "delivered"
+            || target.items.len() != 1
+            || fulfillment.kind == super::model::fulfillment_type::MANUAL
+        {
+            return Err(Error::bad_request("error.refund_restock_unavailable"));
+        }
+        let item = &target.items[0];
+        let cards: Vec<String> = fulfillment
+            .payload
+            .lines()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_owned)
+            .collect();
+        let unique: std::collections::HashSet<&str> = cards.iter().map(String::as_str).collect();
+        if cards.is_empty()
+            || cards.len() != usize::try_from(item.quantity).unwrap_or(0)
+            || unique.len() != cards.len()
+        {
+            return Err(Error::bad_request("error.refund_restock_unavailable"));
+        }
+        result.push(RestockTarget {
+            order_id: target.id,
+            product_id: item.product_id,
+            sku_id: item.sku_id,
+            cards,
+        });
+    }
+    Ok(result)
+}
+
 /// Allocates the payment fee to one refund cumulatively so the last refund absorbs rounding
 /// and the total never exceeds the fee (`CalculatePaymentFeeRefundAmount`, RFD-01).
 pub fn payment_fee_refund_amount(
@@ -153,6 +207,69 @@ mod tests {
 
     fn a(s: &str) -> Amount {
         s.parse().unwrap_or_default()
+    }
+
+    #[test]
+    fn rfd_admin_01_restock_requires_first_full_unambiguous_card_delivery() {
+        use crate::order::model::{Fulfillment, OrderItem, fulfillment_type};
+        let mut o = order(1, OrderStatus::Completed);
+        assert!(restock_targets(&o, a("99")).is_err());
+        o.refunded_amount = a("1");
+        assert!(restock_targets(&o, a("99")).is_err());
+        o.refunded_amount = Amount::ZERO;
+        o.items.push(OrderItem {
+            id: 1,
+            order_id: 1,
+            product_id: 7,
+            sku_id: 8,
+            quantity: 1,
+            title: Default::default(),
+            sku_snapshot: Default::default(),
+            tags: vec![],
+            original_unit_price: a("100"),
+            unit_price: a("100"),
+            cost_price: Amount::ZERO,
+            original_total_price: a("100"),
+            total_price: a("100"),
+            coupon_discount: Amount::ZERO,
+            member_discount: Amount::ZERO,
+            promotion_discount: Amount::ZERO,
+            wholesale_discount: Amount::ZERO,
+            promotion_id: None,
+            promotion_name: String::new(),
+            fulfillment_type: fulfillment_type::AUTO.into(),
+            manual_form_schema: Default::default(),
+            manual_form_submission: Default::default(),
+            instructions: Default::default(),
+            created_at: o.created_at,
+            updated_at: o.updated_at,
+        });
+        o.fulfillment = Some(Fulfillment {
+            kind: fulfillment_type::AUTO.into(),
+            status: "delivered".into(),
+            payload: "CARD-1".into(),
+            id: 1,
+            order_id: 1,
+            payload_line_count: 1,
+            logistics: Default::default(),
+            delivered_by: None,
+            delivered_at: None,
+            created_at: o.created_at,
+            updated_at: o.updated_at,
+        });
+        let targets = restock_targets(&o, a("100")).unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(targets[0].sku_id, 8);
+        assert_eq!(targets[0].cards, vec!["CARD-1"]);
+        o.fulfillment
+            .as_mut()
+            .unwrap_or_else(|| panic!("fixture"))
+            .payload = "CARD-1\nCARD-2".into();
+        assert!(restock_targets(&o, a("100")).is_err());
+        o.fulfillment
+            .as_mut()
+            .unwrap_or_else(|| panic!("fixture"))
+            .kind = fulfillment_type::MANUAL.into();
+        assert!(restock_targets(&o, a("100")).is_err());
     }
 
     /// RFD-01: cumulative allocation absorbs rounding and caps at the fee.

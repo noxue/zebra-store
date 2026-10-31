@@ -15,12 +15,13 @@ use zs_domain::payment::channel::PaymentChannel;
 use zs_domain::payment::model::Payment;
 use zs_domain::payment::types::{FeePolicy, PaymentStatus};
 use zs_domain::{Id, Result};
+use zs_shared::money::Amount;
 use zs_shared::page::{Page, PageRequest};
 
 use super::{map, ops, refund};
 use crate::db::entity::{
-    coupons, order_items, order_refund_records, orders, payment_channels, payments, products,
-    promotions, user_oauth_identities, users,
+    coupons, order_items, order_refund_records, orders, payment_channels, payments,
+    product_mappings, products, promotions, user_oauth_identities, users,
 };
 use crate::db::repo::catalog::sql::{
     SEARCH_LOCALES, backend_of, contains_pattern, ilike_sql, json_text,
@@ -207,6 +208,60 @@ struct StatusCount {
 impl OrderRepo for SeaOrderRepo {
     async fn get(&self, id: Id) -> Result<Option<Order>> {
         map::load(&self.db, id).await
+    }
+
+    async fn reseller_item_profits(&self, order_id: Id) -> Result<HashMap<Id, Amount>> {
+        use crate::db::entity::{
+            reseller_ledger_entries as ledger, reseller_order_snapshots as snapshots,
+        };
+        use zs_domain::reseller::accounting::decimal_of;
+        let Some(order) = map::load(&self.db, order_id).await? else {
+            return Ok(HashMap::new());
+        };
+        let root = order.parent_id.unwrap_or(order.id);
+        let entries = ledger::Entity::find()
+            .filter(ledger::Column::OrderId.eq(root))
+            .filter(ledger::Column::Type.is_in(["order_profit", "refund_deduct"]))
+            .filter(ledger::Column::DeletedAt.is_null())
+            .filter(ledger::Column::Status.ne("canceled"))
+            .all(&self.db)
+            .await
+            .dom()?;
+        let total = entries.iter().map(|entry| entry.amount).sum();
+        let snapshot = snapshots::Entity::find()
+            .filter(snapshots::Column::OrderId.eq(root))
+            .one(&self.db)
+            .await
+            .dom()?;
+        let Some(items) = snapshot
+            .as_ref()
+            .and_then(|s| s.pricing_snapshot_json.as_ref())
+            .and_then(|v| v.get("items"))
+            .and_then(serde_json::Value::as_array)
+        else {
+            return Ok(HashMap::new());
+        };
+        let ids: Vec<_> = items
+            .iter()
+            .map(|item| {
+                item.get("order_item_id")
+                    .and_then(|v| {
+                        v.as_i64()
+                            .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
+                    })
+                    .unwrap_or_default()
+            })
+            .collect();
+        let weights: Vec<_> = items
+            .iter()
+            .map(|item| decimal_of(item.get("profit_amount")))
+            .collect();
+        let shares = zs_domain::reseller::accounting::allocate_profit(total, &weights);
+        Ok(ids
+            .into_iter()
+            .zip(shares)
+            .map(|(id, amount)| (id, Amount::new(amount)))
+            .collect())
     }
 
     async fn pending_auto_fulfillment_ids(&self) -> Result<Vec<Id>> {
@@ -569,6 +624,26 @@ impl OrderRepo for SeaOrderRepo {
             .all(&self.db)
             .await
             .dom()
+    }
+
+    async fn upstream_delivery_types(&self, product_ids: &[Id]) -> Result<HashMap<Id, String>> {
+        if product_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        Ok(product_mappings::Entity::find()
+            .filter(product_mappings::Column::LocalProductId.is_in(product_ids.to_vec()))
+            .filter(product_mappings::Column::DeletedAt.is_null())
+            .select_only()
+            .columns([
+                product_mappings::Column::LocalProductId,
+                product_mappings::Column::UpstreamFulfillmentType,
+            ])
+            .into_tuple::<(Id, String)>()
+            .all(&self.db)
+            .await
+            .dom()?
+            .into_iter()
+            .collect())
     }
 
     async fn users(&self, ids: &[Id]) -> Result<HashMap<Id, UserBrief>> {

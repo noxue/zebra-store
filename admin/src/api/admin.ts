@@ -36,6 +36,7 @@ import type {
   AdminLoginResponse,
   AdminManualRefundPayload,
   AdminOriginalRefundResponse,
+  AdminOriginalRefundPayload,
   AdminMemberLevel,
   AdminMemberLevelPrice,
   AdminNotificationLog,
@@ -243,7 +244,7 @@ export const adminAPI = {
   prepareManualRefundOrder: (id: Id, data: AdminManualRefundPayload) => api.post<{ attempt: { id: number; status: string } }>(`/admin/orders/${id}/manual-refund/prepare`, data),
   confirmManualRefundOrder: (id: Id, data: { attempt_id: number; transfer_ref: string }) => api.post<JsonObject>(`/admin/orders/${id}/manual-refund/confirm`, data),
   cancelManualRefundOrder: (id: Id, data: { attempt_id: number }) => api.post<{ attempt: { status: string } }>(`/admin/orders/${id}/manual-refund/cancel`, data),
-  originalRefundOrder: (id: Id, data: AdminManualRefundPayload) => api.post<AdminOriginalRefundResponse>(`/admin/orders/${id}/original-refund`, data),
+  originalRefundOrder: (id: Id, data: AdminOriginalRefundPayload) => api.post<AdminOriginalRefundResponse>(`/admin/orders/${id}/original-refund`, data),
   getOrderRefunds: (params?: QueryParams) => api.get<AdminOrderRefund[]>('/admin/order-refunds', { params }),
   getOrderRefund: (id: Id) => api.get<AdminOrderRefund>(`/admin/order-refunds/${id}`),
   updateOrderRefundPaymentFee: (id: Id, data: AdminUpdateRefundPaymentFeePayload) =>

@@ -380,7 +380,7 @@ async fn ups07_paid_upstream_item_is_procured_and_delivered() {
         .unwrap();
     assert_eq!(parent_row.status, "delivered");
 
-    // the buyer sees the delivery masked as manual (UPS-19)
+    // UPS-19: keep the supplier's automatic delivery type without exposing procurement.
     let detail = app
         .call(
             "GET",
@@ -391,5 +391,6 @@ async fn ups07_paid_upstream_item_is_procured_and_delivered() {
         .await;
     let child_view = &data(&detail)["children"][0];
     assert_eq!(child_view["fulfillment"]["payload"], "CODE-1", "{detail}");
-    assert_ne!(child_view["fulfillment"]["type"], "upstream");
+    assert_eq!(child_view["fulfillment"]["type"], "auto");
+    assert_eq!(child_view["items"][0]["fulfillment_type"], "auto");
 }

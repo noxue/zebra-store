@@ -97,6 +97,9 @@ export default defineComponent({
         <Field label={k('fields.wechatQrCode')} hint={k('imageHint')}>
           <ResellerImageField v-model={s.form.support.wechat_qr_code} disabled={disabled.value} />
         </Field>
+        <Field label={k('fields.telegramQrCode')} hint={k('imageHint')}>
+          <ResellerImageField v-model={s.form.support.telegram_qr_code} disabled={disabled.value} />
+        </Field>
         <Field label={k('fields.wechatGroupQrCode')} hint={k('imageHint')}>
           <ResellerImageField v-model={s.form.support.wechat_group_qr_code} disabled={disabled.value} />
         </Field>
@@ -194,7 +197,7 @@ export default defineComponent({
           <h3 class="text-sm font-bold text-fg">{k('fields.navVisibility')}</h3>
           <p class="mb-3 text-xs text-muted">{k('descriptions.nav')}</p>
           <div class="flex flex-wrap gap-4">
-            {['blog', 'notice', 'about'].map((key) => (
+            {['blog', 'notice'].map((key) => (
               <label key={key} class="inline-flex items-center gap-2 rounded-full border border-line bg-surface-strong px-4 py-2 text-sm font-bold text-fg">
                 <Switch v-model={s.form.nav_config.builtin[key]} disabled={disabled.value} label={k(`nav.${key}`)} />
                 {k(`nav.${key}`)}

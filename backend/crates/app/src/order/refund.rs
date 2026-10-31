@@ -14,7 +14,7 @@ use zs_domain::payment::gateway::{
 };
 use zs_domain::payment::model::AdminPaymentFilter;
 use zs_domain::payment::refund::{
-    GatewayRefundAttempt, GatewayRefundAttemptUpdate, NewGatewayRefundAttempt,
+    AdminRefundOptions, GatewayRefundAttempt, GatewayRefundAttemptUpdate, NewGatewayRefundAttempt,
     status as gateway_refund_status,
 };
 use zs_domain::payment::types::PaymentStatus;
@@ -122,12 +122,13 @@ impl OrderService {
                     .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
                 self.confirm_and_mark(&order, &attempt).await
             } else {
-                self.original_refund(
+                self.original_refund_with_options(
                     attempt.order_id,
                     &attempt.amount.to_string(),
                     &attempt.remark,
                     attempt.payment_fee_refunded,
                     "",
+                    attempt.admin_options,
                 )
                 .await
                 .map(|_| ())
@@ -152,6 +153,10 @@ impl OrderService {
             order.children.iter().collect()
         };
         for target in targets {
+            // No card has been issued, so there is no converter credential to invalidate.
+            if target.fulfillment.is_none() {
+                continue;
+            }
             if target
                 .fulfillment
                 .as_ref()
@@ -190,10 +195,66 @@ impl OrderService {
         Ok(())
     }
 
+    async fn procurement_refund_requestable(&self, order: &Order) -> Result<bool> {
+        if self
+            .deps
+            .store
+            .ensure_procurement_refundable(order.id)
+            .await
+            .is_ok()
+        {
+            return Ok(true);
+        }
+        match &self.deps.integration {
+            Some(integration) => integration.can_stop_procurement_for_refund(order).await,
+            None => Ok(false),
+        }
+    }
+
+    pub async fn original_refund_supported(&self, order: &Order) -> Result<bool> {
+        if order.paid_at.is_none() || order.total_amount <= order.refunded_amount {
+            return Ok(false);
+        }
+        if !self.procurement_refund_requestable(order).await? {
+            return Ok(false);
+        }
+        let (payments, _) = self
+            .deps
+            .payment_records
+            .list_admin(&AdminPaymentFilter {
+                page: PageRequest {
+                    page: 1,
+                    page_size: 100,
+                },
+                order_id: order.id,
+                status: PaymentStatus::Success.as_str().into(),
+                skip_count: true,
+                ..Default::default()
+            })
+            .await?;
+        for payment in payments {
+            let Some(channel) = self.deps.payment_channels.get(payment.channel_id).await? else {
+                continue;
+            };
+            if self
+                .deps
+                .registry
+                .lookup(&channel.provider_type, &channel.channel_type)
+                .is_some_and(|gateway| gateway.capabilities().refund)
+            {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
     /// Buyer-facing availability for a full refund to the successful payment method.
     pub async fn buyer_refund_mode(&self, order: &Order) -> Result<&'static str> {
         if order.paid_at.is_none() || order.total_amount <= order.refunded_amount {
             return Ok("none");
+        }
+        if !self.procurement_refund_requestable(order).await? {
+            return Ok("processing");
         }
         // A terminal provider failure needs staff review before another gateway
         // submission. The admin flow can retry after the merchant fixes the cause.
@@ -322,7 +383,9 @@ impl OrderService {
     }
 
     async fn confirm_and_mark(&self, order: &Order, attempt: &GatewayRefundAttempt) -> Result<()> {
-        self.confirm_card_refund(order, &attempt.refund_no).await?;
+        if !attempt.admin_options.force_refund {
+            self.confirm_card_refund(order, &attempt.refund_no).await?;
+        }
         self.deps
             .store
             .mark_gateway_refund_card_confirmed(attempt.id)
@@ -355,6 +418,31 @@ impl OrderService {
         fee_refunded: bool,
         client_ip: &str,
     ) -> Result<OriginalRefundResult> {
+        self.original_refund_with_options(
+            order_id,
+            raw_amount,
+            remark,
+            fee_refunded,
+            client_ip,
+            AdminRefundOptions::default(),
+        )
+        .await
+    }
+
+    pub async fn original_refund_with_options(
+        &self,
+        order_id: Id,
+        raw_amount: &str,
+        remark: &str,
+        fee_refunded: bool,
+        client_ip: &str,
+        admin_options: AdminRefundOptions,
+    ) -> Result<OriginalRefundResult> {
+        if (admin_options.force_refund && admin_options.admin_id.is_none_or(|id| id <= 0))
+            || (admin_options.restock_cards && !admin_options.force_refund)
+        {
+            return Err(Error::invalid());
+        }
         let amount = parse_refund_amount(raw_amount)?;
         let (payments, _) = self
             .deps
@@ -420,7 +508,8 @@ impl OrderService {
             )
             && (attempt.amount != amount
                 || attempt.payment_fee_refunded != fee_refunded
-                || attempt.remark != remark)
+                || attempt.remark != remark
+                || attempt.admin_options != admin_options)
         {
             return Err(Error::bad_request("error.gateway_refund_pending"));
         }
@@ -429,6 +518,7 @@ impl OrderService {
             && attempt.amount == amount
             && attempt.payment_fee_refunded == fee_refunded
             && attempt.remark == remark
+            && attempt.admin_options == admin_options
         {
             let result = GatewayRefundResult {
                 provider_ref: attempt.provider_ref.clone(),
@@ -455,7 +545,8 @@ impl OrderService {
                 gateway_refund_status::PREPARING | gateway_refund_status::PENDING
             )
         }) {
-            self.preflight_gateway_refund(order_id, amount).await?;
+            self.preflight_gateway_refund_with_options(order_id, amount, admin_options)
+                .await?;
         }
         let now = self.deps.clock.now();
         let request_date = now
@@ -478,9 +569,13 @@ impl OrderService {
                 payment_fee_refunded: fee_refunded,
                 now,
                 initial_status: gateway_refund_status::PREPARING.to_owned(),
+                admin_options,
             })
             .await?;
         let attempt = reservation.attempt;
+        if attempt.admin_options != admin_options {
+            return Err(Error::bad_request("error.gateway_refund_pending"));
+        }
 
         if attempt.status == gateway_refund_status::SUCCEEDED {
             let result = GatewayRefundResult {
@@ -510,7 +605,11 @@ impl OrderService {
                 .get(order_id)
                 .await?
                 .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
-            if let Err(error) = self.prepare_card_refund(&order, &attempt.refund_no).await {
+            if let Err(error) = if admin_options.force_refund {
+                Ok(())
+            } else {
+                self.prepare_card_refund(&order, &attempt.refund_no).await
+            } {
                 if self
                     .cancel_card_refund(&order, &attempt.refund_no)
                     .await
@@ -613,7 +712,9 @@ impl OrderService {
                     .get(order_id)
                     .await?
                     .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
-                self.cancel_card_refund(&order, &attempt.refund_no).await?;
+                if !attempt.admin_options.force_refund {
+                    self.cancel_card_refund(&order, &attempt.refund_no).await?;
+                }
             }
             let updated = self
                 .deps
@@ -652,6 +753,16 @@ impl OrderService {
         order_id: Id,
         amount: zs_shared::money::Amount,
     ) -> Result<()> {
+        self.preflight_gateway_refund_with_options(order_id, amount, AdminRefundOptions::default())
+            .await
+    }
+
+    async fn preflight_gateway_refund_with_options(
+        &self,
+        order_id: Id,
+        amount: zs_shared::money::Amount,
+        admin_options: AdminRefundOptions,
+    ) -> Result<()> {
         let order = self
             .deps
             .repo
@@ -662,7 +773,11 @@ impl OrderService {
         plan_refund(
             &order,
             amount,
-            setting.max_refund_days,
+            if admin_options.force_refund {
+                0
+            } else {
+                setting.max_refund_days
+            },
             self.deps.clock.now(),
         )?;
         let delivered = order.fulfillment.is_some()
@@ -671,6 +786,7 @@ impl OrderService {
                 .iter()
                 .any(|child| child.fulfillment.is_some());
         if delivered
+            && !admin_options.force_refund
             && (amount != order.total_amount
                 || order.refunded_amount != zs_shared::money::Amount::ZERO)
         {
@@ -678,12 +794,66 @@ impl OrderService {
                 "error.card_converter_refund_review_required",
             ));
         }
+        if !admin_options.force_refund {
+            let targets: Vec<&Order> = if order.children.is_empty() {
+                vec![&order]
+            } else {
+                order.children.iter().collect()
+            };
+            for target in targets {
+                if let Some(f) = &target.fulfillment
+                    && f.kind != zs_domain::order::model::fulfillment_type::MANUAL
+                    && !f.logistics.contains_key("card_converter_id")
+                {
+                    let bound = if let Some(integration) = &self.deps.integration {
+                        integration.requires_converter(target).await?
+                    } else {
+                        false
+                    };
+                    if !bound {
+                        return Err(Error::bad_request(
+                            "error.card_converter_refund_review_required",
+                        ));
+                    }
+                }
+            }
+        }
+        if admin_options.restock_cards {
+            zs_domain::order::refund::restock_targets(&order, amount)?;
+        }
         if let Some(parent_id) = order.parent_id
             && let Some(parent) = self.deps.repo.get(parent_id).await?
             && amount > parent.total_amount - parent.refunded_amount
         {
             return Err(zs_domain::order::refund::refund_exceeded());
         }
+        self.stop_procurement_before_refund(&order, amount).await
+    }
+
+    async fn stop_procurement_before_refund(
+        &self,
+        order: &Order,
+        amount: zs_shared::money::Amount,
+    ) -> Result<()> {
+        if self
+            .deps
+            .store
+            .ensure_procurement_refundable(order.id)
+            .await
+            .is_err()
+        {
+            // Stopping all unresolved children is only valid for a full remaining refund.
+            if amount != order.total_amount - order.refunded_amount {
+                return Err(Error::bad_request("error.order_procurement_processing"));
+            }
+            if let Some(integration) = &self.deps.integration {
+                integration.stop_procurement_for_refund(order).await?;
+            }
+        }
+        self.deps
+            .store
+            .ensure_procurement_refundable(order.id)
+            .await?;
         Ok(())
     }
 
@@ -721,6 +891,22 @@ impl OrderService {
             return Err(Error::not_found(keys::ORDER_NOT_FOUND));
         }
         let setting = self.order_setting().await;
+        if gateway_attempt.is_none() {
+            let order = self
+                .deps
+                .repo
+                .get(order_id)
+                .await?
+                .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
+            plan_refund(
+                &order,
+                amount,
+                setting.max_refund_days,
+                self.deps.clock.now(),
+            )?;
+            self.stop_procurement_before_refund(&order, amount).await?;
+        }
+
         let done = self
             .deps
             .store
@@ -881,6 +1067,7 @@ impl OrderService {
                 payment_fee_refunded: fee_refunded,
                 now,
                 initial_status: gateway_refund_status::MANUAL_PREPARING.to_owned(),
+                admin_options: AdminRefundOptions::default(),
             })
             .await?;
         let attempt = reservation.attempt;

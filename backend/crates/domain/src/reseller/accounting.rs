@@ -45,6 +45,31 @@ fn round2(v: Decimal) -> Decimal {
     v.round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero)
 }
 
+/// Allocate a posted earning across an order's items, preserving cents exactly.
+/// Stable item order receives the final rounding remainder.
+pub fn allocate_profit(amount: Decimal, weights: &[Decimal]) -> Vec<Decimal> {
+    let sum: Decimal = weights.iter().map(|v| (*v).max(Decimal::ZERO)).sum();
+    let mut remaining = round2(amount);
+    let mut remaining_weight = sum;
+    weights
+        .iter()
+        .map(|weight| {
+            let weight = (*weight).max(Decimal::ZERO);
+            if weight.is_zero() || remaining_weight.is_zero() {
+                return Decimal::ZERO;
+            }
+            let part = if weight == remaining_weight {
+                remaining
+            } else {
+                round2(remaining * weight / remaining_weight)
+            };
+            remaining -= part;
+            remaining_weight -= weight;
+            part
+        })
+        .collect()
+}
+
 /// Inputs of a refund claw-back.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RefundDeductInput {
@@ -595,5 +620,31 @@ mod tests {
         assert_eq!(refund_key(9), "refund_deduct:9");
         assert_eq!(split_key(3, 42), "split:3:42");
         assert_eq!(fixed(d("0.5"), 8), "0.50000000");
+    }
+}
+
+#[cfg(test)]
+mod profit_allocation_tests {
+    use super::*;
+
+    #[test]
+    fn dash01_allocations_preserve_cents_and_allow_negative_profit() {
+        let one = Decimal::ONE;
+        assert_eq!(
+            allocate_profit(Decimal::new(1, 2), &[one, one]),
+            vec![Decimal::new(1, 2), Decimal::ZERO]
+        );
+        assert_eq!(
+            allocate_profit(Decimal::new(-1, 2), &[one, one]),
+            vec![Decimal::new(-1, 2), Decimal::ZERO]
+        );
+        assert_eq!(
+            allocate_profit(Decimal::from(30), &[Decimal::from(20), Decimal::from(40)]),
+            vec![Decimal::from(10), Decimal::from(20)]
+        );
+        assert_eq!(
+            allocate_profit(one, &[Decimal::ZERO, Decimal::ZERO]),
+            vec![Decimal::ZERO, Decimal::ZERO]
+        );
     }
 }
