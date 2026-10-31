@@ -828,7 +828,7 @@ async fn synchronous_delivery_and_manual_review_are_protocol_neutral() {
     assert_eq!(again.downstream_order_no, "S-3");
     assert!(!lifecycle.calls().contains(&format!("rollback:{o3}")));
 
-    // ---- unknown again, then the admin marks it failed: rolled back only now
+    // RFD-05: unknown cannot be canceled or rolled back, even by an admin.
     *acme.placing.lock().unwrap() = Placing::Unknown;
     let (o4, p4) = procure(&app, "S-4", product_id, sku).await;
     assert_eq!(row(&app, p4).await.status, "manual_review");
@@ -840,10 +840,10 @@ async fn synchronous_delivery_and_manual_review_are_protocol_neutral() {
             None,
         )
         .await;
-    data(&canceled);
-    assert_eq!(row(&app, p4).await.status, "canceled");
-    assert!(lifecycle.calls().contains(&format!("rollback:{o4}")));
-    // a second cancel is refused (and never rolls back twice)
+    assert_ne!(canceled["status_code"], 0);
+    assert_eq!(row(&app, p4).await.status, "manual_review");
+    assert!(!lifecycle.calls().contains(&format!("rollback:{o4}")));
+    // Repeating the request must not bypass the unknown-result barrier.
     let again = app
         .admin(
             "POST",
@@ -857,7 +857,7 @@ async fn synchronous_delivery_and_manual_review_are_protocol_neutral() {
         .iter()
         .filter(|c| **c == format!("rollback:{o4}"))
         .count();
-    assert_eq!(rollbacks, 1);
+    assert_eq!(rollbacks, 0);
 
     // ---- executed but needs a human: order number kept, review reason stored,
     // admin retry re-checks the supplier order instead of buying again

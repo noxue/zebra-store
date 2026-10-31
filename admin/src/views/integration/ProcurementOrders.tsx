@@ -28,6 +28,7 @@ import {
   formatTime,
   localCostAmount,
   procurementProfit,
+  procurementOwnerProfit,
   procurementStatusTone,
   relativeTimeParts,
 } from './integrationUtils'
@@ -40,6 +41,7 @@ const STATUS_ICON: Record<string, IconComponent> = {
   rejected: AlertTriangle,
   failed: AlertTriangle,
   fulfilled: Check,
+  stock_recovered: Check,
   completed: Check,
   partially_refunded: Receipt,
   refunded: Receipt,
@@ -71,8 +73,8 @@ export default defineComponent({
     }
     const upstreamAmount = (o: ProcurementRow) =>
       o.upstream_amount && String(o.upstream_amount) !== '0.00' ? formatMoney(o.upstream_amount, o.upstream_currency || o.currency) : '-'
-    const profit = (o: ProcurementRow) => {
-      const v = procurementProfit(o)
+    const profit = (o: ProcurementRow, owner = false) => {
+      const v = owner ? procurementOwnerProfit(o) : procurementProfit(o)
       return { text: v !== null ? formatMoney(v, o.currency) : '-', cls: v === null ? '' : parseFloat(v) >= 0 ? 'text-success-text' : 'text-danger-text' }
     }
     const refundTypeLabel = (type: string) => {
@@ -171,7 +173,8 @@ export default defineComponent({
             {infoCell(t('procurement.columns.localSellAmount'), formatMoney(o.local_sell_amount, o.currency), null, 'zs-num font-medium text-fg')}
             {infoCell(t('procurement.columns.upstreamAmount'), upstreamAmount(o), null, 'zs-num font-medium text-fg')}
             {cost !== null && infoCell(t('procurement.columns.localCost'), formatMoney(cost, o.currency), null, 'zs-num font-medium text-fg')}
-            {infoCell(t('procurement.detail.profit'), pr.text, null, cn('zs-num font-medium', pr.cls))}
+            {infoCell(t('admin.dashboard.kpi.ownerProfit'), profit(o, true).text, null, cn('zs-num font-medium', profit(o, true).cls))}
+            {infoCell(t('admin.dashboard.kpi.totalProfit'), pr.text, null, cn('zs-num font-medium', pr.cls))}
             {infoCell(t('procurement.columns.retryCount'), o.retry_count ?? 0, null, 'text-fg')}
           </div>
 
@@ -268,7 +271,8 @@ export default defineComponent({
                 moneyBox(t('procurement.detail.upstreamRefunded'), formatMoney(d.upstream_refunded_amount, d.upstream_currency || d.currency), 'text-danger-text')}
               {hasPositiveAmount(d.local_order?.refunded_amount) &&
                 moneyBox(t('procurement.detail.localRefunded'), formatMoney(d.local_order?.refunded_amount, d.currency), 'text-danger-text')}
-              {moneyBox(t('procurement.detail.profit'), pr.text, pr.cls)}
+              {moneyBox(t('admin.dashboard.kpi.ownerProfit'), profit(d, true).text, profit(d, true).cls)}
+              {moneyBox(t('admin.dashboard.kpi.totalProfit'), pr.text, pr.cls)}
             </div>,
           )}
 

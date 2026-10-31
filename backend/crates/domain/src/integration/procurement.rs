@@ -36,6 +36,7 @@ pub enum ProcurementStatus {
     PartiallyRefunded,
     Fulfilled,
     Completed,
+    StockRecovered,
     Refunded,
     Canceled,
     /// Zebra Store addition: the supplier may have executed (and charged) the purchase
@@ -46,7 +47,7 @@ pub enum ProcurementStatus {
 }
 
 impl ProcurementStatus {
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 12] = [
         Self::Pending,
         Self::Submitted,
         Self::Accepted,
@@ -55,6 +56,7 @@ impl ProcurementStatus {
         Self::PartiallyRefunded,
         Self::Fulfilled,
         Self::Completed,
+        Self::StockRecovered,
         Self::Refunded,
         Self::Canceled,
         Self::ManualReview,
@@ -65,7 +67,7 @@ impl ProcurementStatus {
     }
 
     pub fn from_stored(raw: &str) -> Self {
-        Self::parse(raw).unwrap_or(Self::Pending)
+        Self::parse(raw).unwrap_or(Self::ManualReview)
     }
 
     pub fn as_str(self) -> &'static str {
@@ -78,6 +80,7 @@ impl ProcurementStatus {
             Self::PartiallyRefunded => "partially_refunded",
             Self::Fulfilled => "fulfilled",
             Self::Completed => "completed",
+            Self::StockRecovered => "stock_recovered",
             Self::Refunded => "refunded",
             Self::Canceled => "canceled",
             Self::ManualReview => "manual_review",
@@ -117,6 +120,7 @@ pub fn callback_allowed(current: ProcurementStatus, event: &UpstreamEvent) -> bo
             current,
             ProcurementStatus::Fulfilled
                 | ProcurementStatus::Completed
+                | ProcurementStatus::StockRecovered
                 | ProcurementStatus::Refunded
                 | ProcurementStatus::Canceled
         ),
@@ -373,6 +377,8 @@ pub struct ProcurementOrder {
     pub upstream_amount: Amount,
     pub upstream_currency: String,
     pub local_sell_amount: Amount,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reseller_profit_amount: Option<Amount>,
     pub currency: String,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub error_message: String,
@@ -458,6 +464,11 @@ pub struct ProcurementFilter {
 /// Persistence of `procurement_orders`.
 #[async_trait]
 pub trait ProcurementRepo: Send + Sync {
+    /// Net reseller ledger allocation, only loaded for administrative profit views.
+    async fn reseller_profits(
+        &self,
+        local_order_ids: &[Id],
+    ) -> Result<std::collections::HashMap<Id, Amount>>;
     /// With `connection` and `local_order` attached.
     async fn get(&self, id: Id) -> Result<Option<ProcurementOrder>>;
     async fn get_by_local_order_id(&self, local_order_id: Id) -> Result<Option<ProcurementOrder>>;

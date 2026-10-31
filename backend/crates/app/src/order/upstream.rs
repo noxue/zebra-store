@@ -529,7 +529,21 @@ impl ProcurementLifecycle for OrderIntegrationPorts {
         Ok(())
     }
 
-    async fn deliver_upstream(&self, order_id: Id, delivery: &UpstreamDelivery) -> Result<()> {
+    async fn deliver_upstream(
+        &self,
+        order_id: Id,
+        delivery: &UpstreamDelivery,
+    ) -> Result<zs_domain::integration::hooks::DeliveryDisposition> {
+        use zs_domain::integration::hooks::DeliveryDisposition;
+        if self
+            .0
+            .deps
+            .store
+            .recover_refunded_upstream(order_id, delivery, self.0.deps.clock.now())
+            .await?
+        {
+            return Ok(DeliveryDisposition::RecoveredToStock);
+        }
         let order = self
             .0
             .deps
@@ -547,7 +561,7 @@ impl ProcurementLifecycle for OrderIntegrationPorts {
         if let Some((notify_id, status)) = done.and_then(|d| d.notify) {
             self.0.enqueue_status_email(notify_id, status, None).await;
         }
-        Ok(())
+        Ok(DeliveryDisposition::Delivered)
     }
 
     async fn rollback_failed(&self, order_id: Id) -> Result<()> {

@@ -606,7 +606,7 @@ export type OrderStatus =
 export interface Order {
   id?: number
   order_no: string
-  refund_mode?: 'none' | 'automatic' | 'contact_support'
+  refund_mode?: 'none' | 'automatic' | 'contact_support' | 'processing'
   refund_state?: 'none' | 'checking' | 'processing' | 'awaiting_support' | 'syncing' | 'succeeded' | 'needs_review'
   parent_order_no?: string
   guest_email?: string

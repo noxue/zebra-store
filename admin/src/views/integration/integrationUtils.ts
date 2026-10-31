@@ -416,6 +416,7 @@ export interface ProcurementLocalOrder {
 }
 
 export interface ProcurementFinanceInput {
+  reseller_profit_amount?: Money
   local_sell_amount?: Money
   upstream_refunded_amount?: Money
   connection?: { exchange_rate?: Money }
@@ -443,6 +444,11 @@ export const procurementProfit = (order: ProcurementFinanceInput): string | null
   const localRefund = parseMoneyValue(order.local_order?.refunded_amount)
   if (![sell, upstreamRefund, localCost, localRefund].some((v) => Math.abs(v) > 0.000001)) return null
   return (sell + upstreamRefund - localCost - localRefund).toFixed(2)
+}
+
+export const procurementOwnerProfit = (order: ProcurementFinanceInput): string | null => {
+  const total = procurementProfit(order)
+  return total === null || order.reseller_profit_amount === undefined ? null : (Number(total) - parseMoneyValue(order.reseller_profit_amount)).toFixed(2)
 }
 
 export interface UpstreamRefundRecordRow {
@@ -485,7 +491,7 @@ export const parseProcurementStats = (data: unknown): ProcurementStats => {
 }
 
 /** `manual_review` (Zebra Store): the supplier may have charged us; never rolled back automatically. */
-export const PROCUREMENT_STATUSES = ['pending', 'accepted', 'manual_review', 'rejected', 'failed', 'partially_refunded', 'fulfilled', 'refunded', 'canceled'] as const
+export const PROCUREMENT_STATUSES = ['pending', 'accepted', 'manual_review', 'rejected', 'failed', 'partially_refunded', 'fulfilled', 'stock_recovered', 'refunded', 'canceled'] as const
 
 export const procurementStatusTone = (status?: string): BadgeTone => {
   switch (status) {
@@ -502,6 +508,7 @@ export const procurementStatusTone = (status?: string): BadgeTone => {
       return 'danger'
     case 'fulfilled':
     case 'completed':
+    case 'stock_recovered':
       return 'success'
     default:
       return 'neutral'
@@ -510,8 +517,8 @@ export const procurementStatusTone = (status?: string): BadgeTone => {
 
 /** Manual review: retry re-checks / resubmits with the same request number. */
 export const canRetryProcurement = (status: string) => ['failed', 'rejected', 'manual_review'].includes(status)
-/** Manual review: cancel marks it failed and rolls the local order back (refund). */
-export const canCancelProcurement = (status: string) => ['pending', 'submitted', 'accepted', 'failed', 'manual_review'].includes(status)
+/** Only unsubmitted or accepted orders can request a verified cancellation. */
+export const canCancelProcurement = (status: string) => ['pending', 'accepted', 'rejected', 'failed'].includes(status)
 
 /** Relative-time bucket: [key suffix, n]. */
 export const relativeTimeParts = (raw: string | undefined, now = Date.now()): { key: 'justNow' | 'minutesAgo' | 'hoursAgo' | 'daysAgo'; n: number } | null => {

@@ -271,3 +271,13 @@ describe('product settings list query', () => {
     )
   })
 })
+
+
+describe('order status translations', () => {
+  it('RFD-05 reseller orders show processing and partial delivery in Chinese', async () => {
+    const zh = (await import('@/i18n/locales/zh-CN.json')).default
+    expect(zh.orderDetail.refundProcessing).toContain('无法退款')
+    expect(zh.resellerConsole.orders.statusMap.fulfilling).toBe('处理中')
+    expect(zh.resellerConsole.orders.statusMap.partially_delivered).toBe('部分交付')
+  })
+})

@@ -137,7 +137,14 @@ impl ReportService {
             // MISC-03 ④: empty windows fall back to the latest order currency.
             totals.currency = r.latest_currency().await.map_err(fetch_failed)?;
         }
-        let profit = profit_total(&items, &refunds, &payments);
+        let mut profit = profit_total(&items, &refunds, &payments);
+        profit.reseller_profit = r
+            .reseller_profits(w.start, w.end)
+            .await
+            .map_err(fetch_failed)?
+            .iter()
+            .map(|entry| entry.amount)
+            .sum();
         let inventory = r.inventory().await.map_err(fetch_failed)?;
         let stock = stock_stats(&inventory, a.low_stock_threshold);
         let inputs = OverviewInputs {
@@ -169,7 +176,19 @@ impl ReportService {
         let payments = r.payments(w.start, w.end).await.map_err(fetch_failed)?;
         let items = r.items(w.start, w.end).await.map_err(fetch_failed)?;
         let refunds = r.refunds(w.start, w.end).await.map_err(fetch_failed)?;
-        let response = trends(&w, &setting, &orders, &payments, &items, &refunds);
+        let reseller_profits = r
+            .reseller_profits(w.start, w.end)
+            .await
+            .map_err(fetch_failed)?;
+        let response = trends(
+            &w,
+            &setting,
+            &orders,
+            &payments,
+            &items,
+            &refunds,
+            &reseller_profits,
+        );
         self.store(key, Cached::Trends(response.clone()));
         Ok(response)
     }
@@ -221,7 +240,9 @@ mod tests {
     use rust_decimal::Decimal;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use zs_domain::dashboard::inventory::InventorySnapshot;
-    use zs_domain::dashboard::stats::{ItemFact, OrderFact, PaymentFact, RefundFact};
+    use zs_domain::dashboard::stats::{
+        ItemFact, OrderFact, PaymentFact, RefundFact, ResellerProfitFact,
+    };
     use zs_shared::clock::FixedClock;
 
     #[derive(Debug, Default)]
@@ -255,6 +276,13 @@ mod tests {
             Ok(Vec::new())
         }
         async fn refunds(&self, _: DateTime<Utc>, _: DateTime<Utc>) -> Result<Vec<RefundFact>> {
+            Ok(Vec::new())
+        }
+        async fn reseller_profits(
+            &self,
+            _: DateTime<Utc>,
+            _: DateTime<Utc>,
+        ) -> Result<Vec<ResellerProfitFact>> {
             Ok(Vec::new())
         }
         async fn new_users(&self, _: DateTime<Utc>, _: DateTime<Utc>) -> Result<i64> {

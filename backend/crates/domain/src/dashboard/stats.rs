@@ -92,6 +92,8 @@ pub struct PaymentFact {
 pub struct ItemFact {
     pub order_id: Id,
     pub order_status: String,
+    /// Earned reseller share for the item (rankings use the same gross basis as profit).
+    pub reseller_profit: Decimal,
     pub order_created_at: DateTime<Utc>,
     pub product_id: Id,
     pub sku_id: Id,
@@ -120,6 +122,14 @@ pub struct RefundFact {
     pub created_at: DateTime<Utc>,
 }
 
+/// Signed reseller earning / refund claw-back, booked at the ledger timestamp.
+/// Withdrawals and manual balance adjustments are not sales profit.
+#[derive(Debug, Clone)]
+pub struct ResellerProfitFact {
+    pub amount: Decimal,
+    pub created_at: DateTime<Utc>,
+}
+
 /// Read port over orders, payments, refunds, users, products and wallets.
 #[async_trait]
 pub trait DashboardRepo: Send + Sync {
@@ -129,6 +139,11 @@ pub trait DashboardRepo: Send + Sync {
     async fn payments(&self, start: DateTime<Utc>, end: DateTime<Utc>) -> Result<Vec<PaymentFact>>;
     async fn items(&self, start: DateTime<Utc>, end: DateTime<Utc>) -> Result<Vec<ItemFact>>;
     async fn refunds(&self, start: DateTime<Utc>, end: DateTime<Utc>) -> Result<Vec<RefundFact>>;
+    async fn reseller_profits(
+        &self,
+        start: DateTime<Utc>,
+        end: DateTime<Utc>,
+    ) -> Result<Vec<ResellerProfitFact>>;
     async fn new_users(&self, start: DateTime<Utc>, end: DateTime<Utc>) -> Result<i64>;
     async fn active_products(&self) -> Result<i64>;
     async fn total_user_balance(&self) -> Result<Decimal>;
@@ -163,6 +178,8 @@ pub struct Kpi {
     pub total_cost: String,
     pub payment_fee: String,
     pub total_profit: String,
+    pub owner_profit: String,
+    pub reseller_profit: String,
     pub profit_margin: String,
     pub payments_total: i64,
     pub payments_success: i64,
@@ -216,6 +233,7 @@ pub struct TrendPoint {
     pub payments_failed: i64,
     pub gmv_paid: String,
     pub profit: String,
+    pub owner_profit: String,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -243,6 +261,7 @@ pub struct ProductRanking {
     pub paid_amount: String,
     pub total_cost: String,
     pub profit: String,
+    pub owner_profit: String,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -333,6 +352,7 @@ pub struct Profit {
     pub cost: Decimal,
     pub refunded_cost: Decimal,
     pub payment_fee: Decimal,
+    pub reseller_profit: Decimal,
 }
 
 impl Profit {
@@ -502,6 +522,8 @@ pub fn overview(
             total_cost: money(total_cost),
             payment_fee: money(i.profit.payment_fee),
             total_profit: money(total_profit),
+            owner_profit: money(total_profit - i.profit.reseller_profit),
+            reseller_profit: money(i.profit.reseller_profit),
             profit_margin: percent(rate(total_profit, i.profit.revenue)),
             payments_total: t.payments_total,
             payments_success: t.payments_success,
@@ -538,6 +560,7 @@ pub fn trends(
     payments: &[PaymentFact],
     items: &[ItemFact],
     refunds: &[RefundFact],
+    reseller_profits: &[ResellerProfitFact],
 ) -> TrendResponse {
     #[derive(Default)]
     struct Day {
@@ -567,6 +590,10 @@ pub fn trends(
         }
     }
     let profits = profit_by_day(w, items, refunds, payments);
+    let mut shares: BTreeMap<String, Decimal> = BTreeMap::new();
+    for share in reseller_profits {
+        *shares.entry(w.day_of(share.created_at)).or_default() += share.amount;
+    }
     let reverses = setting.accounting.refund_reverses_cost;
     let empty = Day::default();
     let no_profit = Profit::default();
@@ -583,6 +610,9 @@ pub fn trends(
                 payments_failed: d.payments_failed,
                 gmv_paid: money(d.gmv_paid),
                 profit: money(p.profit(reverses)),
+                owner_profit: money(
+                    p.profit(reverses) - shares.get(&date).copied().unwrap_or_default(),
+                ),
                 date,
             }
         })
@@ -608,6 +638,7 @@ pub fn top_products(items: &[ItemFact], limit: usize) -> Vec<ProductRanking> {
         quantity: i64,
         paid: Decimal,
         cost: Decimal,
+        reseller_profit: Decimal,
     }
     let mut groups: Vec<Acc> = Vec::new();
     let mut index: HashMap<(Id, Id, String), usize> = HashMap::new();
@@ -624,6 +655,7 @@ pub fn top_products(items: &[ItemFact], limit: usize) -> Vec<ProductRanking> {
                 quantity: 0,
                 paid: Decimal::ZERO,
                 cost: Decimal::ZERO,
+                reseller_profit: Decimal::ZERO,
             });
             groups.len() - 1
         });
@@ -631,6 +663,7 @@ pub fn top_products(items: &[ItemFact], limit: usize) -> Vec<ProductRanking> {
         g.orders.insert(i.order_id);
         g.quantity += i.quantity;
         g.paid += item_revenue(i);
+        g.reseller_profit += i.reseller_profit;
         if i.cost_price > Decimal::ZERO {
             g.cost += item_cost(i);
         }
@@ -662,6 +695,7 @@ pub fn top_products(items: &[ItemFact], limit: usize) -> Vec<ProductRanking> {
                 paid_amount: money(g.paid),
                 total_cost: money(g.cost),
                 profit: money(g.paid - g.cost),
+                owner_profit: money(g.paid - g.cost - g.reseller_profit),
             }
         })
         .collect()
@@ -805,6 +839,7 @@ mod tests {
         ItemFact {
             order_id,
             order_status: status.into(),
+            reseller_profit: Decimal::ZERO,
             order_created_at: at("2026-09-24T01:00:00Z"),
             product_id,
             sku_id: 0,
@@ -961,6 +996,7 @@ mod tests {
             &payments,
             &[it],
             &[],
+            &[],
         );
         assert_eq!(r.points.len(), 7);
         let last = r.points.last().unwrap();
@@ -1053,6 +1089,7 @@ mod tests {
             cost: d("10"),
             refunded_cost: Decimal::ZERO,
             payment_fee: d("0.5"),
+            reseller_profit: d("4.5"),
         };
         let stock = StockStats::default();
         let o = overview(

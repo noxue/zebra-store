@@ -26,6 +26,14 @@ pub struct UpstreamDelivery {
     pub delivered_at: Option<DateTime<Utc>>,
 }
 
+/// Disposition of a supplier credential; recovered inventory is never delivered
+/// or notified to the refunded buyer/downstream.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeliveryDisposition {
+    Delivered,
+    RecoveredToStock,
+}
+
 /// Order-side effects of the procurement state machine (implemented by the order group).
 #[async_trait]
 pub trait ProcurementLifecycle: Send + Sync {
@@ -38,7 +46,11 @@ pub trait ProcurementLifecycle: Send + Sync {
     /// status and enqueues the customer status email. Must return an error when the
     /// fulfillment could not be written: the purchase order then stays non-terminal so
     /// the supplier / poller retries (UPS-02).
-    async fn deliver_upstream(&self, order_id: Id, delivery: &UpstreamDelivery) -> Result<()>;
+    async fn deliver_upstream(
+        &self,
+        order_id: Id,
+        delivery: &UpstreamDelivery,
+    ) -> Result<DeliveryDisposition>;
 
     /// Terminal procurement failure (rejected / canceled / retries exhausted): local
     /// order `fulfilling → paid` (conditional) and parent status recomputed (UPS-07).
@@ -69,6 +81,19 @@ pub enum FailureRefund {
 /// order group from its payment / status-change workflows).
 #[async_trait]
 pub trait IntegrationOrderEvents: Send + Sync {
+    /// Read-only eligibility to request cancellation of unresolved purchases.
+    async fn can_stop_procurement_for_refund(&self, order: &Order) -> Result<bool> {
+        let _ = order;
+        Ok(false)
+    }
+
+    /// Stops unresolved purchases, with supplier confirmation for accepted orders.
+    /// Does not refund money; the order service still reserves the real refund.
+    async fn stop_procurement_for_refund(&self, order: &Order) -> Result<()> {
+        let _ = order;
+        Ok(())
+    }
+
     /// Locks delivered converter cards before money can be refunded.
     async fn prepare_refund(&self, order: &Order, refund_no: &str) -> Result<bool>;
 

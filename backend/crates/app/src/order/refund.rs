@@ -153,6 +153,10 @@ impl OrderService {
             order.children.iter().collect()
         };
         for target in targets {
+            // No card has been issued, so there is no converter credential to invalidate.
+            if target.fulfillment.is_none() {
+                continue;
+            }
             if target
                 .fulfillment
                 .as_ref()
@@ -191,8 +195,27 @@ impl OrderService {
         Ok(())
     }
 
+    async fn procurement_refund_requestable(&self, order: &Order) -> Result<bool> {
+        if self
+            .deps
+            .store
+            .ensure_procurement_refundable(order.id)
+            .await
+            .is_ok()
+        {
+            return Ok(true);
+        }
+        match &self.deps.integration {
+            Some(integration) => integration.can_stop_procurement_for_refund(order).await,
+            None => Ok(false),
+        }
+    }
+
     pub async fn original_refund_supported(&self, order: &Order) -> Result<bool> {
         if order.paid_at.is_none() || order.total_amount <= order.refunded_amount {
+            return Ok(false);
+        }
+        if !self.procurement_refund_requestable(order).await? {
             return Ok(false);
         }
         let (payments, _) = self
@@ -229,6 +252,9 @@ impl OrderService {
     pub async fn buyer_refund_mode(&self, order: &Order) -> Result<&'static str> {
         if order.paid_at.is_none() || order.total_amount <= order.refunded_amount {
             return Ok("none");
+        }
+        if !self.procurement_refund_requestable(order).await? {
+            return Ok("processing");
         }
         // A terminal provider failure needs staff review before another gateway
         // submission. The admin flow can retry after the merchant fixes the cause.
@@ -801,6 +827,33 @@ impl OrderService {
         {
             return Err(zs_domain::order::refund::refund_exceeded());
         }
+        self.stop_procurement_before_refund(&order, amount).await
+    }
+
+    async fn stop_procurement_before_refund(
+        &self,
+        order: &Order,
+        amount: zs_shared::money::Amount,
+    ) -> Result<()> {
+        if self
+            .deps
+            .store
+            .ensure_procurement_refundable(order.id)
+            .await
+            .is_err()
+        {
+            // Stopping all unresolved children is only valid for a full remaining refund.
+            if amount != order.total_amount - order.refunded_amount {
+                return Err(Error::bad_request("error.order_procurement_processing"));
+            }
+            if let Some(integration) = &self.deps.integration {
+                integration.stop_procurement_for_refund(order).await?;
+            }
+        }
+        self.deps
+            .store
+            .ensure_procurement_refundable(order.id)
+            .await?;
         Ok(())
     }
 
@@ -838,6 +891,22 @@ impl OrderService {
             return Err(Error::not_found(keys::ORDER_NOT_FOUND));
         }
         let setting = self.order_setting().await;
+        if gateway_attempt.is_none() {
+            let order = self
+                .deps
+                .repo
+                .get(order_id)
+                .await?
+                .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
+            plan_refund(
+                &order,
+                amount,
+                setting.max_refund_days,
+                self.deps.clock.now(),
+            )?;
+            self.stop_procurement_before_refund(&order, amount).await?;
+        }
+
         let done = self
             .deps
             .store

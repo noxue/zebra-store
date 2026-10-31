@@ -14,6 +14,8 @@ import {
   isOrderRefundWindowExpired,
   itemDiscountTotal,
   itemPaidAmount,
+  itemOwnerProfit,
+  ownerOrderProfit,
   manualSubmissionRows,
   normalizeMaxRefundDays,
   orderPaymentFee,
@@ -133,6 +135,21 @@ describe('money helpers', () => {
     expect(orderPaymentFee(o)).toBe(0.5)
     // 10 - 3*2 - 2 - 0.5
     expect(orderProfit(o)).toBe(1.5)
+  })
+
+  it('DASH-01 separates owner profit using net commissions without duplicate child allocations', () => {
+    const o = order({
+      refunded_amount: '2.00',
+      items: [item({ id: 1, total_price: '10', cost_price: '3' })],
+      children: [order({ id: 2, items: [item({ id: 1 })] })],
+      reseller_item_profit_amounts: { '1': '1.25' },
+      payments: [{ status: 'success', fee_policy: 'merchant_absorbed', fee_amount: '0.50' }] as AdminOrder['payments'],
+    })
+    expect(orderProfit(o)).toBe(4.5)
+    expect(ownerOrderProfit(o)).toBe(3.25)
+    expect(itemOwnerProfit(o, o.items![0]!, 0)).toBe(3.75)
+    expect(ownerOrderProfit({ ...o, reseller_item_profit_amounts: { '1': '-1.25' } })).toBe(5.75)
+    expect(ownerOrderProfit({ ...o, reseller_item_profit_amounts: undefined })).toBe(4.5)
   })
 
   it('item discount/paid amounts', () => {

@@ -360,6 +360,7 @@ impl ProcurementService {
         let change = ProcurementChange {
             status: Some(ProcurementStatus::Rejected),
             error_message: Some(message.clone()),
+            next_retry_at: Some(None),
             ..ProcurementChange::default()
         };
         let changed = self
@@ -426,6 +427,9 @@ impl ProcurementService {
         let Some(p) = self.repo.get(id).await? else {
             return Ok(());
         };
+        if p.status == ProcurementStatus::Submitted {
+            return self.hold_for_review(&p, "interrupted supplier submission; reconcile the original request before retrying".into()).await;
+        }
         if !matches!(
             p.status,
             ProcurementStatus::Pending | ProcurementStatus::Failed
@@ -547,6 +551,23 @@ impl ProcurementService {
             idempotency_key: format!("procurement:{}", p.id),
             quote_id,
         };
+        // Persist the submission claim before the external purchase. Refund and
+        // cancellation now see an in-flight task; competing workers cannot submit.
+        if !self
+            .repo
+            .update(
+                p.id,
+                &[p.status],
+                &ProcurementChange {
+                    status: Some(ProcurementStatus::Submitted),
+                    ..ProcurementChange::default()
+                },
+                self.now(),
+            )
+            .await?
+        {
+            return Ok(());
+        }
         let resp = match client.place_order(&req).await {
             Ok(r) => r,
             Err(e) => {
@@ -612,7 +633,11 @@ impl ProcurementService {
             .repo
             .update(
                 p.id,
-                &[ProcurementStatus::Pending, ProcurementStatus::Failed],
+                &[
+                    ProcurementStatus::Pending,
+                    ProcurementStatus::Failed,
+                    ProcurementStatus::Submitted,
+                ],
                 &change,
                 self.now(),
             )
@@ -685,7 +710,11 @@ impl ProcurementService {
                 .repo
                 .update(
                     p.id,
-                    &[ProcurementStatus::Pending, ProcurementStatus::Failed],
+                    &[
+                        ProcurementStatus::Pending,
+                        ProcurementStatus::Failed,
+                        ProcurementStatus::Submitted,
+                    ],
                     &change,
                     self.now(),
                 )
@@ -711,7 +740,29 @@ impl ProcurementService {
         fulfillment: Option<&RemoteFulfillment>,
     ) -> Result<()> {
         let p = self.repo.get(id).await?.ok_or_else(not_found)?;
-        if !callback_allowed(p.status, event) {
+        // A late receipt for a fully refunded buyer must reach inventory recovery,
+        // even when an older version already marked the purchase canceled/refunded.
+        let recovery = if matches!(event, UpstreamEvent::Delivered)
+            && p.status != ProcurementStatus::StockRecovered
+        {
+            // Final monetary eligibility is verified under the order-family lock;
+            // child refund amounts may be represented on the parent only.
+            self.orders
+                .get(p.local_order_id)
+                .await?
+                .is_some_and(|order| order.status == "refunded")
+        } else {
+            false
+        };
+        let delivery_states = if recovery {
+            ProcurementStatus::ALL
+                .into_iter()
+                .filter(|status| *status != ProcurementStatus::StockRecovered)
+                .collect::<Vec<_>>()
+        } else {
+            OPEN_FOR_DELIVERY.to_vec()
+        };
+        if !recovery && !callback_allowed(p.status, event) {
             tracing::warn!(
                 procurement_order_id = p.id,
                 status = p.status.as_str(),
@@ -732,7 +783,7 @@ impl ProcurementService {
                         .repo
                         .update(
                             p.id,
-                            &OPEN_FOR_DELIVERY,
+                            &delivery_states,
                             &ProcurementChange {
                                 status: Some(ProcurementStatus::Accepted),
                                 held_delivery: held_delivery.clone(),
@@ -745,20 +796,50 @@ impl ProcurementService {
                         return Ok(());
                     }
                 }
-                self.lifecycle
+                let disposition = match self
+                    .lifecycle
                     .deliver_upstream(p.local_order_id, &delivery_of(held_delivery.as_ref()))
-                    .await?;
+                    .await
+                {
+                    Ok(disposition) => disposition,
+                    Err(error) if error.key() == "error.upstream_recovery_needs_review" => {
+                        self.repo.update(p.id, &delivery_states, &ProcurementChange {
+                            status: Some(ProcurementStatus::ManualReview),
+                            error_message: Some("refunded upstream delivery requires inventory recovery review".into()),
+                            next_retry_at: Some(None), ..Default::default()
+                        }, now).await?;
+                        self.alert(
+                            &p,
+                            "refunded upstream delivery requires inventory recovery review",
+                        )
+                        .await;
+                        return Ok(());
+                    }
+                    Err(error) => return Err(error),
+                };
+                let recovered = disposition
+                    == zs_domain::integration::hooks::DeliveryDisposition::RecoveredToStock;
                 let change = ProcurementChange {
-                    status: Some(ProcurementStatus::Fulfilled),
+                    status: Some(if recovered {
+                        ProcurementStatus::StockRecovered
+                    } else {
+                        ProcurementStatus::Fulfilled
+                    }),
+                    error_message: recovered
+                        .then(|| "refunded upstream delivery recovered into local stock".into()),
+                    next_retry_at: Some(None),
                     upstream_payload: fulfillment.map(|f| f.payload.clone()),
                     ..ProcurementChange::default()
                 };
                 if self
                     .repo
-                    .update(p.id, &OPEN_FOR_DELIVERY, &change, now)
+                    .update(p.id, &delivery_states, &change, now)
                     .await?
                 {
                     tracing::info!(procurement_order_id = p.id, "procurement fulfilled");
+                    if recovered {
+                        return Ok(());
+                    }
                     // Multi-level chains: notify our own downstream buyer (order and parent).
                     self.downstream.enqueue_for_order(p.local_order_id).await;
                     if let Ok(Some(o)) = self.orders.get(p.local_order_id).await
@@ -771,6 +852,8 @@ impl ProcurementService {
             UpstreamEvent::Canceled => {
                 let change = ProcurementChange {
                     status: Some(ProcurementStatus::Canceled),
+                    error_message: Some("supplier cancellation confirmed".into()),
+                    next_retry_at: Some(None),
                     ..ProcurementChange::default()
                 };
                 if self
@@ -991,6 +1074,24 @@ impl ProcurementService {
             .await
             .map_err(|e| e.or_internal(keys::PROCUREMENT_FETCH_FAILED))?;
         self.fill_parent_nos(&mut page.items).await;
+        let profits = self
+            .repo
+            .reseller_profits(
+                &page
+                    .items
+                    .iter()
+                    .map(|p| p.local_order_id)
+                    .collect::<Vec<_>>(),
+            )
+            .await?;
+        for purchase in &mut page.items {
+            purchase.reseller_profit_amount = Some(
+                profits
+                    .get(&purchase.local_order_id)
+                    .copied()
+                    .unwrap_or_default(),
+            );
+        }
         Ok(page)
     }
 
@@ -1017,6 +1118,14 @@ impl ProcurementService {
     /// (refund status synced when the supplier reports one).
     pub async fn detail(&self, id: Id) -> Result<ProcurementOrder> {
         let mut order = self.get(id).await?;
+        order.reseller_profit_amount = Some(
+            self.repo
+                .reseller_profits(&[order.local_order_id])
+                .await?
+                .get(&order.local_order_id)
+                .copied()
+                .unwrap_or_default(),
+        );
         self.fill_refunds(&mut order).await;
         let (preview, lines) = truncate_payload(&order.upstream_payload, PAYLOAD_PREVIEW_MAX_LINES);
         order.upstream_payload = preview;
@@ -1136,15 +1245,100 @@ impl ProcurementService {
         Ok(())
     }
 
-    /// Manual cancel = the admin gives up on the purchase (LQA-I3). The local order is
-    /// rolled back and **refunded** (buyer wallet; guest orders get a manual refund
-    /// record the admin pays back through the original method) when nothing can still
-    /// be delivered: never submitted / failed / rejected / held for review (the admin
-    /// checked the supplier), or accepted and canceled at the supplier. An accepted
-    /// purchase the supplier refused to cancel, or a submitted one whose answer is
-    /// unknown, is canceled locally without a refund (goods may still arrive) and the
-    /// admin decides through the order refund.
+    /// Cancel only after the supplier's monetary boundary is settled, then keep
+    /// the historical admin cancellation/refund behavior.
     pub async fn cancel(&self, id: Id) -> Result<CancelOutcome> {
+        let p = self.stop_purchase(id).await?;
+        if let Err(error) = self.lifecycle.rollback_failed(p.local_order_id).await {
+            tracing::warn!(%error, local_order_id = p.local_order_id, "local order rollback failed");
+        }
+        let refund = self
+            .lifecycle
+            .refund_failed(
+                p.local_order_id,
+                &format!("采购失败退款 {}", p.local_order_no),
+            )
+            .await?;
+        Ok(CancelOutcome { refund })
+    }
+
+    /// Read-only: a request may stop a queue/known supplier task. Unknown receipts
+    /// and purchased-but-undelivered goods never become refundable by relabeling.
+    pub async fn can_stop_for_refund(
+        &self,
+        order: &zs_domain::order::model::Order,
+    ) -> Result<bool> {
+        let targets = if order.children.is_empty() {
+            vec![order]
+        } else {
+            order.children.iter().collect()
+        };
+        let mut found = false;
+        for target in targets {
+            let Some(p) = self.repo.get_by_local_order_id(target.id).await? else {
+                if target
+                    .items
+                    .iter()
+                    .any(|item| item.fulfillment_type == "upstream")
+                    && target.fulfillment.is_none()
+                {
+                    return Ok(false);
+                }
+                continue;
+            };
+            let safe_final = matches!(
+                p.status,
+                ProcurementStatus::Canceled | ProcurementStatus::Refunded
+            ) || (matches!(
+                p.status,
+                ProcurementStatus::Fulfilled | ProcurementStatus::Completed
+            ) && target.fulfillment.is_some());
+            if safe_final {
+                continue;
+            }
+            if p.has_held_delivery || maybe_executed(&p.error_message) {
+                return Ok(false);
+            }
+            let local_queue = matches!(
+                p.status,
+                ProcurementStatus::Pending
+                    | ProcurementStatus::Failed
+                    | ProcurementStatus::Rejected
+            ) && !p.upstream_ref().is_known();
+            if !local_queue
+                && !(p.status == ProcurementStatus::Accepted && p.upstream_ref().is_known())
+            {
+                return Ok(false);
+            }
+            found = true;
+        }
+        Ok(found)
+    }
+
+    pub async fn stop_for_refund(&self, order: &zs_domain::order::model::Order) -> Result<()> {
+        let targets = if order.children.is_empty() {
+            vec![order]
+        } else {
+            order.children.iter().collect()
+        };
+        for target in targets {
+            if let Some(p) = self.repo.get_by_local_order_id(target.id).await?
+                && !matches!(
+                    p.status,
+                    ProcurementStatus::Canceled
+                        | ProcurementStatus::Refunded
+                        | ProcurementStatus::Fulfilled
+                        | ProcurementStatus::Completed
+                        | ProcurementStatus::StockRecovered
+                )
+            {
+                self.stop_purchase(p.id).await?;
+            }
+        }
+        Ok(())
+    }
+
+    async fn stop_purchase(&self, id: Id) -> Result<ProcurementOrder> {
         let p = self.get(id).await?;
         let open = [
             ProcurementStatus::Pending,
@@ -1157,28 +1351,49 @@ impl ProcurementService {
         if !open.contains(&p.status) {
             return Err(status_invalid());
         }
-        let mut settled = matches!(
+        if p.has_held_delivery || maybe_executed(&p.error_message) {
+            return Err(Error::bad_request("error.order_procurement_processing"));
+        }
+        let never_submitted = matches!(
             p.status,
-            ProcurementStatus::Pending
-                | ProcurementStatus::Failed
-                | ProcurementStatus::Rejected
-                | ProcurementStatus::ManualReview
-        );
-        if p.status == ProcurementStatus::Accepted
-            && let Ok((_, client)) = self.connections.client_of(p.connection_id).await
-            && client.addressable(&p.upstream_ref())
-        {
-            match client.cancel_order(&p.upstream_ref()).await {
-                Ok(()) => settled = true,
-                Err(error) => {
-                    tracing::warn!(%error, procurement_order_id = p.id, "cancel upstream order failed");
+            ProcurementStatus::Pending | ProcurementStatus::Failed | ProcurementStatus::Rejected
+        ) && !p.upstream_ref().is_known()
+            && !maybe_executed(&p.error_message)
+            && !p.has_held_delivery;
+        let mut settled = never_submitted;
+        // An executing submit, retryable failure or unknown result cannot be
+        // canceled/refunded by relabeling it. Wait for a supplier final result.
+        if !never_submitted {
+            if p.status != ProcurementStatus::Accepted || !p.upstream_ref().is_known() {
+                return Err(Error::bad_request("error.order_procurement_processing"));
+            }
+            if let Ok((_, client)) = self.connections.client_of(p.connection_id).await
+                && client.addressable(&p.upstream_ref())
+            {
+                match client.cancel_order(&p.upstream_ref()).await {
+                    Ok(()) => settled = true,
+                    Err(error) => {
+                        tracing::warn!(%error, procurement_order_id = p.id, "cancel upstream order failed");
+                    }
                 }
             }
         }
+        if !settled {
+            // Failed cancellation does not stop polling a task that may still
+            // deliver. Keep it processing and forbid any buyer refund.
+            self.alert(
+                &p,
+                "supplier cancellation unconfirmed; purchase remains processing",
+            )
+            .await;
+            return Err(Error::bad_request("error.order_procurement_processing"));
+        }
         let change = ProcurementChange {
             status: Some(ProcurementStatus::Canceled),
-            error_message: Some(if settled {
-                "manually canceled".into()
+            error_message: Some(if never_submitted {
+                "manually canceled before submission".into()
+            } else if settled {
+                "supplier cancellation confirmed".into()
             } else {
                 "manually canceled (supplier cancel not confirmed: no refund)".into()
             }),
@@ -1194,31 +1409,11 @@ impl ProcurementService {
         if !changed {
             return Err(status_invalid());
         }
-        if let Err(error) = self.lifecycle.rollback_failed(p.local_order_id).await {
-            tracing::warn!(%error, local_order_id = p.local_order_id, "local order rollback failed");
-        }
-        if !settled {
-            self.alert(
-                &p,
-                "canceled by an admin; supplier cancel not confirmed, no refund",
-            )
-            .await;
-            return Ok(CancelOutcome::default());
-        }
-        let refund = self
-            .lifecycle
-            .refund_failed(
-                p.local_order_id,
-                &format!("采购失败退款 {}", p.local_order_no),
-            )
-            .await
-            .map_err(|e| e.or_internal(keys::PROCUREMENT_CANCEL_FAILED))?;
         tracing::info!(
             procurement_order_id = p.id,
-            ?refund,
-            "procurement canceled and refunded"
+            "procurement stopped before buyer refund"
         );
-        Ok(CancelOutcome { refund })
+        Ok(p)
     }
 
     /// Purchase orders needing an admin (LQA-I3), keyed by local order id.

@@ -61,9 +61,14 @@ async fn sync_creates_all_tables_idempotently() {
         .iter()
         .map(|row| row.try_get("", "name").unwrap())
         .collect();
-    assert_eq!(rows.len(), 79, "tables: {names:?}");
+    assert_eq!(rows.len(), 80, "tables: {names:?}");
     assert!(names.iter().any(|name| name == "gateway_refund_attempts"));
     assert!(names.iter().any(|name| name == "personal_api_keys"));
+    assert!(
+        names
+            .iter()
+            .any(|name| name == "procurement_stock_recoveries")
+    );
 }
 
 // RSL-13: historical paid withdrawals get one debit at their original payout

@@ -42,6 +42,7 @@ pub struct AdminOrderDetail {
     pub promotion_name: String,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub payments: Vec<AdminPayment>,
+    pub reseller_item_profit_amounts: HashMap<Id, zs_shared::money::Amount>,
 }
 
 impl OrderService {
@@ -198,6 +199,7 @@ impl OrderService {
                 admin_payment(p, name, &refs)
             })
             .collect();
+        let reseller_item_profit_amounts = self.deps.repo.reseller_item_profits(order.id).await?;
         order.truncate_fulfillment_payload();
         Ok(AdminOrderDetail {
             order,
@@ -206,6 +208,7 @@ impl OrderService {
             coupon_code,
             promotion_name,
             payments,
+            reseller_item_profit_amounts,
         })
     }
 

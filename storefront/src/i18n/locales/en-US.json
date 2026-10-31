@@ -1615,6 +1615,8 @@
       "currencyKinds": "Currencies",
       "statusAll": "All statuses",
       "statusMap": {
+        "fulfilling": "Processing",
+        "partially_delivered": "Partially delivered",
         "pending_payment": "Pending payment",
         "paid": "Paid",
         "completed": "Completed",
@@ -1707,6 +1709,7 @@
     "paymentTitle": "Payment Info"
   },
   "orderDetail": {
+    "refundProcessing": "Upstream procurement is processing or its result is uncertain. Refunds require a confirmed final result.",
     "title": "Order Detail",
     "refundNotice": "Bought the wrong item or no longer need it? Request a refund to the original payment method. Used cards require manual review.",
     "requestRefund": "Request Refund",

@@ -12,6 +12,7 @@ pub mod integration_processed_events;
 pub mod jobs;
 pub mod personal_api_keys;
 pub mod procurement_deliveries;
+pub mod procurement_stock_recoveries;
 pub mod zs_catalog_snapshots;
 pub mod zs_change_log;
 pub mod zs_order_requests;

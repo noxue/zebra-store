@@ -1615,6 +1615,8 @@
       "currencyKinds": "幣種數量",
       "statusAll": "全部狀態",
       "statusMap": {
+        "fulfilling": "處理中",
+        "partially_delivered": "部分交付",
         "pending_payment": "待支付",
         "paid": "已支付",
         "completed": "已完成",
@@ -1707,6 +1709,7 @@
     "paymentTitle": "支付資訊"
   },
   "orderDetail": {
+    "refundProcessing": "上游採購處理中或結果尚未確定，完成核實前無法退款。",
     "title": "訂單詳情",
     "refundNotice": "如果買錯或不再需要，可以申請退款；退款成功後，款項將原路返回。已使用的卡密需人工核查。",
     "requestRefund": "申請原路退款",

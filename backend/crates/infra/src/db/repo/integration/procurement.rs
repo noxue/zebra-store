@@ -23,6 +23,7 @@ use super::orders::SeaIntegrationOrders;
 use crate::db::entity::{
     procurement_deliveries, procurement_orders, product_mappings, sku_mappings,
 };
+use crate::db::repo::order::consistency;
 use crate::db::repo::support::{DbResultExt, from_json, to_json};
 
 /// SeaORM implementation of [`ProcurementRepo`].
@@ -130,6 +131,7 @@ pub(crate) fn to_domain(m: procurement_orders::Model) -> ProcurementOrder {
         upstream_amount: Amount::new(m.upstream_amount),
         upstream_currency: m.upstream_currency,
         local_sell_amount: Amount::new(m.local_sell_amount),
+        reseller_profit_amount: None,
         currency: m.currency,
         error_message: m.error_message,
         retry_count: m.retry_count,
@@ -214,6 +216,40 @@ fn filter_condition(f: &ProcurementFilter, with_status: bool) -> Condition {
 
 #[async_trait]
 impl ProcurementRepo for SeaProcurementRepo {
+    async fn reseller_profits(&self, ids: &[Id]) -> Result<HashMap<Id, Amount>> {
+        use crate::db::entity::{order_items, orders};
+        use crate::db::repo::order::read::SeaOrderRepo;
+        use zs_domain::order::ports::OrderRepo;
+        let targets = orders::Entity::find()
+            .filter(orders::Column::Id.is_in(ids.to_vec()))
+            .all(&self.db)
+            .await
+            .dom()?;
+        let items = order_items::Entity::find()
+            .filter(order_items::Column::OrderId.is_in(ids.to_vec()))
+            .filter(order_items::Column::DeletedAt.is_null())
+            .all(&self.db)
+            .await
+            .dom()?;
+        let repo = SeaOrderRepo::new(self.db.clone());
+        let mut roots = HashMap::new();
+        let mut out = HashMap::new();
+        for target in targets {
+            let root = target.parent_id.filter(|id| *id > 0).unwrap_or(target.id);
+            if let std::collections::hash_map::Entry::Vacant(entry) = roots.entry(root) {
+                entry.insert(repo.reseller_item_profits(root).await?);
+            }
+            let amount = items
+                .iter()
+                .filter(|item| item.order_id == target.id)
+                .filter_map(|item| roots.get(&root).and_then(|shares| shares.get(&item.id)))
+                .copied()
+                .fold(Amount::ZERO, |sum, value| sum + value);
+            out.insert(target.id, amount);
+        }
+        Ok(out)
+    }
+
     async fn get(&self, id: Id) -> Result<Option<ProcurementOrder>> {
         self.first(Condition::all().add(procurement_orders::Column::Id.eq(id)))
             .await
@@ -247,6 +283,8 @@ impl ProcurementRepo for SeaProcurementRepo {
         // Existence check and insert share one transaction (SQLite serializes writers;
         // other backends rely on the order group calling this once per payment).
         let txn = self.db.begin().await.dom()?;
+        let order = consistency::lock_family(&txn, new.local_order_id).await?;
+        consistency::ensure_procurement_open(&txn, &order).await?;
         let exists = procurement_orders::Entity::find()
             .filter(procurement_orders::Column::LocalOrderId.eq(new.local_order_id))
             .filter(procurement_orders::Column::DeletedAt.is_null())
@@ -291,6 +329,23 @@ impl ProcurementRepo for SeaProcurementRepo {
         change: &ProcurementChange,
         now: DateTime<Utc>,
     ) -> Result<bool> {
+        let txn = self.db.begin().await.dom()?;
+        let row = procurement_orders::Entity::find_by_id(id)
+            .one(&txn)
+            .await
+            .dom()?;
+        let Some(row) = row else {
+            return Ok(false);
+        };
+        let order = consistency::lock_family(&txn, row.local_order_id).await?;
+        // Only executable transitions need an open buyer order. Supplier results
+        // still persist for reconciliation even when delivery is now prohibited.
+        if matches!(
+            change.status,
+            Some(ProcurementStatus::Pending | ProcurementStatus::Submitted)
+        ) {
+            consistency::ensure_procurement_open(&txn, &order).await?;
+        }
         use procurement_orders::Column as C;
         let mut upd =
             procurement_orders::Entity::update_many().col_expr(C::UpdatedAt, Expr::value(now));
@@ -325,13 +380,9 @@ impl ProcurementRepo for SeaProcurementRepo {
         if !from.is_empty() {
             q = q.filter(C::Status.is_in(from.iter().map(|s| s.as_str())));
         }
-        let Some(delivery) = &change.held_delivery else {
-            return Ok(q.exec(&self.db).await.dom()?.rows_affected > 0);
-        };
-        // The guarded status change and the held delivery commit together.
-        let txn = self.db.begin().await.dom()?;
+        // The guarded status change and held delivery commit with the order lock.
         let changed = q.exec(&txn).await.dom()?.rows_affected > 0;
-        if changed {
+        if changed && let Some(delivery) = &change.held_delivery {
             hold_delivery(&txn, id, delivery, now).await?;
         }
         txn.commit().await.dom()?;

@@ -74,7 +74,11 @@ impl ProcurementLifecycle for FakeLifecycle {
         Ok(())
     }
 
-    async fn deliver_upstream(&self, order_id: Id, d: &UpstreamDelivery) -> zs_domain::Result<()> {
+    async fn deliver_upstream(
+        &self,
+        order_id: Id,
+        d: &UpstreamDelivery,
+    ) -> zs_domain::Result<zs_domain::integration::hooks::DeliveryDisposition> {
         if *self.fail_delivery.lock().unwrap() {
             self.calls
                 .lock()
@@ -87,7 +91,7 @@ impl ProcurementLifecycle for FakeLifecycle {
             .unwrap()
             .push(format!("deliver:{order_id}"));
         self.deliveries.lock().unwrap().push((order_id, d.clone()));
-        Ok(())
+        Ok(zs_domain::integration::hooks::DeliveryDisposition::Delivered)
     }
 
     async fn rollback_failed(&self, order_id: Id) -> zs_domain::Result<()> {

@@ -18,6 +18,8 @@ import {
   itemDiscountTotal,
   itemPaidAmount,
   itemProfit,
+  itemOwnerProfit,
+  ownerOrderProfit,
   itemRefundAmount,
   manualSubmissionRows,
   orderPaymentFee,
@@ -259,7 +261,10 @@ export default defineComponent({
               </div>
             )}
             <div class="font-medium text-success-text">
-              {t('admin.orders.itemProfit')}：{formatMoney(itemProfit(owner, item, index).toFixed(2), cur)}
+              {t('admin.dashboard.kpi.ownerProfit')}：{formatMoney(itemOwnerProfit(owner, item, index, props.order?.reseller_item_profit_amounts).toFixed(2), cur)}
+            </div>
+            <div class="text-sm text-muted">
+              {t('admin.dashboard.kpi.totalProfit')}：{formatMoney(itemProfit(owner, item, index).toFixed(2), cur)}
             </div>
           </div>
         </div>
@@ -351,6 +356,7 @@ export default defineComponent({
 
     const renderRefundCard = (o: AdminOrder) => {
       const days = props.maxRefundDays
+      if (o.refund_mode === 'processing') return <Section title={t('admin.orders.refundCardTitle')}><p>{t('admin.orders.procurementProcessing')}</p></Section>
       if (!shouldShowRefundCard(o, days) && !o.original_refund_supported) return null
       if (o.refund_state && ['checking', 'processing', 'syncing'].includes(o.refund_state)) {
         return <Section title={t('admin.orders.refundCardTitle')}>
@@ -584,7 +590,8 @@ export default defineComponent({
                     </div>
                   )}
                   <div class="rounded-zs border border-success/40 bg-success-soft px-4 py-2 text-sm font-semibold text-success-text">
-                    {t('admin.orders.orderProfit')}：{formatMoney(orderProfit(o).toFixed(2), cur)}
+                    {t('admin.dashboard.kpi.ownerProfit')}：{formatMoney(ownerOrderProfit(o).toFixed(2), cur)}
+                    <p>{t('admin.dashboard.kpi.totalProfit')}：{formatMoney(orderProfit(o).toFixed(2), cur)}</p>
                   </div>
                 </div>
               </>

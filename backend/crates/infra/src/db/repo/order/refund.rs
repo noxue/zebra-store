@@ -20,7 +20,7 @@ use zs_domain::wallet::ports::BalanceChangeRequest;
 use zs_domain::{Error, Id, Result};
 use zs_shared::money::Amount;
 
-use super::{map, ops, wallet};
+use super::{consistency, map, ops, wallet};
 use crate::db::entity::{
     card_secret_batches, card_secrets, gateway_refund_attempts, order_refund_records, orders,
     payments, product_skus,
@@ -76,23 +76,8 @@ pub(crate) async fn reserve_gateway_refund_in<C: ConnectionTrait>(
         .await
         .dom()?
         .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
-    // Delivery takes the order row lock before checking attempts. Hold that same lock
-    // while publishing the reservation so delivery cannot pass the check concurrently.
-    // Fulfillment of a child may update its parent. Lock children first to match
-    // that ordering and avoid a child -> parent / parent -> child deadlock.
-    orders::Entity::find()
-        .filter(orders::Column::ParentId.eq(input.order_id))
-        .order_by_asc(orders::Column::Id)
-        .lock_exclusive()
-        .all(conn)
-        .await
-        .dom()?;
-    orders::Entity::find_by_id(input.order_id)
-        .lock_exclusive()
-        .one(conn)
-        .await
-        .dom()?
-        .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
+    let order = consistency::lock_family(conn, input.order_id).await?;
+    consistency::ensure_refundable(conn, &order).await?;
     if let Some(existing) = gateway_refund_attempts::Entity::find()
         .filter(gateway_refund_attempts::Column::PaymentId.eq(input.payment_id))
         .filter(gateway_refund_attempts::Column::Status.is_in([
@@ -171,6 +156,13 @@ pub(crate) async fn claim_gateway_refund_submission_in<C: ConnectionTrait>(
     attempt_id: Id,
     now: DateTime<Utc>,
 ) -> Result<bool> {
+    let attempt = gateway_refund_attempts::Entity::find_by_id(attempt_id)
+        .one(conn)
+        .await
+        .dom()?
+        .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
+    let order = consistency::lock_family(conn, attempt.order_id).await?;
+    consistency::ensure_refundable(conn, &order).await?;
     let changed = gateway_refund_attempts::Entity::update_many()
         .col_expr(
             gateway_refund_attempts::Column::Status,
@@ -422,16 +414,11 @@ pub(crate) async fn refund_in<C: ConnectionTrait>(
 ) -> Result<RefundDone> {
     let now = req.now;
     let not_found = || Error::not_found(keys::ORDER_NOT_FOUND);
-    // Lock order: parent first, then the child (the parent-refund path locks the parent
-    // and then updates its children), so the two paths never deadlock.
-    let head = map::load(conn, req.order_id).await?.ok_or_else(not_found)?;
-    let parent = match head.parent_id.filter(|p| *p > 0) {
-        Some(pid) => map::load_locked(conn, pid).await?,
+    let order = consistency::lock_family(conn, req.order_id).await?;
+    let parent = match order.parent_id.filter(|p| *p > 0) {
+        Some(pid) => map::load(conn, pid).await?,
         None => None,
     };
-    let order = map::load_locked(conn, req.order_id)
-        .await?
-        .ok_or_else(not_found)?;
     let gateway_attempt = if let Some(attempt_id) = req.gateway_refund_attempt_id {
         let attempt = gateway_refund_attempts::Entity::find_by_id(attempt_id)
             .lock_exclusive()
@@ -501,6 +488,7 @@ pub(crate) async fn refund_in<C: ConnectionTrait>(
         }
         None
     };
+    consistency::ensure_refundable(conn, &order).await?;
     // A child keeps the checkout split snapshot. The successful payment and
     // wallet/online split belong to its parent.
     let paid_order = parent.as_ref().unwrap_or(&order);

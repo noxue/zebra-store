@@ -21,6 +21,7 @@ export interface ProcurementRow {
   status: string
   upstream_amount: Money
   upstream_currency?: string
+  reseller_profit_amount?: Money
   local_sell_amount: Money
   currency?: string
   error_message?: string

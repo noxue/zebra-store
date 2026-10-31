@@ -129,6 +129,10 @@ pub trait OrderRepo: Send + Sync {
     /// Unconditional status write used by the lazy refund-status sync.
     async fn set_status(&self, id: Id, status: OrderStatus, now: DateTime<Utc>) -> Result<()>;
 
+    /// Net reseller earnings allocated to immutable checkout item ids. Admin-only
+    /// profit presentation; withdrawals never change this sum.
+    async fn reseller_item_profits(&self, order_id: Id) -> Result<HashMap<Id, Amount>>;
+
     async fn refunds_of(&self, order_ids: &[Id]) -> Result<Vec<RefundRecord>>;
     async fn refund(&self, id: Id) -> Result<Option<RefundRecord>>;
     async fn list_refunds(&self, filter: &RefundFilter) -> Result<Page<RefundRecord>>;
@@ -332,6 +336,16 @@ pub trait OrderStore: Send + Sync {
     /// Returns whether the order changed.
     async fn upstream_fulfilling(&self, order_id: Id, now: DateTime<Utc>) -> Result<bool>;
 
+    /// Recover a never-disclosed late supplier delivery after a full buyer refund.
+    /// True means durably recovered, including an idempotent repeat; false means
+    /// this is not a fully refunded order. Ambiguity is held for staff review.
+    async fn recover_refunded_upstream(
+        &self,
+        order_id: Id,
+        delivery: &UpstreamDelivery,
+        now: DateTime<Utc>,
+    ) -> Result<bool>;
+
     /// Supplier delivery: one `upstream` fulfillment per order (idempotent), order
     /// `paid|fulfilling → delivered` (conditional), parent recomputed. `None` when the
     /// fulfillment already existed.
@@ -344,6 +358,10 @@ pub trait OrderStore: Send + Sync {
 
     /// Procurement failed: `fulfilling → paid` (conditional) with the parent recomputed.
     async fn upstream_rollback(&self, order_id: Id, now: DateTime<Utc>) -> Result<bool>;
+
+    /// Advisory availability check; monetary transactions repeat this under the
+    /// same order-family lock used by procurement and delivery.
+    async fn ensure_procurement_refundable(&self, order_id: Id) -> Result<()>;
 
     /// Records a refund (RFD-01 … RFD-04), with affiliate and reseller claw-backs.
     async fn refund(&self, request: &RefundRequest) -> Result<RefundDone>;
