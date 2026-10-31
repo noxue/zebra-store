@@ -11,7 +11,7 @@ use zs_domain::order::model::{Order, RefundRecord, keys, refund_type};
 use zs_domain::order::ports::{RefundDone, RefundRequest};
 use zs_domain::order::refund::{payment_fee_refund_amount, plan_refund, refundable_fee_snapshot};
 use zs_domain::payment::refund::{
-    GatewayRefundAttempt, GatewayRefundAttemptUpdate, NewGatewayRefundAttempt,
+    AdminRefundOptions, GatewayRefundAttempt, GatewayRefundAttemptUpdate, NewGatewayRefundAttempt,
     ReservedGatewayRefund, status as gateway_refund_status,
 };
 use zs_domain::reseller::ports::OrderRefunded;
@@ -21,7 +21,10 @@ use zs_domain::{Error, Id, Result};
 use zs_shared::money::Amount;
 
 use super::{map, ops, wallet};
-use crate::db::entity::{gateway_refund_attempts, order_refund_records, orders, payments};
+use crate::db::entity::{
+    card_secret_batches, card_secrets, gateway_refund_attempts, order_refund_records, orders,
+    payments, product_skus,
+};
 use crate::db::repo::affiliate::clawback_on_refund;
 use crate::db::repo::payment::records::to_domain as payment_to_domain;
 use crate::db::repo::reseller::ledger::deduct_refund_in;
@@ -48,6 +51,11 @@ fn gateway_attempt_to_domain(model: gateway_refund_attempts::Model) -> GatewayRe
         remark: model.remark,
         payment_fee_refunded: model.payment_fee_refunded,
         card_confirmed: model.card_confirmed,
+        admin_options: AdminRefundOptions {
+            admin_id: model.admin_refund_by,
+            force_refund: model.force_refund,
+            restock_cards: model.restock_cards,
+        },
         payload,
         error: model.error,
         refund_record_id: model.refund_record_id,
@@ -114,6 +122,8 @@ pub(crate) async fn reserve_gateway_refund_in<C: ConnectionTrait>(
         .filter(gateway_refund_attempts::Column::Amount.eq(input.amount.decimal()))
         .filter(gateway_refund_attempts::Column::Remark.eq(input.remark.clone()))
         .filter(gateway_refund_attempts::Column::PaymentFeeRefunded.eq(input.payment_fee_refunded))
+        .filter(gateway_refund_attempts::Column::ForceRefund.eq(input.admin_options.force_refund))
+        .filter(gateway_refund_attempts::Column::RestockCards.eq(input.admin_options.restock_cards))
         .order_by_desc(gateway_refund_attempts::Column::Id)
         .lock_exclusive()
         .one(conn)
@@ -126,6 +136,9 @@ pub(crate) async fn reserve_gateway_refund_in<C: ConnectionTrait>(
         });
     }
     let model = gateway_refund_attempts::ActiveModel {
+        admin_refund_by: Set(input.admin_options.admin_id),
+        force_refund: Set(input.admin_options.force_refund),
+        restock_cards: Set(input.admin_options.restock_cards),
         order_id: Set(input.order_id),
         payment_id: Set(input.payment_id),
         channel_id: Set(input.channel_id),
@@ -497,7 +510,15 @@ pub(crate) async fn refund_in<C: ConnectionTrait>(
     if req.to_wallet && order.user_id == 0 {
         return Err(Error::invalid());
     }
-    let plan = plan_refund(&order, req.amount, req.max_refund_days, now)?;
+    let forced = gateway_attempt
+        .as_ref()
+        .is_some_and(|a| a.force_refund && a.admin_refund_by.is_some());
+    let plan = plan_refund(
+        &order,
+        req.amount,
+        if forced { 0 } else { req.max_refund_days },
+        now,
+    )?;
     // LQA-R4: a child refund also counts against its parent, so parent + child refunds
     // can never exceed what the buyer paid, and the parent shows the refunded total.
     if let Some(parent) = &parent
@@ -607,7 +628,7 @@ pub(crate) async fn refund_in<C: ConnectionTrait>(
     .await
     .map_err(|e| Error::internal(e).or_internal(keys::ORDER_UPDATE_FAILED))?;
 
-    if let Some(attempt) = gateway_attempt {
+    if let Some(attempt) = &gateway_attempt {
         gateway_refund_attempts::Entity::update_many()
             .col_expr(
                 gateway_refund_attempts::Column::Status,
@@ -636,6 +657,14 @@ pub(crate) async fn refund_in<C: ConnectionTrait>(
             .exec(conn)
             .await
             .dom()?;
+    }
+
+    if let Some(attempt) = &gateway_attempt
+        && attempt.force_refund
+        && attempt.restock_cards
+        && let Some(admin_id) = attempt.admin_refund_by
+    {
+        restock_cards_in(conn, &order, req.amount, record.id, admin_id, now).await?;
     }
 
     let reason = if req.to_wallet {
@@ -688,6 +717,116 @@ pub(crate) async fn refund_in<C: ConnectionTrait>(
         record: map::refund_to_domain(record),
         transaction,
     })
+}
+
+/// Runs after provider success inside the refund transaction and its idempotency gate.
+async fn restock_cards_in<C: ConnectionTrait>(
+    conn: &C,
+    order: &Order,
+    amount: Amount,
+    record_id: Id,
+    admin_id: Id,
+    now: DateTime<Utc>,
+) -> Result<()> {
+    let mut targets = zs_domain::order::refund::restock_targets(order, amount)?;
+    targets.sort_by_key(|target| target.sku_id);
+    for target in targets {
+        // Serialize credential returns for each SKU, including codes received directly upstream.
+        if product_skus::Entity::find_by_id(target.sku_id)
+            .lock_exclusive()
+            .one(conn)
+            .await
+            .dom()?
+            .is_none()
+        {
+            tracing::warn!(
+                sku_id = target.sku_id,
+                refund_record_id = record_id,
+                "refund_restock_sku_missing"
+            );
+            continue;
+        }
+        let mut new_cards = Vec::new();
+        for secret in &target.cards {
+            let existing = card_secrets::Entity::find()
+                .filter(card_secrets::Column::ProductId.eq(target.product_id))
+                .filter(card_secrets::Column::SkuId.eq(target.sku_id))
+                .filter(card_secrets::Column::Secret.eq(secret.clone()))
+                .filter(card_secrets::Column::DeletedAt.is_null())
+                .lock_exclusive()
+                .all(conn)
+                .await
+                .dom()?;
+            if existing.is_empty() {
+                new_cards.push(secret.clone());
+                continue;
+            }
+            // Never duplicate an existing available credential or reactivate another buyer's card.
+            if existing
+                .iter()
+                .any(|card| card.order_id != Some(target.order_id))
+            {
+                continue;
+            }
+            if let Some(card) = existing.first() {
+                card_secrets::Entity::update_many()
+                    .col_expr(card_secrets::Column::Status, Expr::value("available"))
+                    .col_expr(
+                        card_secrets::Column::OrderId,
+                        Expr::value(Option::<i64>::None),
+                    )
+                    .col_expr(
+                        card_secrets::Column::ReservedAt,
+                        Expr::value(Option::<DateTime<Utc>>::None),
+                    )
+                    .col_expr(
+                        card_secrets::Column::UsedAt,
+                        Expr::value(Option::<DateTime<Utc>>::None),
+                    )
+                    .col_expr(card_secrets::Column::UpdatedAt, Expr::value(now))
+                    .filter(card_secrets::Column::Id.eq(card.id))
+                    .filter(card_secrets::Column::OrderId.eq(target.order_id))
+                    .filter(card_secrets::Column::Status.is_in(["used", "reserved"]))
+                    .exec(conn)
+                    .await
+                    .dom()?;
+            }
+        }
+        if new_cards.is_empty() {
+            continue;
+        }
+        let batch = card_secret_batches::ActiveModel {
+            product_id: Set(target.product_id),
+            sku_id: Set(target.sku_id),
+            batch_no: Set(format!("REFUND-{record_id}-{}", target.order_id)),
+            source: Set("manual_preconverted".into()),
+            total_count: Set(i32::try_from(new_cards.len()).map_err(Error::internal)?),
+            note: Set(format!("refund_restock:{}:{record_id}", order.order_no)),
+            created_by: Set(Some(admin_id)),
+            created_at: Set(now),
+            updated_at: Set(now),
+            ..Default::default()
+        }
+        .insert(conn)
+        .await
+        .dom()?;
+        for secret in new_cards {
+            card_secrets::ActiveModel {
+                product_id: Set(target.product_id),
+                sku_id: Set(target.sku_id),
+                batch_id: Set(Some(batch.id)),
+                secret: Set(secret),
+                status: Set("available".into()),
+                created_at: Set(now),
+                updated_at: Set(now),
+                ..Default::default()
+            }
+            .insert(conn)
+            .await
+            .dom()?;
+        }
+    }
+    Ok(())
 }
 
 /// Switches the fee-refunded flag of a manual refund (lock order, then record; RFD-01).

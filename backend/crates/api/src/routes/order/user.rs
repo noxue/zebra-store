@@ -406,7 +406,7 @@ async fn list(
         )
         .await?;
     Ok(Paged(
-        result.items.iter().map(OrderSummary::from).collect(),
+        s.svc.order.service.order_summaries(&result.items).await?,
         Pagination::new(page, result.total),
     ))
 }

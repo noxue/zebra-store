@@ -923,6 +923,14 @@ const messages = {
       },
     },
     orders: {
+      forceRefund: "管理員強制原路退款",
+      forceRefundHint: "跳過卡密狀態與退款期限核驗；不會自動作廢外部卡密。",
+      restockCards: "退款成功後將卡密回到庫存",
+      restockCardsHint: "預設不回庫。僅首次全額退款可選；請確認卡密未使用。上游發出的卡密將加入對應商品和 SKU 的本地庫存。",
+      restockFullOnly: "卡密回庫僅支援首次全額退款，請填寫訂單全額。",
+      forceRefundConfirm: "確認跳過卡密核驗，透過付款通道原路退款？卡密不回庫。",
+      forceRefundConfirmRestock: "確認卡密未使用，並跳過核驗發起原路退款？通道退款成功後，卡密將回到對應商品和 SKU 的庫存。",
+
       title: '訂單管理',
       stockShortageAfterPayment: '此訂單已付款，但付款時庫存不足。請核實入帳後補貨並人工處理，或按原支付渠道退款；勿重複交付。',
       empty: '暫無訂單',
@@ -3119,12 +3127,13 @@ const messages = {
       },
       contact: {
         title: '聯絡方式',
-        subtitle: '全域通用配置',
+        subtitle: '僅在主站的獨立客服頁顯示；分站使用各自的客服設定',
         telegram: 'Telegram 連結',
         telegramPlaceholder: 'https://telegram.me/...',
         whatsapp: 'WhatsApp 連結',
         whatsappPlaceholder: 'https://wa.me/...',
         wechatId: '微信號',
+        telegramQrCode: 'Telegram 客服二維碼',
         wechatQrCode: '微信客服二維碼',
         qqNumber: 'QQ 號',
         qqGroup: 'QQ 群號',
@@ -3730,6 +3739,7 @@ const messages = {
       },
     },
     resellerProfiles: {
+      metadata: { title: "管理員記錄", tags: "標籤", tagsHint: "多個標籤用逗號分隔，如姓名、合作管道；最多 20 個，每個 50 字。", note: "備註", noteHint: "僅管理員可見，用於記錄約定等資訊；最多 5000 字。" },
       title: '分銷商審核',
       empty: '暫無分銷商資料',
       filters: {
@@ -4077,6 +4087,7 @@ const messages = {
         email: '客服郵箱',
         supportUrl: '客服連結',
         wechatId: '微信號',
+        telegramQrCode: 'Telegram 客服二維碼',
         wechatQrCode: '微信客服二維碼',
         qqNumber: 'QQ 號',
         qqGroup: 'QQ 群號',

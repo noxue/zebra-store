@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { ArrowLeft, CreditCard } from 'lucide-vue-next'
 import { GuestAuthForm } from '@/components/order/GuestAuthForm'
 import { OrderBody, OrderBodySkeleton } from '@/components/order/OrderBody'
+import { OrderProcessingOverlay } from '@/components/order/OrderProcessingOverlay'
 import { Button, Card, EmptyState, SectionTitle } from '@/components/ui'
 import { useGuestOrderDetail } from '@/composables/useGuestOrderDetail'
 import { usePageTitle } from '@/composables/usePageTitle'
@@ -16,6 +17,7 @@ export default defineComponent({
     usePageTitle(() => t('guestOrderDetail.title'))
     return () => (
       <div class="zs-page py-8 sm:py-10">
+        <OrderProcessingOverlay order={d.viewState.value === 'detail' ? d.order.value : null} onRefresh={() => window.location.reload()} />
         <div class="mb-8 flex flex-wrap items-end justify-between gap-4">
           <SectionTitle as="h1" size="xl" title={t('guestOrderDetail.title')} subtitle={t('guestOrderDetail.subtitle')} />
           <RouterLink to="/guest/orders" class="inline-flex items-center gap-1 text-sm font-bold text-muted transition hover:text-primary-text">
@@ -72,7 +74,7 @@ export default defineComponent({
               ) : (
                 <div class="space-y-2">
                   {d.order.value.refund_state === 'needs_review' && <p class="text-sm text-warning-text">{t('orderDetail.refundState.needs_review')}</p>}
-                  <Button size="sm" variant="secondary" to="/about">{t('orderDetail.contactRefundSupport')}</Button>
+                  <Button size="sm" variant="secondary" to="/contact">{t('orderDetail.contactRefundSupport')}</Button>
                 </div>
               )}
             </Card>

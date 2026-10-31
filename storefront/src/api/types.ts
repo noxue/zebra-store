@@ -131,7 +131,7 @@ export interface SiteConfig {
   storefront_template?: string
   nav_config?: NavConfig
   footer_links?: FooterLink[]
-  contact?: { telegram?: string; whatsapp?: string; email?: string; support_url?: string; wechat_id?: string; wechat_qr_code?: string; qq_number?: string; qq_group?: string; wechat_group_qr_code?: string }
+  contact?: { telegram?: string; whatsapp?: string; email?: string; support_url?: string; wechat_id?: string; wechat_qr_code?: string; telegram_qr_code?: string; qq_number?: string; qq_group?: string; wechat_group_qr_code?: string }
   support?: { telegram?: string; whatsapp?: string; email?: string; support_url?: string }
   announcement?: AnnouncementConfig | null
   about?: AboutConfig
@@ -975,6 +975,7 @@ export interface ResellerSiteConfigPayload {
     support_url?: string
     wechat_id?: string
     wechat_qr_code?: string
+    telegram_qr_code?: string
     qq_number?: string
     qq_group?: string
     wechat_group_qr_code?: string
@@ -1034,6 +1035,8 @@ export interface ResellerProductSettingSKUData {
   spec_values: Record<string, unknown>
   base_price_amount: string
   shared_agent_price_amount?: string
+  /** Main-site public sale price, independent of reseller pricing. */
+  retail_price_amount?: string
   is_active: boolean
   setting?: ResellerProductSettingData
   effective_price_amount?: string
@@ -1044,6 +1047,7 @@ export interface ResellerProductSettingProductData {
   slug: string
   title: LocalizedText
   price_amount: string
+  retail_price_amount?: string
   is_active: boolean
 }
 

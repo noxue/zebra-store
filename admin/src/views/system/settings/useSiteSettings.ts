@@ -59,7 +59,7 @@ export function useSiteSettings() {
       site_description: createLocalizedField(),
     },
     currency: 'CNY',
-    contact: { telegram: '', whatsapp: '', wechat_id: '', wechat_qr_code: '', qq_number: '', qq_group: '', wechat_group_qr_code: '' },
+    contact: { telegram: '', whatsapp: '', wechat_id: '', wechat_qr_code: '', telegram_qr_code: '', qq_number: '', qq_group: '', wechat_group_qr_code: '' },
     seo: { title: createLocalizedField(), keywords: createLocalizedField(), description: createLocalizedField() },
     about: {
       hero: { title: createLocalizedField(), subtitle: createLocalizedField() },
@@ -91,6 +91,7 @@ export function useSiteSettings() {
     form.contact.whatsapp = asString(contact.whatsapp)
     form.contact.wechat_id = asString(contact.wechat_id)
     form.contact.wechat_qr_code = asString(contact.wechat_qr_code)
+    form.contact.telegram_qr_code = asString(contact.telegram_qr_code)
     form.contact.qq_number = asString(contact.qq_number)
     form.contact.qq_group = asString(contact.qq_group)
     form.contact.wechat_group_qr_code = asString(contact.wechat_group_qr_code)

@@ -192,3 +192,15 @@ export const getResellerRuleSourceLabelKey = (source?: string): string => {
   if (source === 'profile') return 'defaultRule'
   return 'unknownRule'
 }
+
+/** Main-site retail prices for the same listed SKUs as cost and reseller sale price. */
+export const summarizeProductRecommendedPrice = (detail?: (DetailLike & { product?: { retail_price_amount?: string } }) | null, fallback = '-'): string => {
+  const values = new Set<string>()
+  for (const sku of (detail?.skus || []).filter(isSkuListed)) {
+    const value = String(sku.retail_price_amount || '').trim()
+    if (value) values.add(value)
+  }
+  if (values.size === 0) return detail?.skus?.length ? fallback : detail?.product?.retail_price_amount || fallback
+  const sorted = sortMoney([...values])
+  return sorted.length === 1 ? sorted[0] : `${sorted[0]} - ${sorted[sorted.length - 1]}`
+}

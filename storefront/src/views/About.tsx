@@ -1,9 +1,8 @@
 import { defineComponent } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Check, MessageCircle, Send, Sparkles } from 'lucide-vue-next'
+import { Check, Sparkles } from 'lucide-vue-next'
 import { useAbout } from '@/composables/useAbout'
 import { Card, Mascot } from '@/components/ui'
-import { getImageUrl } from '@/utils/image'
 
 export default defineComponent({
   name: 'AboutView',
@@ -33,7 +32,7 @@ export default defineComponent({
             <Mascot mood="wink" />
           </div>
         </section>
-        {(s.hasIntroduction.value || s.hasServices.value || s.hasContact.value) && (
+        {(s.hasIntroduction.value || s.hasServices.value) && (
           <Card padding="lg">
             <div class="space-y-12">
               {s.hasIntroduction.value && <p class="whitespace-pre-line text-lg leading-relaxed text-muted">{s.introductionText.value}</p>}
@@ -52,59 +51,7 @@ export default defineComponent({
                   </div>
                 </div>
               )}
-              {s.hasContact.value && (
-                <div>
-                  {(s.contactTitle.value || s.hasContactLinks.value) && heading(s.contactTitle.value || t('about.contactUs'))}
-                  {s.contactText.value && <p class="mb-6 whitespace-pre-line text-muted">{s.contactText.value}</p>}
-                  {s.hasContactLinks.value && (
-                    <div class="grid gap-4 sm:grid-cols-2">
-                      {s.contactConfig.value.telegram && (
-                        <a href={s.contactConfig.value.telegram} target="_blank" rel="noopener noreferrer" class="zs-card-hover flex items-center justify-center gap-3 rounded-zs border border-line bg-surface-strong px-6 py-4 font-bold text-fg">
-                          <span class="flex size-9 items-center justify-center rounded-full bg-accent-soft text-accent-text">
-                            <Send class="size-4" />
-                          </span>
-                          Telegram
-                        </a>
-                      )}
-                      {s.contactConfig.value.whatsapp && (
-                        <a href={s.contactConfig.value.whatsapp} target="_blank" rel="noopener noreferrer" class="zs-card-hover flex items-center justify-center gap-3 rounded-zs border border-line bg-surface-strong px-6 py-4 font-bold text-fg">
-                          <span class="flex size-9 items-center justify-center rounded-full bg-success-soft text-success-text">
-                            <MessageCircle class="size-4" />
-                          </span>
-                          WhatsApp
-                        </a>
-                      )}
-                      {s.contactConfig.value.support_url && (
-                        <a href={s.contactConfig.value.support_url} target="_blank" rel="noopener noreferrer" class="zs-card-hover rounded-zs border border-line bg-surface-strong px-6 py-4 font-bold text-fg">{t('about.supportLink')}</a>
-                      )}
-                      {s.contactConfig.value.email && (
-                        <a href={`mailto:${s.contactConfig.value.email}`} class="zs-card-hover rounded-zs border border-line bg-surface-strong px-6 py-4 font-bold text-fg">{t('about.supportEmail')}: {s.contactConfig.value.email}</a>
-                      )}
-                      {s.contactConfig.value.wechat_id && (
-                        <div class="rounded-zs border border-line bg-surface-strong px-6 py-4 font-bold text-fg">{t('about.wechatId')}: <span class="select-all break-all">{s.contactConfig.value.wechat_id}</span></div>
-                      )}
-                      {s.contactConfig.value.qq_number && (
-                        <div class="rounded-zs border border-line bg-surface-strong px-6 py-4 font-bold text-fg">{t('about.qqNumber')}: <span class="select-all break-all">{s.contactConfig.value.qq_number}</span></div>
-                      )}
-                      {s.contactConfig.value.qq_group && (
-                        <div class="rounded-zs border border-line bg-surface-strong px-6 py-4 font-bold text-fg">{t('about.qqGroup')}: <span class="select-all break-all">{s.contactConfig.value.qq_group}</span></div>
-                      )}
-                      {s.contactConfig.value.wechat_qr_code && (
-                        <div class="rounded-zs border border-line bg-surface-strong px-6 py-4 font-bold text-fg">
-                          <p class="mb-3">{t('about.wechatQrCode')}</p>
-                          <a href={getImageUrl(s.contactConfig.value.wechat_qr_code)} target="_blank" rel="noopener noreferrer"><img src={getImageUrl(s.contactConfig.value.wechat_qr_code)} alt={t('about.wechatQrCode')} class="h-36 w-36 max-w-full rounded-zs object-contain" /></a>
-                        </div>
-                      )}
-                      {s.contactConfig.value.wechat_group_qr_code && (
-                        <div class="rounded-zs border border-line bg-surface-strong px-6 py-4 font-bold text-fg">
-                          <p class="mb-3">{t('about.wechatGroupQrCode')}</p>
-                          <a href={getImageUrl(s.contactConfig.value.wechat_group_qr_code)} target="_blank" rel="noopener noreferrer"><img src={getImageUrl(s.contactConfig.value.wechat_group_qr_code)} alt={t('about.wechatGroupQrCode')} class="h-36 w-36 max-w-full rounded-zs object-contain" /></a>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
+
             </div>
           </Card>
         )}

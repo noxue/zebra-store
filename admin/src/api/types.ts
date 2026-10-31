@@ -178,6 +178,7 @@ export interface AdminFulfillment {
 export interface AdminOrder {
   id: number
   order_no: string
+  original_refund_supported?: boolean
   refund_mode?: 'none' | 'automatic' | 'contact_support'
   refund_state?: 'none' | 'checking' | 'processing' | 'awaiting_support' | 'syncing' | 'succeeded' | 'needs_review'
   refund_attempt?: { id: number; status: string; amount: Money; remark: string; payment_fee_refunded: boolean } | null
@@ -982,6 +983,8 @@ export interface AdminResellerProfileRef {
 }
 
 export interface AdminResellerProfile {
+  tags?: string[]
+  admin_note?: string
   id: number
   user_id: number
   status: string
@@ -1050,6 +1053,7 @@ export interface AdminResellerSiteConfigPayload {
     support_url?: string
     wechat_id?: string
     wechat_qr_code?: string
+    telegram_qr_code?: string
     qq_number?: string
     qq_group?: string
     wechat_group_qr_code?: string
@@ -1189,6 +1193,8 @@ export interface AdminResellerProfileApprovePayload {
 }
 
 export interface AdminResellerProfileUpdatePayload {
+  tags?: string[]
+  admin_note?: string
   default_markup_percent?: string
   max_markup_percent?: string
   settlement_status?: string
@@ -1597,6 +1603,11 @@ export interface AdminManualRefundPayload {
   amount: string
   remark?: string
   payment_fee_refunded?: boolean
+}
+
+export interface AdminOriginalRefundPayload extends AdminManualRefundPayload {
+  force_refund?: boolean
+  restock_cards?: boolean
 }
 
 export interface AdminOriginalRefundResponse {

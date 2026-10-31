@@ -2,6 +2,7 @@ import { defineComponent } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { CreditCard, XCircle } from 'lucide-vue-next'
 import { OrderBody, OrderBodySkeleton } from '@/components/order/OrderBody'
+import { OrderProcessingOverlay } from '@/components/order/OrderProcessingOverlay'
 import { Breadcrumb, Button, Card, EmptyState, SectionTitle } from '@/components/ui'
 import { useOrderDetail } from '@/composables/useOrderDetail'
 import { usePageTitle } from '@/composables/usePageTitle'
@@ -14,6 +15,7 @@ export default defineComponent({
     usePageTitle(() => t('orderDetail.title'))
     return () => (
       <div class="zs-page py-8 sm:py-10">
+        <OrderProcessingOverlay order={d.loading.value ? null : d.order.value} onRefresh={() => window.location.reload()} />
         <div class="mb-5">
           <Breadcrumb items={[{ label: t('nav.home'), to: '/' }, { label: t('orders.title'), to: '/me/orders' }, { label: t('orderDetail.title') }]} />
         </div>
@@ -66,7 +68,7 @@ export default defineComponent({
               ) : (
                 <div class="space-y-2">
                   {d.order.value.refund_state === 'needs_review' && <p class="text-sm text-warning-text">{t('orderDetail.refundState.needs_review')}</p>}
-                  <Button size="sm" variant="secondary" to="/about">{t('orderDetail.contactRefundSupport')}</Button>
+                  <Button size="sm" variant="secondary" to="/contact">{t('orderDetail.contactRefundSupport')}</Button>
                 </div>
               )}
             </Card>

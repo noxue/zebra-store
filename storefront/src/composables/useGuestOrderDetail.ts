@@ -1,4 +1,4 @@
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { guestOrderAPI, type GuestCredentials } from '@/api/order'
@@ -10,6 +10,7 @@ import { useConfirmDialog } from '@/composables/useConfirmDialog'
 import { clearGuestOrderAuth, loadGuestOrderAuth, saveGuestOrderAuth } from '@/utils/guestOrderAuth'
 import { resolveGuestOrderDetailViewState } from '@/utils/guestOrderDetailState'
 import { useOrderDisplayHelpers } from './useOrderDisplayHelpers'
+import { useOrderAutoRefresh } from './useOrderAutoRefresh'
 
 /** Guest order detail: credentials form, then the shared order body. */
 export function useGuestOrderDetail() {
@@ -32,31 +33,53 @@ export function useGuestOrderDetail() {
   const showAuthForm = computed(() => !hasAuth.value || authError.value !== '')
   const viewState = computed(() => resolveGuestOrderDetailViewState({ loading: loading.value, order: order.value, showAuthForm: showAuthForm.value }))
 
-  const loadOrder = async () => {
-    loading.value = true
+  let requestVersion = 0
+  let disposed = false
+  const loadOrder = async (silent = false) => {
+    const no = orderNo()
+    const credentials = { ...auth.value }
+    const version = ++requestVersion
+    const isCurrent = () => !disposed && version === requestVersion && no === orderNo()
+      && credentials.email === auth.value.email && credentials.order_password === auth.value.order_password
+    if (!silent) loading.value = true
     try {
       if (!hasAuth.value) {
         order.value = null
         authError.value = t('guestOrderDetail.authRequired')
         return
       }
-      order.value = (await guestOrderAPI.detail(orderNo(), { ...auth.value })).data
+      const response = silent
+        ? await guestOrderAPI.detail(no, credentials, { silentBusinessError: true })
+        : await guestOrderAPI.detail(no, credentials)
+      if (!isCurrent()) return
+      order.value = response.data
       hasManualPayment.value = false
       if (order.value?.status === 'pending_payment' || order.value?.status === 'canceled') {
         try {
-          const latest = await guestOrderAPI.latestPayment({ ...auth.value }, { order_no: order.value.order_no })
+          const latest = await guestOrderAPI.latestPayment(credentials, { order_no: order.value.order_no })
+          if (!isCurrent()) return
           hasManualPayment.value = latest.data?.provider_type === 'manual_qr'
         } catch { /* No active payment attempt. */ }
       }
-      authError.value = ''
+      if (isCurrent()) authError.value = ''
     } catch {
-      order.value = null
-      hasManualPayment.value = false
-      authError.value = t('guestOrderDetail.authInvalid')
+      if (isCurrent() && !silent) {
+        order.value = null
+        hasManualPayment.value = false
+        authError.value = t('guestOrderDetail.authInvalid')
+      }
     } finally {
-      loading.value = false
+      if (isCurrent()) loading.value = false
     }
   }
+
+  useOrderAutoRefresh(order, loading, () => loadOrder(true))
+  watch(() => route.params.order_no, () => {
+    order.value = null
+    hasManualPayment.value = false
+    void loadOrder()
+  })
+  onBeforeUnmount(() => { disposed = true })
 
   const handleAuthSubmit = async () => {
     authError.value = ''
@@ -69,11 +92,13 @@ export function useGuestOrderDetail() {
   }
 
   const clearAuth = () => {
+    requestVersion++
     clearGuestOrderAuth()
     auth.value = { email: '', order_password: '' }
     order.value = null
     hasManualPayment.value = false
     authError.value = t('guestOrderDetail.authRequired')
+    loading.value = false
   }
 
   const requestRefund = async () => {

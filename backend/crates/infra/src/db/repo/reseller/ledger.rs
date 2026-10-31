@@ -635,6 +635,24 @@ pub async fn review_withdraw_in<C: ConnectionTrait>(
         ),
     };
     entries.exec(conn).await.dom()?;
+    if matches!(action, WithdrawAction::Pay) {
+        // RSL-13: a payout is a separate debit in the history. The withdrawn
+        // allocation rows already remove the funds from available/locked sums.
+        let mut payout = entry(
+            req.reseller_id,
+            None,
+            LedgerType::WithdrawPaid,
+            -req.amount,
+            &req.currency,
+            format!("withdraw_paid:{id}"),
+            json!({ "processed_by": admin_id }),
+            LedgerStatus::Withdrawn,
+            None,
+            now,
+        );
+        payout.withdraw_request_id = Set(Some(id));
+        insert_entry_in(conn, payout).await?;
+    }
     refresh_balance_in(conn, req.reseller_id, &req.currency, now).await?;
     Ok(withdraws::Entity::find_by_id(id)
         .one(conn)

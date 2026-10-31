@@ -4,14 +4,13 @@ import { useAppStore } from '@/stores/app'
 import { localizedText } from '@/utils/localized'
 import { usePageTitle } from './usePageTitle'
 
-/** About page content from `config.about` + `config.contact`. */
+/** Main-site introduction; customer support has its own page. */
 export function useAbout() {
   const { t } = useI18n()
   const appStore = useAppStore()
   usePageTitle(() => t('nav.about'))
 
-  const about = computed(() => appStore.config?.about)
-  const contactConfig = computed(() => appStore.config?.contact || {})
+  const about = computed(() => appStore.isResellerTenant ? undefined : appStore.config?.about)
   const text = (raw: Parameters<typeof localizedText>[0]) => localizedText(raw, appStore.locale)
 
   const configuredHeroTitle = computed(() => text(about.value?.hero?.title))
@@ -24,25 +23,16 @@ export function useAbout() {
     const raw = about.value?.services?.items
     return Array.isArray(raw) ? raw.map((item) => text(item)).filter(Boolean) : []
   })
-  const contactTitle = computed(() => text(about.value?.contact?.title))
-  const contactText = computed(() => text(about.value?.contact?.text))
   const hasIntroduction = computed(() => introductionText.value !== '')
   const hasServices = computed(() => servicesTitle.value !== '' || serviceItems.value.length > 0)
-  const hasContactLinks = computed(() => Object.values(contactConfig.value).some((value) => typeof value === 'string' && value.trim() !== ''))
-  const hasContact = computed(() => contactTitle.value !== '' || contactText.value !== '' || hasContactLinks.value)
 
   return {
-    contactConfig,
     heroTitle,
     heroSubtitle,
     introductionText,
     servicesTitle,
     serviceItems,
-    contactTitle,
-    contactText,
     hasIntroduction,
     hasServices,
-    hasContactLinks,
-    hasContact,
   }
 }

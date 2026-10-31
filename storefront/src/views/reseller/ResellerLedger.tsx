@@ -69,6 +69,7 @@ export default defineComponent({
       },
       { key: 'status', title: t('personalCenter.reseller.ledgerTable.status'), render: (row) => <Badge tone={ledgerStatusTone(row.status)}>{statusLabel(row.status)}</Badge> },
       { key: 'order_id', title: t('resellerConsole.ledger.orderId'), render: (row) => <span class="whitespace-nowrap zs-num text-xs">{row.order_id || '-'}</span> },
+      { key: 'withdraw_request_id', title: t('personalCenter.reseller.ledgerTable.withdrawRequestId'), render: (row) => row.withdraw_request_id ? <span class="zs-num text-xs">#{row.withdraw_request_id}</span> : '-' },
       { key: 'available_at', title: t('personalCenter.reseller.ledgerTable.availableAt'), render: (row) => <span class="whitespace-nowrap text-xs text-muted">{formatResellerConsoleDate(row.available_at)}</span> },
       { key: 'created_at', title: t('personalCenter.reseller.ledgerTable.createdAt'), render: (row) => <span class="whitespace-nowrap text-xs text-muted">{formatResellerConsoleDate(row.created_at)}</span> },
     ])

@@ -206,6 +206,75 @@ async fn refund_reverses_cost_setting() {
     );
 }
 
+/// MISC-03-REFUND-01: reproduce the 2026-10-30 dashboard, including a refunded parent
+/// whose 121.00 cost lives on its child. Unreturned payment fees must remain expenses.
+#[tokio::test]
+async fn refunded_parent_reverses_child_cost_and_invalidates_cached_profit() {
+    let app = TestApp::new().await;
+    let db = &app.db;
+    let c = channel(db, "refund regression").await;
+    let p = product(db, "refund-regression", "auto", 0).await;
+    for (no, status, amount, cost, fee) in [
+        ("NET-1", "completed", "128", "107", "0.64"),
+        ("NET-2", "delivered", "117", "107", "0.59"),
+        ("NET-3", "refunded", "131", "121", "0.66"),
+    ] {
+        let parent = order(db, no, None, status, amount, "2026-09-01T01:00:00Z").await;
+        let child = order(
+            db,
+            &format!("{no}-01"),
+            Some(parent),
+            status,
+            amount,
+            "2026-09-01T01:00:00Z",
+        )
+        .await;
+        item(db, child, p, 0, "refund regression", 1, amount, "0", cost).await;
+        payment(
+            db,
+            parent,
+            c,
+            "huifu",
+            "success",
+            amount,
+            fee,
+            "merchant_absorbed",
+            "2026-09-01T01:00:01Z",
+        )
+        .await;
+        if status == "refunded" {
+            refund(db, parent, amount, "0", "2026-09-01T02:00:00Z").await;
+        }
+    }
+    let path = format!("/api/v1/admin/dashboard/overview?{WINDOW}");
+    setting(
+        db,
+        "dashboard_config",
+        json!({"accounting":{"refund_reverses_cost":false}}),
+    )
+    .await;
+    let before = app.get(&path).await;
+    assert_eq!(data(&before)["kpi"]["total_profit"], "-91.89");
+    setting(
+        db,
+        "dashboard_config",
+        json!({"accounting":{"refund_reverses_cost":true}}),
+    )
+    .await;
+    // Reusing the same URL must not reuse the old accounting mode's cached response.
+    let after = app.get(&path).await;
+    let k = &data(&after)["kpi"];
+    assert_eq!(k["gmv_paid"], "245.00");
+    assert_eq!(k["payment_fee"], "1.89");
+    assert_eq!(k["total_cost"], "215.89");
+    assert_eq!(k["total_profit"], "29.11");
+    assert_eq!(k["profit_margin"], "11.88");
+    let trends = app
+        .get(&format!("/api/v1/admin/dashboard/trends?{WINDOW}"))
+        .await;
+    assert_eq!(data(&trends)["points"][0]["profit"], "29.11");
+}
+
 #[tokio::test]
 async fn trends_bucket_by_requested_zone() {
     let app = TestApp::new().await;

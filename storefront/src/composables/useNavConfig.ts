@@ -71,12 +71,12 @@ export const useNavConfig = () => {
   const isListMode = computed(() => appStore.isListMode)
   const blogEnabled = computed(() => navConfig.value?.builtin?.blog !== false)
   const noticeEnabled = computed(() => navConfig.value?.builtin?.notice !== false)
-  const aboutEnabled = computed(() => navConfig.value?.builtin?.about !== false)
+  const aboutEnabled = computed(() => !appStore.isResellerTenant && navConfig.value?.builtin?.about !== false)
 
   const builtinNavItems = computed<NavItem[]>(() => {
     const builtin = navConfig.value?.builtin
     return Object.entries(builtinNavDefs)
-      .filter(([key]) => !(builtin && builtin[key] === false))
+      .filter(([key]) => !(builtin && builtin[key] === false) && (key !== 'about' || aboutEnabled.value))
       .map(([key, def]) => ({ key, path: def.path, label: t(def.label), icon: def.icon, type: 'route' as const, target: '_self' }))
   })
 
@@ -106,16 +106,20 @@ export const useNavConfig = () => {
       .filter((item) => item.label && item.path)
   })
 
+  const contactNavItem = computed<NavItem>(() => ({
+    key: 'contact', path: '/contact', label: t('customerSupport.title'), icon: MessageCircle, type: 'route', target: '_self',
+  }))
+
   const primaryNavItems = computed<NavItem[]>(() => {
     const items: NavItem[] = [{ key: 'home', path: '/', label: t('nav.home'), icon: Home, type: 'route', target: '_self' }]
     if (!isListMode.value) {
       items.push({ key: 'products', path: '/products', label: t('nav.products'), icon: LayoutGrid, type: 'route', target: '_self' })
     }
-    items.push(...builtinNavItems.value, ...customNavItems.value)
+    items.push(...builtinNavItems.value, ...customNavItems.value, contactNavItem.value)
     return items
   })
 
-  const secondaryNavItems = computed<NavItem[]>(() => [...builtinNavItems.value, ...customNavItems.value])
+  const secondaryNavItems = computed<NavItem[]>(() => [...builtinNavItems.value, ...customNavItems.value, contactNavItem.value])
 
   return {
     navConfig,

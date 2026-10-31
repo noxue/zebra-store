@@ -1,6 +1,8 @@
 //! Storefront DTOs (`transport/presenter/order.go`): white-listed fields only — no cost
 //! price, internal ids, guest credential or risk IP (MISC-02); upstream delivery is shown as
-//! manual (UPS-19); delivery instructions only after payment (DLV-02).
+//! the supplier's auto/manual type (UPS-19); delivery instructions only after payment (DLV-02).
+
+use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;
@@ -18,6 +20,46 @@ fn mask_upstream(ft: &str) -> String {
     } else {
         ft.to_owned()
     }
+}
+
+/// Resolve only a presentation copy: procurement must retain its internal upstream type.
+fn delivery_display_order(order: &Order, types: &HashMap<Id, String>) -> Order {
+    fn resolve(order: &mut Order, types: &HashMap<Id, String>) {
+        for item in &mut order.items {
+            if item.fulfillment_type == fulfillment_type::UPSTREAM {
+                item.fulfillment_type = if types
+                    .get(&item.product_id)
+                    .is_some_and(|t| t.trim() == fulfillment_type::AUTO)
+                {
+                    fulfillment_type::AUTO
+                } else {
+                    fulfillment_type::MANUAL
+                }
+                .to_owned();
+            }
+        }
+        if let Some(f) = &mut order.fulfillment
+            && f.kind == fulfillment_type::UPSTREAM
+        {
+            f.kind = if !order.items.is_empty()
+                && order
+                    .items
+                    .iter()
+                    .all(|i| i.fulfillment_type == fulfillment_type::AUTO)
+            {
+                fulfillment_type::AUTO
+            } else {
+                fulfillment_type::MANUAL
+            }
+            .to_owned();
+        }
+        for child in &mut order.children {
+            resolve(child, types);
+        }
+    }
+    let mut display = order.clone();
+    resolve(&mut display, types);
+    display
 }
 
 fn non_empty(map: &JsonMap) -> Option<JsonMap> {
@@ -141,6 +183,12 @@ pub struct OrderSummary {
     pub children: Vec<OrderSummary>,
 }
 
+impl OrderSummary {
+    pub fn with_delivery_types(order: &Order, types: &HashMap<Id, String>) -> Self {
+        Self::from(&delivery_display_order(order, types))
+    }
+}
+
 impl From<&Order> for OrderSummary {
     fn from(o: &Order) -> Self {
         Self {
@@ -200,6 +248,10 @@ pub struct OrderDetail {
 }
 
 impl OrderDetail {
+    pub fn with_delivery_types(order: &Order, truncate: bool, types: &HashMap<Id, String>) -> Self {
+        Self::new(&delivery_display_order(order, types), truncate)
+    }
+
     /// Full detail; with `truncate` the delivered content keeps 100 lines (DLV-05).
     pub fn new(o: &Order, truncate: bool) -> Self {
         let paid = o.paid_at.is_some();
@@ -361,5 +413,33 @@ mod tests {
         d.allowed_payment_channel_ids = Some(vec![]);
         let v = serde_json::to_value(&d).unwrap_or_default();
         assert_eq!(v["allowed_payment_channel_ids"], json!([]));
+    }
+
+    /// UPS-19: supplier automatic deliveries stay automatic in all buyer DTOs.
+    #[test]
+    fn ups19_delivery_types_preserve_auto_manual_and_internal_order() {
+        let mut parent = order(1, OrderStatus::Paid);
+        let mut child = order(2, OrderStatus::Paid);
+        child.items = vec![
+            item(3, "upstream", 1),
+            item(4, "manual", 1),
+            item(5, "auto", 1),
+        ];
+        parent.children.push(child);
+        let types = HashMap::from([(3, "auto".to_owned()), (4, "auto".to_owned())]);
+        let detail = OrderDetail::with_delivery_types(&parent, true, &types);
+        assert_eq!(detail.children[0].items[0].fulfillment_type, "auto");
+        assert_eq!(detail.children[0].items[1].fulfillment_type, "manual");
+        assert_eq!(detail.children[0].items[2].fulfillment_type, "auto");
+        assert_eq!(parent.children[0].items[0].fulfillment_type, "upstream");
+        let summary = OrderSummary::with_delivery_types(&parent, &types);
+        assert_eq!(summary.children[0].items[0].fulfillment_type, "auto");
+        for supplier_type in ["manual", "unknown", "upstream"] {
+            let types = HashMap::from([(3, supplier_type.to_owned())]);
+            let detail = OrderDetail::with_delivery_types(&parent, false, &types);
+            assert_eq!(detail.children[0].items[0].fulfillment_type, "manual");
+        }
+        let detail = OrderDetail::with_delivery_types(&parent, false, &HashMap::new());
+        assert_eq!(detail.children[0].items[0].fulfillment_type, "manual");
     }
 }

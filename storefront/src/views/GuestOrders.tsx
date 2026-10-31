@@ -30,11 +30,8 @@ export default defineComponent({
               }}
             >
               {g.hasSavedAuth.value && (
-                <div class="mb-4 flex flex-col gap-2 rounded-zs border border-line bg-surface-muted px-4 py-2.5 text-xs text-muted md:flex-row md:items-center md:justify-between">
+                <div class="mb-4 rounded-zs border border-line bg-surface-muted px-4 py-2.5 text-xs text-muted">
                   <span>{t('guestOrders.savedHint', { email: g.savedAuth.value.email || '-' })}</span>
-                  <Button variant="link" size="xs" onClick={g.clearSaved}>
-                    {t('guestOrders.clearSaved')}
-                  </Button>
                 </div>
               )}
               <div class="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_1fr_auto]">

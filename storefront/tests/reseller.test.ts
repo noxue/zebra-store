@@ -23,6 +23,7 @@ import {
   normalizeResellerProductSettingsPagination,
   summarizeProductBasePrice,
   summarizeProductEffectivePrice,
+  summarizeProductRecommendedPrice,
 } from '@/utils/reseller/productSettings'
 import { siteConfigFormToPayload, siteConfigToForm } from '@/utils/reseller/siteConfig'
 
@@ -153,6 +154,18 @@ describe('pricing', () => {
     expect(summarizeProductBasePrice({ product_setting: undefined, skus: [detail.skus[0]] })).toBe('38.67')
   })
 
+  // RSL-12: main-site retail must never come from agent costs or reseller rules.
+  it('summarizes main-site recommended prices independently of reseller prices', () => {
+    const sku = { id: 1, sku_code: 'a', spec_values: {}, base_price_amount: '38.67', shared_agent_price_amount: '45.00', retail_price_amount: '60.00', effective_price_amount: '50.00', is_active: true }
+    const detail = { skus: [sku, { ...sku, id: 2, retail_price_amount: '150.00' }, { ...sku, id: 3, retail_price_amount: '999.00', is_active: false }, { ...sku, id: 4, retail_price_amount: '1.00', setting: { product_id: 1, sku_id: 4, is_listed: false, pricing_mode: 'inherit', markup_percent: '0.00', fixed_markup_amount: '0.00', fixed_price_amount: '0.00', sort_order: 0 } }] }
+    expect(summarizeProductRecommendedPrice(detail)).toBe('60.00 - 150.00')
+    expect(summarizeProductRecommendedPrice({ skus: [sku, { ...sku, id: 2 }] })).toBe('60.00')
+    expect(summarizeProductRecommendedPrice({ skus: [{ ...sku, is_active: false }], product: { retail_price_amount: '60.00' } })).toBe('-')
+    expect(summarizeProductRecommendedPrice({ skus: [], product: { retail_price_amount: '80.00' } })).toBe('80.00')
+    expect(summarizeProductRecommendedPrice({ skus: [{ ...sku, retail_price_amount: undefined }] })).toBe('-')
+    expect(summarizeProductRecommendedPrice(null)).toBe('-')
+  })
+
   it('normalizes pagination', () => {
     expect(normalizeResellerProductSettingsPagination({ page: '2', page_size: 10, total: 0, total_page: 0 })).toEqual({ page: 2, page_size: 10, total: 0, total_page: 1 })
     expect(normalizeResellerProductSettingsPagination(null).page).toBe(1)
@@ -167,6 +180,9 @@ describe('finance', () => {
   it('ledger display sign by type', () => {
     expect(ledgerAmountDisplay({ type: 'order_profit', amount: '5', currency: 'CNY' })).toBe('+5.00 CNY')
     expect(ledgerAmountDisplay({ type: 'withdraw_lock', amount: '5', currency: 'CNY' })).toBe('−5.00 CNY')
+    // RSL-13: paid withdrawals are debits, including older positive payloads.
+    expect(ledgerAmountDisplay({ type: 'withdraw_paid', amount: '-25.00', currency: 'CNY' })).toBe('−25.00 CNY')
+    expect(ledgerAmountDisplay({ type: 'withdraw_paid', amount: '25.00', currency: 'CNY' })).toBe('−25.00 CNY')
     expect(ledgerAmountDisplay({ type: 'manual_adjust', amount: '-2', currency: 'CNY' })).toBe('−2.00 CNY')
   })
   it('primary balance is the largest available', () => {
@@ -222,7 +238,7 @@ describe('site config form', () => {
       theme: { primary_color: '#123abc', background_color: '#eeeeee' },
       footer_links: [{ name: { 'zh-CN': '链接', 'zh-TW': '', 'en-US': '' }, url: 'https://a' }],
       nav_config: { builtin: { blog: false }, custom_items: [] },
-      support: { wechat_id: 'seller', wechat_qr_code: '/uploads/reseller/support.png', qq_number: '123', qq_group: '456', wechat_group_qr_code: '/uploads/reseller/group.png' },
+      support: { wechat_id: 'seller', telegram_qr_code: '/uploads/reseller/tg.png', wechat_qr_code: '/uploads/reseller/support.png', qq_number: '123', qq_group: '456', wechat_group_qr_code: '/uploads/reseller/group.png' },
     })
     expect(form.nav_config.builtin).toEqual({ blog: false, notice: true, about: true })
     expect(form.announcement.type).toBe('info')
@@ -233,6 +249,7 @@ describe('site config form', () => {
     expect(payload.template_mode).toBe('list')
     expect(payload.theme?.primary_color).toBe('#123abc')
     expect(payload.support?.wechat_id).toBe('seller')
+    expect(payload.support?.telegram_qr_code).toBe('/uploads/reseller/tg.png')
     expect(payload.support?.wechat_group_qr_code).toBe('/uploads/reseller/group.png')
     expect(payload.footer_links).toHaveLength(1)
     expect(payload.scripts).toEqual([{ name: 'Chat', enabled: true, position: 'body_end', code: 'chat()' }])

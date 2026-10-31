@@ -27,13 +27,13 @@ async fn public_config_at(app: &App, host: &str) -> serde_json::Value {
 async fn rsl06_customer_support_isolated_between_main_and_resellers() {
     let app = App::new().await;
     let saved_main = app.admin_call("PUT", "/api/v1/admin/settings", Some(json!({
-        "key": "site_config", "value": {"contact": {"wechat_id": "main-id", "wechat_qr_code": "/uploads/main.png", "qq_number": "10001"}}
+        "key": "site_config", "value": {"contact": {"wechat_id": "main-id", "wechat_qr_code": "/uploads/main.png", "telegram_qr_code": "/uploads/main-tg.png", "qq_number": "10001"}, "about": {"introduction": {"zh-CN": "主站介绍"}}}
     }))).await;
     data(&saved_main);
     let (_, first_token, first_id) = app.reseller("support-one@example.test", "0").await;
     let (_, second_token, second_id) = app.reseller("support-two@example.test", "0").await;
     let saved_first = app.call("PUT", "/api/v1/reseller/site-config", Some(json!({
-        "support": {"wechat_id": "seller-one", "wechat_qr_code": "/uploads/reseller/one.png", "qq_group": "20002"}
+        "support": {"wechat_id": "seller-one", "wechat_qr_code": "/uploads/reseller/one.png", "telegram_qr_code": "/uploads/reseller/one-tg.png", "qq_group": "20002"}
     })), Some(&first_token)).await;
     data(&saved_first);
     let saved_second = app.call("PUT", "/api/v1/reseller/site-config", Some(json!({
@@ -64,6 +64,15 @@ async fn rsl06_customer_support_isolated_between_main_and_resellers() {
         .await
         .unwrap();
     assert_eq!(main["contact"]["wechat_id"], "main-id");
+    assert_eq!(main["contact"]["telegram_qr_code"], "/uploads/main-tg.png");
+    assert_eq!(main["about"]["introduction"]["zh-CN"], "主站介绍");
+    assert_eq!(
+        first["contact"]["telegram_qr_code"],
+        "/uploads/reseller/one-tg.png"
+    );
+    assert!(second["contact"].get("telegram_qr_code").is_none());
+    assert!(first.get("about").is_none());
+    assert!(second.get("about").is_none());
     assert_eq!(first["contact"]["wechat_id"], "seller-one");
     assert_eq!(
         first["contact"]["wechat_qr_code"],

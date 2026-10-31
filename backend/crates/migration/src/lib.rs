@@ -59,5 +59,6 @@ pub async fn before_sync(db: &DatabaseConnection) -> Result<(), DbErr> {
 pub async fn run(db: &DatabaseConnection) -> Result<(), DbErr> {
     mysql_time::datetime_precision(db).await?;
     reseller::live_unique_indexes(db).await?;
-    integration::downstream_ref_index(db).await
+    integration::downstream_ref_index(db).await?;
+    reseller::backfill_paid_withdrawals(db).await
 }

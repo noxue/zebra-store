@@ -217,9 +217,20 @@ export default defineComponent({
               <FormField label={t('admin.settings.contact.wechatQrCode')}>
                 <BrandImageField v-model={f.contact.wechat_qr_code} placeholder="QR" selectText={t('admin.settings.contact.uploadQr')} tip={t('admin.settings.contact.qrHint')} />
               </FormField>
+              <FormField label={t('admin.settings.contact.telegramQrCode')}>
+                <BrandImageField v-model={f.contact.telegram_qr_code} placeholder="QR" selectText={t('admin.settings.contact.uploadQr')} tip={t('admin.settings.contact.qrHint')} />
+              </FormField>
               <FormField label={t('admin.settings.contact.wechatGroupQrCode')}>
                 <BrandImageField v-model={f.contact.wechat_group_qr_code} placeholder="QR" selectText={t('admin.settings.contact.uploadQr')} tip={t('admin.settings.contact.qrHint')} />
               </FormField>
+              <div class="space-y-4 md:col-span-2">
+                <FormField label={t('admin.settings.about.contactBlockTitle')}>
+                  <Input v-model={f.about.contact.title[lang]} placeholder={t('admin.settings.about.contactBlockTitlePlaceholder')} />
+                </FormField>
+                <FormField label={t('admin.settings.about.contactText')}>
+                  <Textarea v-model={f.about.contact.text[lang]} rows={4} placeholder={t('admin.settings.about.contactTextPlaceholder')} />
+                </FormField>
+              </div>
             </div>
           </Card>
 

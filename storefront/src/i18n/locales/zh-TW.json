@@ -257,6 +257,7 @@
     "dismissToday": "今日不再提示",
     "dismissForever": "不再提示"
   },
+  "customerSupport": {"title": "聯絡客服", "empty": "本站尚未設定客服聯絡方式"},
   "about": {
     "title": "關於我們",
     "subtitle": "了解斑馬小舖",
@@ -269,6 +270,7 @@
     "contactUs": "聯絡我們",
     "contactText": "如果您對我們的產品或服務有任何疑問，歡迎透過以下方式聯絡我們：",
     "wechatId": "微信號",
+    "telegramQrCode": "Telegram 客服二維碼",
     "wechatQrCode": "微信客服二維碼",
     "qqNumber": "QQ 號",
     "qqGroup": "QQ 群號",
@@ -805,6 +807,7 @@
           "email": "客服信箱",
           "supportUrl": "客服連結",
           "wechatId": "微信號",
+          "telegramQrCode": "Telegram 客服二維碼",
           "wechatQrCode": "微信客服二維碼",
           "qqNumber": "QQ 號",
           "qqGroup": "QQ 群號",
@@ -845,10 +848,11 @@
       },
       "productSettings": {
         "title": "商品售價配置",
-        "subtitle": "查看成本價和售價，按商品或 SKU 調整售價。",
+        "subtitle": "查看成本價、主站推薦售價和本站售價，按商品或 SKU 調整售價。",
         "searchPlaceholder": "搜尋商品名稱、Slug 或商品 ID",
         "empty": "暫無可配置商品",
         "basePrice": "成本價",
+        "recommendedPrice": "推薦售價",
         "edit": "編輯售價",
         "editorTitle": "售價規則",
         "productLevelRule": "商品級規則",
@@ -949,6 +953,7 @@
         "paid": "已打款"
       },
       "ledgerTable": {
+        "withdrawRequestId": "提現單號",
         "type": "類型",
         "amount": "金額",
         "status": "狀態",
@@ -1796,7 +1801,6 @@
     "passwordPlaceholder": "訂單密碼",
     "orderNoPlaceholder": "訂單號（可選）",
     "savedHint": "已保存信箱：{email}",
-    "clearSaved": "清除已保存資訊",
     "tip": "請輸入下單時的信箱與訂單密碼",
     "search": "查詢訂單",
     "searching": "查詢中...",

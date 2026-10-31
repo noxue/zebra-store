@@ -20,6 +20,14 @@ pub mod status {
     pub const SUCCEEDED: &str = "succeeded";
 }
 
+/// Administrator-only approval; persisted independently of provider response payloads.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+pub struct AdminRefundOptions {
+    pub admin_id: Option<Id>,
+    pub force_refund: bool,
+    pub restock_cards: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct GatewayRefundAttempt {
     pub id: Id,
@@ -34,6 +42,7 @@ pub struct GatewayRefundAttempt {
     pub remark: String,
     pub payment_fee_refunded: bool,
     pub card_confirmed: bool,
+    pub admin_options: AdminRefundOptions,
     pub payload: Map<String, serde_json::Value>,
     pub error: String,
     pub refund_record_id: Option<Id>,
@@ -54,6 +63,7 @@ pub struct NewGatewayRefundAttempt {
     pub payment_fee_refunded: bool,
     pub now: DateTime<Utc>,
     pub initial_status: String,
+    pub admin_options: AdminRefundOptions,
 }
 
 #[derive(Debug, Clone)]

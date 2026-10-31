@@ -19,6 +19,11 @@ pub struct Model {
     pub apply_reason: String,
     #[sea_orm(column_type = "Text")]
     pub reject_reason: String,
+    /// Nullable extensions keep existing rows compatible with entity-first sync.
+    #[sea_orm(column_type = "Json", nullable)]
+    pub tags: Option<Json>,
+    #[sea_orm(column_type = "Text", nullable)]
+    pub admin_note: Option<String>,
     #[sea_orm(column_type = "Decimal(Some((10, 2)))")]
     pub default_markup_percent: Decimal,
     #[sea_orm(column_type = "Decimal(Some((10, 2)))")]

@@ -32,6 +32,8 @@ export const ProfileEditDialog = defineComponent({
       maxMarkup: '0.00',
       settlementStatus: 'normal',
       reason: '',
+      tags: '',
+      adminNote: '',
     })
 
     watch(
@@ -42,6 +44,8 @@ export const ProfileEditDialog = defineComponent({
         form.maxMarkup = props.profile.max_markup_percent || '0.00'
         form.settlementStatus = props.profile.settlement_status || 'normal'
         form.reason = ''
+        form.tags = (props.profile.tags || []).join(', ')
+        form.adminNote = props.profile.admin_note || ''
       },
       { immediate: true },
     )
@@ -57,6 +61,8 @@ export const ProfileEditDialog = defineComponent({
         max_markup_percent: form.maxMarkup.trim() || '0.00',
         settlement_status: form.settlementStatus,
         reason: form.reason.trim() || undefined,
+        tags: [...new Set(form.tags.split(/[,，\n]/).map((v) => v.trim()).filter(Boolean))],
+        admin_note: form.adminNote.trim(),
       })
     }
 
@@ -75,6 +81,16 @@ export const ProfileEditDialog = defineComponent({
           {{
             default: () => (
               <div class="grid gap-4 sm:grid-cols-2">
+                <div class="sm:col-span-2">
+                  <FormField label={t('admin.resellerProfiles.metadata.tags')} hint={t('admin.resellerProfiles.metadata.tagsHint')}>
+                    <Input v-model={form.tags} />
+                  </FormField>
+                </div>
+                <div class="sm:col-span-2">
+                  <FormField label={t('admin.resellerProfiles.metadata.note')} hint={t('admin.resellerProfiles.metadata.noteHint')}>
+                    <Textarea v-model={form.adminNote} rows={5} maxlength={5000} />
+                  </FormField>
+                </div>
                 <FormField label={label('admin.resellerProfiles.table.defaultMarkup', 'defaultMarkup')}>
                   <Input v-model={form.defaultMarkup} placeholder="0.00" mono />
                 </FormField>

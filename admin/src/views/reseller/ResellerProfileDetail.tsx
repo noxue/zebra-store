@@ -267,6 +267,19 @@ export default defineComponent({
             </Card>
           </div>
 
+          <Card title={t('admin.resellerProfiles.metadata.title')}>
+            <div class="space-y-4">
+              <div>
+                <p class="mb-2 text-xs text-muted">{t('admin.resellerProfiles.metadata.tags')}</p>
+                <div class="flex flex-wrap gap-1">{profile.tags?.length ? profile.tags.map((tag) => <Badge key={tag} tone="primary"><span class="whitespace-normal break-all">{tag}</span></Badge>) : '-'}</div>
+              </div>
+              <div>
+                <p class="mb-2 text-xs text-muted">{t('admin.resellerProfiles.metadata.note')}</p>
+                <p class="whitespace-pre-wrap break-words text-sm">{profile.admin_note || '-'}</p>
+              </div>
+            </div>
+          </Card>
+
           <Tabs
             v-model={currentTab.value}
             items={['overview', 'profile', 'domains', 'site', 'products', 'finance'].map((key) => ({

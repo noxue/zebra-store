@@ -1,4 +1,4 @@
-import { onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { paymentAPI, userOrderAPI } from '@/api/order'
@@ -8,6 +8,7 @@ import { toast } from '@/composables/useToast'
 import { downloadBlob } from '@/utils/format'
 import { hasDeliveredOrder, orderExportText } from '@/utils/exportOrder'
 import { useOrderDisplayHelpers } from './useOrderDisplayHelpers'
+import { useOrderAutoRefresh } from './useOrderAutoRefresh'
 
 /** Logged-in order detail (load / cancel / download fulfillment). */
 export function useOrderDetail() {
@@ -24,24 +25,42 @@ export function useOrderDetail() {
   const helpers = useOrderDisplayHelpers(order)
   const orderNo = () => String(route.params.order_no || '').trim()
 
-  const loadOrder = async () => {
-    loading.value = true
+  let requestVersion = 0
+  let disposed = false
+  const loadOrder = async (silent = false) => {
+    const no = orderNo()
+    const version = ++requestVersion
+    const isCurrent = () => !disposed && version === requestVersion && no === orderNo()
+    if (!silent) loading.value = true
     try {
-      order.value = (await userOrderAPI.detail(orderNo())).data
+      const response = await userOrderAPI.detail(no, { silentBusinessError: silent })
+      if (!isCurrent()) return
+      order.value = response.data
       hasManualPayment.value = false
       if (order.value?.status === 'pending_payment' || order.value?.status === 'canceled') {
         try {
           const latest = await paymentAPI.latest({ order_no: order.value.order_no })
+          if (!isCurrent()) return
           hasManualPayment.value = latest.data?.provider_type === 'manual_qr'
         } catch { /* No active payment attempt. */ }
       }
     } catch {
-      order.value = null
-      hasManualPayment.value = false
+      if (isCurrent() && !silent) {
+        order.value = null
+        hasManualPayment.value = false
+      }
     } finally {
-      loading.value = false
+      if (isCurrent()) loading.value = false
     }
   }
+
+  useOrderAutoRefresh(order, loading, () => loadOrder(true))
+  watch(() => route.params.order_no, () => {
+    order.value = null
+    hasManualPayment.value = false
+    void loadOrder()
+  })
+  onBeforeUnmount(() => { disposed = true })
 
   const cancelOrder = async () => {
     if (!order.value) return

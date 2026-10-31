@@ -93,6 +93,8 @@ impl MemStore {
             user_id,
             status,
             apply_reason: String::new(),
+            tags: Vec::new(),
+            admin_note: String::new(),
             reject_reason: String::new(),
             default_markup_percent: Amount::ZERO,
             max_markup_percent: Amount::ZERO,

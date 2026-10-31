@@ -19,8 +19,8 @@ use zs_shared::page::{Page, PageRequest};
 
 use super::{map, ops, refund};
 use crate::db::entity::{
-    coupons, order_items, order_refund_records, orders, payment_channels, payments, products,
-    promotions, user_oauth_identities, users,
+    coupons, order_items, order_refund_records, orders, payment_channels, payments,
+    product_mappings, products, promotions, user_oauth_identities, users,
 };
 use crate::db::repo::catalog::sql::{
     SEARCH_LOCALES, backend_of, contains_pattern, ilike_sql, json_text,
@@ -569,6 +569,26 @@ impl OrderRepo for SeaOrderRepo {
             .all(&self.db)
             .await
             .dom()
+    }
+
+    async fn upstream_delivery_types(&self, product_ids: &[Id]) -> Result<HashMap<Id, String>> {
+        if product_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        Ok(product_mappings::Entity::find()
+            .filter(product_mappings::Column::LocalProductId.is_in(product_ids.to_vec()))
+            .filter(product_mappings::Column::DeletedAt.is_null())
+            .select_only()
+            .columns([
+                product_mappings::Column::LocalProductId,
+                product_mappings::Column::UpstreamFulfillmentType,
+            ])
+            .into_tuple::<(Id, String)>()
+            .all(&self.db)
+            .await
+            .dom()?
+            .into_iter()
+            .collect())
     }
 
     async fn users(&self, ids: &[Id]) -> Result<HashMap<Id, UserBrief>> {

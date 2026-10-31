@@ -218,6 +218,9 @@ export default defineComponent({
               <FormField label={t('admin.resellerSiteConfigs.fields.wechatQrCode')}>
                 <MediaPicker v-model={form.support.wechat_qr_code} scene="common" />
               </FormField>
+              <FormField label={t('admin.resellerSiteConfigs.fields.telegramQrCode')}>
+                <MediaPicker v-model={form.support.telegram_qr_code} scene="common" />
+              </FormField>
               <FormField label={t('admin.resellerSiteConfigs.fields.wechatGroupQrCode')}>
                 <MediaPicker v-model={form.support.wechat_group_qr_code} scene="common" />
               </FormField>
@@ -276,7 +279,7 @@ export default defineComponent({
         case 'nav':
           return (
             <div class="space-y-3">
-              {NAV_BUILTIN_KEYS.map((key) => (
+              {NAV_BUILTIN_KEYS.filter((key) => key !== 'about').map((key) => (
                 <div key={key} class="flex items-center justify-between rounded-zs border border-line px-4 py-2.5">
                   <span class="text-sm">{t(`admin.resellerSiteConfigs.navItems.${key}`)}</span>
                   <Switch v-model={form.nav_config.builtin[key]} />

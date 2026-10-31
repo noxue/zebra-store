@@ -79,6 +79,11 @@ pub(crate) fn profile_model(m: profiles_t::Model, user: Option<UserRef>) -> Prof
         user_id: m.user_id,
         status: ProfileStatus::from_db(&m.status),
         apply_reason: m.apply_reason,
+        tags: m
+            .tags
+            .and_then(|v| serde_json::from_value(v).ok())
+            .unwrap_or_default(),
+        admin_note: m.admin_note.unwrap_or_default(),
         reject_reason: m.reject_reason,
         default_markup_percent: Amount::new(m.default_markup_percent),
         max_markup_percent: Amount::new(m.max_markup_percent),

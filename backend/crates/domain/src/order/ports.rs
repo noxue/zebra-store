@@ -151,6 +151,10 @@ pub trait OrderRepo: Send + Sync {
     /// Raw `payment_channel_ids` of the given products.
     async fn product_channel_ids(&self, product_ids: &[Id]) -> Result<Vec<String>>;
 
+    /// Supplier delivery types for buyer-facing order views, including inactive mappings
+    /// still referenced by historical orders. Deleted mappings are excluded.
+    async fn upstream_delivery_types(&self, product_ids: &[Id]) -> Result<HashMap<Id, String>>;
+
     async fn users(&self, ids: &[Id]) -> Result<HashMap<Id, UserBrief>>;
     /// Telegram id bound to a user (bot notifications).
     async fn telegram_user_id(&self, user_id: Id) -> Result<Option<String>>;

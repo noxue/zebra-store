@@ -6,7 +6,7 @@ import type { Order } from '@/api/types'
 import { useLocalized } from '@/composables/useLocalized'
 import { debounce } from '@/utils/debounce'
 import { formatDateTime } from '@/utils/format'
-import { clearGuestOrderAuth, loadGuestOrderAuth, saveGuestOrderAuth } from '@/utils/guestOrderAuth'
+import { loadGuestOrderAuth, saveGuestOrderAuth } from '@/utils/guestOrderAuth'
 import { hasPositive } from '@/utils/orderPayment'
 
 const PAGE_SIZE = 20
@@ -60,18 +60,6 @@ export function useGuestOrders() {
     debouncedLoad(1)
   }
 
-  const clearSaved = () => {
-    clearGuestOrderAuth()
-    savedAuth.value = { email: '', order_password: '' }
-    email.value = ''
-    orderPassword.value = ''
-    orderNo.value = ''
-    orders.value = []
-    pagination.value = emptyPagination()
-    error.value = ''
-    searched.value = false
-  }
-
   const changePage = (page: number) => {
     if (page < 1 || page > pagination.value.total_page) return
     debouncedLoad(page)
@@ -98,7 +86,6 @@ export function useGuestOrders() {
     orders,
     pagination,
     hasSavedAuth,
-    clearSaved,
     handleSearch,
     emptyMessage,
     changePage,

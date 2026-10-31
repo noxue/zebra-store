@@ -258,6 +258,7 @@ pub fn setting_detail(view: &SettingView) -> Value {
                     find(0), find(sku.id), sku.price.decimal(),
                 )),
                 "shared_agent_price_amount": sku.price,
+                "retail_price_amount": sku.retail_price,
                 "is_active": sku.is_active,
             });
             if let Some(s) = find(sku.id) {
@@ -276,6 +277,7 @@ pub fn setting_detail(view: &SettingView) -> Value {
             "slug": p.slug,
             "title": p.title,
             "price_amount": p.price,
+            "retail_price_amount": p.retail_price,
             "is_active": p.is_active,
         },
         "skus": skus,

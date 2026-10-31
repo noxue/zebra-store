@@ -1,10 +1,11 @@
-import { defineComponent, type PropType } from 'vue'
+import { defineComponent, ref, type PropType } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Check, Clock, Copy, Download, Info, Layers, PackageCheck, ReceiptText, RotateCcw, ShoppingBag, Wallet } from 'lucide-vue-next'
 import type { Fulfillment, Order, OrderItem } from '@/api/types'
 import { OrderStatusBadge } from '@/components/common/OrderStatusBadge'
 import { Badge, Button, Card, CardHeader, DataTable, SmartImage, columns } from '@/components/ui'
 import type { OrderDisplayHelpers } from '@/composables/useOrderDisplayHelpers'
+import { useOrderDeliveryReveal } from '@/composables/useOrderDeliveryReveal'
 import type { RefundRecord } from '@/api/types'
 import { hasDeliveredOrder } from '@/utils/exportOrder'
 import { InfoTile } from './AmountRow'
@@ -138,17 +139,20 @@ export const FulfillmentBlock = defineComponent({
       const blocks = f.status === 'delivered' ? h.instructionBlocks(props.items) : []
       const size = props.small ? 'xs' : 'sm'
       return (
-        <div class="space-y-3">
-          <div class="flex flex-wrap items-center justify-between gap-3">
-            <div class="flex flex-wrap gap-2">
+        <section data-order-delivery={props.orderNo} aria-label={t('orderDetail.fulfillmentTitle')} class="flex max-h-[calc(100dvh-12rem)] min-h-0 scroll-mt-24 flex-col gap-3 lg:max-h-[calc(100dvh-8rem)]">
+          <div class="flex shrink-0 flex-wrap items-start justify-between gap-3">
+            <div class="min-w-0 space-y-2">
+              <h3 class="zs-title flex items-center gap-2 text-sm font-bold text-fg"><PackageCheck class="size-4 text-primary" />{t(props.small ? 'orderDetail.childFulfillmentTitle' : 'orderDetail.fulfillmentTitle')}</h3>
+              <div class="flex flex-wrap gap-2">
               <Badge tone="info">
                 {t('orderDetail.fulfillmentType')}：{h.fulfillmentTypeText(f.type)}
               </Badge>
               <Badge tone={f.status === 'delivered' ? 'success' : 'warning'}>
                 {t('orderDetail.fulfillmentStatus')}：{h.fulfillmentStatusText(f.status)}
               </Badge>
+              </div>
             </div>
-            <div class="flex gap-2">
+            <div class="flex shrink-0 gap-2">
               {truncated && (
                 <Button size={size} loading={props.downloading} onClick={() => emit('download', props.orderNo)}>
                   <Download class="size-3.5" />
@@ -163,11 +167,12 @@ export const FulfillmentBlock = defineComponent({
               )}
             </div>
           </div>
+          <div data-delivery-content tabindex={0} class="min-h-0 space-y-3 overflow-y-auto overscroll-contain rounded-zs focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
           {truncated ? (
             <>
               <div class="text-sm text-muted">{t('orderDetail.fulfillmentTotalLines', { count: f.payload_line_count })}</div>
               <div class="rounded-zs-sm border border-warning/40 bg-warning-soft px-3 py-2 text-xs text-warning-text">{t('orderDetail.fulfillmentTruncatedHint')}</div>
-              <pre class="max-h-64 overflow-y-auto whitespace-pre-wrap break-all rounded-zs border border-line bg-surface-strong p-4 font-mono text-sm text-fg">{f.payload}</pre>
+              <pre class="whitespace-pre-wrap break-all rounded-zs border border-line bg-surface-strong p-4 font-mono text-sm text-fg">{f.payload}</pre>
             </>
           ) : lines.length > 0 ? (
             <div class="space-y-1 break-all rounded-zs border border-line bg-surface-strong p-4 text-sm text-fg">
@@ -184,10 +189,11 @@ export const FulfillmentBlock = defineComponent({
                 <Info class="size-4" />
                 {t('orderDetail.instructionsTitle')}
               </div>
-              <div class="zs-prose text-sm" innerHTML={block.html} />
+              <div class="zs-prose break-words text-sm [overflow-wrap:anywhere]" innerHTML={block.html} />
             </div>
           ))}
-        </div>
+          </div>
+        </section>
       )
     }
   },
@@ -205,12 +211,14 @@ export const OrderBody = defineComponent({
   emits: { download: (_no: string) => true, export: () => true },
   setup(props, { slots, emit }) {
     const { t } = useI18n()
+    const root = ref<HTMLElement | null>(null)
+    useOrderDeliveryReveal(() => props.order, root)
     return () => {
       const o = props.order
       const h = props.helpers
       const cur = o.currency
       return (
-        <div class="space-y-6">
+        <div ref={root} class="space-y-6">
           <Card>
             <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div class="flex items-start gap-3">
@@ -264,7 +272,6 @@ export const OrderBody = defineComponent({
                       <OrderItemsList items={child.items || []} currency={cur} helpers={h} compact />
                     </div>
                     <div class="mt-4 border-t border-dashed border-line pt-4">
-                      <h3 class="mb-3 text-sm font-bold text-fg">{t('orderDetail.childFulfillmentTitle')}</h3>
                       {child.fulfillment ? (
                         <FulfillmentBlock
                           fulfillment={child.fulfillment}
@@ -276,7 +283,7 @@ export const OrderBody = defineComponent({
                           onDownload={(no: string) => emit('download', no)}
                         />
                       ) : (
-                        <div class="text-sm text-muted">{t('orderDetail.childFulfillmentEmpty')}</div>
+                        <div><h3 class="mb-3 text-sm font-bold text-fg">{t('orderDetail.childFulfillmentTitle')}</h3><div class="text-sm text-muted">{t('orderDetail.childFulfillmentEmpty')}</div></div>
                       )}
                     </div>
                   </div>
@@ -287,7 +294,6 @@ export const OrderBody = defineComponent({
 
           {o.fulfillment && (
             <Card>
-              <CardHeader title={t('orderDetail.fulfillmentTitle')}>{{ icon: () => <PackageCheck class="size-5 text-primary" /> }}</CardHeader>
               <FulfillmentBlock fulfillment={o.fulfillment} items={o.items || []} orderNo={o.order_no} helpers={h} downloading={props.downloading} onDownload={(no: string) => emit('download', no)} />
             </Card>
           )}

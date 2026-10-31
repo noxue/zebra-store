@@ -62,6 +62,11 @@ export default defineComponent({
         ),
       },
       {
+        key: 'tags',
+        title: t('admin.resellerProfiles.metadata.tags'),
+        render: (r) => r.tags?.length ? <div class="flex min-w-28 max-w-64 flex-wrap gap-1">{r.tags.map((tag) => <Badge key={tag} tone="primary"><span class="whitespace-normal break-all">{tag}</span></Badge>)}</div> : '-',
+      },
+      {
         key: 'status',
         title: t('admin.resellerProfiles.table.status'),
         render: (r) => (
