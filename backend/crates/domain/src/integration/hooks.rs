@@ -77,10 +77,38 @@ pub enum FailureRefund {
     Manual(zs_shared::money::Amount),
 }
 
+/// Administrative acknowledgement for a late supplier batch after a buyer refund.
+/// Presence is the explicit capability signal; old stores never expose this map.
+#[derive(Debug, Clone, Serialize)]
+pub struct StockRecoveryReceipt {
+    pub procurement_order_id: Id,
+    pub upstream_order_no: String,
+    pub status: StockRecoveryStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub payload_sha256: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StockRecoveryStatus {
+    Pending,
+    Recovered,
+    Review,
+}
+
 /// Integration reactions to order events (implemented by this group, called by the
 /// order group from its payment / status-change workflows).
 #[async_trait]
 pub trait IntegrationOrderEvents: Send + Sync {
+    /// Capability and exact-batch recovery acknowledgement for privileged suppliers.
+    async fn stock_recovery_receipts(
+        &self,
+        order: &Order,
+    ) -> Result<std::collections::HashMap<Id, StockRecoveryReceipt>> {
+        let _ = order;
+        Ok(std::collections::HashMap::new())
+    }
+
     /// Read-only eligibility to request cancellation of unresolved purchases.
     async fn can_stop_procurement_for_refund(&self, order: &Order) -> Result<bool> {
         let _ = order;

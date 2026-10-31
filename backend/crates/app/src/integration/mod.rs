@@ -82,6 +82,14 @@ impl OrderEvents {
 
 #[async_trait]
 impl IntegrationOrderEvents for OrderEvents {
+    async fn stock_recovery_receipts(
+        &self,
+        order: &zs_domain::order::model::Order,
+    ) -> Result<std::collections::HashMap<Id, zs_domain::integration::hooks::StockRecoveryReceipt>>
+    {
+        self.procurement.stock_recovery_receipts(order).await
+    }
+
     async fn can_stop_procurement_for_refund(
         &self,
         order: &zs_domain::order::model::Order,

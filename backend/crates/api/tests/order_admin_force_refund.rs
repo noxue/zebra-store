@@ -560,6 +560,15 @@ async fn late_receipt(f: &Fixture, id: i64, payload: &str) {
         .unwrap();
 }
 
+async fn recovery_receipt(f: &Fixture) -> serde_json::Value {
+    let detail = f
+        .app
+        .admin_call("GET", &format!("/api/v1/admin/orders/{}", f.order_id), None)
+        .await;
+    assert_eq!(detail["status_code"], 0, "{detail}");
+    detail["data"]["upstream_stock_recovery"][f.child_id.to_string()].clone()
+}
+
 #[tokio::test]
 async fn rfd06_late_receipts_for_canceled_and_refunded_tasks_enter_stock_without_buyer_delivery() {
     use zs_infra::db::entity::{
@@ -568,6 +577,10 @@ async fn rfd06_late_receipts_for_canceled_and_refunded_tasks_enter_stock_without
     for status in ["accepted", "canceled", "refunded"] {
         let f = fixture().await;
         let id = refunded_purchase(&f, 2, status).await;
+        let receipt = recovery_receipt(&f).await;
+        assert_eq!(receipt["status"], "pending");
+        assert_eq!(receipt["upstream_order_no"], "SYNTHETIC-SUPPLIER-RECEIPT");
+        assert!(receipt["payload_sha256"].is_null());
         late_receipt(&f, id, "SYNTHETIC-RECOVERY-A\nSYNTHETIC-RECOVERY-B").await;
         let purchase = procurement_orders::Entity::find_by_id(id)
             .one(&f.app.db)
@@ -575,6 +588,14 @@ async fn rfd06_late_receipts_for_canceled_and_refunded_tasks_enter_stock_without
             .unwrap()
             .unwrap();
         assert_eq!(purchase.status, "stock_recovered", "{status}");
+        let receipt = recovery_receipt(&f).await;
+        assert_eq!(receipt["status"], "recovered");
+        assert_eq!(receipt["procurement_order_id"], id);
+        assert_eq!(
+            receipt["payload_sha256"],
+            "c7fad2ab6e87e92421ce35b03775427c389a61cce92949d984db35276977ae9f"
+        );
+        assert!(!receipt.to_string().contains("SYNTHETIC-RECOVERY-"));
         use zs_domain::integration::procurement::ProcurementRepo;
         let repo =
             zs_infra::db::repo::integration::procurement::SeaProcurementRepo::new(f.app.db.clone());
@@ -681,6 +702,7 @@ async fn rfd06_ambiguous_or_previously_disclosed_cards_are_held_for_review() {
         "duplicate-lines",
         "existing-stock",
         "disclosed",
+        "embedded-disclosure",
     ] {
         let f = fixture().await;
         let id = refunded_purchase(
@@ -703,10 +725,18 @@ async fn rfd06_ambiguous_or_previously_disclosed_cards_are_held_for_review() {
             _ => {
                 let now = chrono::Utc::now();
                 fulfillments::ActiveModel {
-                    order_id: Set(f.child_id),
+                    order_id: Set(if case == "embedded-disclosure" {
+                        f.order_id
+                    } else {
+                        f.child_id
+                    }),
                     type_: Set("upstream".into()),
                     status: Set("delivered".into()),
-                    payload: Set("SYNTHETIC-DISCLOSED".into()),
+                    payload: Set(if case == "embedded-disclosure" {
+                        "Previously sent code: SYNTHETIC-DISCLOSED (use once)".into()
+                    } else {
+                        "SYNTHETIC-DISCLOSED".into()
+                    }),
                     created_at: Set(now),
                     updated_at: Set(now),
                     ..Default::default()
@@ -718,6 +748,7 @@ async fn rfd06_ambiguous_or_previously_disclosed_cards_are_held_for_review() {
             }
         };
         late_receipt(&f, id, &payload).await;
+        assert_eq!(recovery_receipt(&f).await["status"], "review");
         assert_eq!(
             procurement_orders::Entity::find_by_id(id)
                 .one(&f.app.db)
@@ -884,4 +915,134 @@ async fn rfd05_wallet_refund_also_stops_unsubmitted_procurement() {
         order_common::dec("125")
     );
     assert_eq!(f.calls.load(Ordering::SeqCst), 0);
+}
+
+/// RFD-06: capability is not inferred from a status label or missing supplier identity.
+#[tokio::test]
+async fn rfd06_recovery_acknowledgement_requires_full_refund_and_supplier_reference() {
+    use zs_infra::db::entity::{orders, procurement_orders};
+    let f = fixture().await;
+    assert!(recovery_receipt(&f).await.is_null());
+    let id = refunded_purchase(&f, 1, "canceled").await;
+    assert_eq!(recovery_receipt(&f).await["status"], "pending");
+    procurement_orders::Entity::update_many()
+        .col_expr(
+            procurement_orders::Column::UpstreamOrderNo,
+            sea_orm::sea_query::Expr::value(""),
+        )
+        .filter(procurement_orders::Column::Id.eq(id))
+        .exec(&f.app.db)
+        .await
+        .unwrap();
+    assert!(recovery_receipt(&f).await.is_null());
+    procurement_orders::Entity::update_many()
+        .col_expr(
+            procurement_orders::Column::UpstreamOrderNo,
+            sea_orm::sea_query::Expr::value("SYNTHETIC-SUPPLIER-RECEIPT"),
+        )
+        .filter(procurement_orders::Column::Id.eq(id))
+        .exec(&f.app.db)
+        .await
+        .unwrap();
+    orders::Entity::update_many()
+        .col_expr(
+            orders::Column::RefundedAmount,
+            sea_orm::sea_query::Expr::value(order_common::dec("0")),
+        )
+        .exec(&f.app.db)
+        .await
+        .unwrap();
+    assert!(recovery_receipt(&f).await.is_null());
+}
+
+/// RFD-06: the actual native signed/encrypted event reaches stock recovery and its
+/// privileged acknowledgement, while the refunded customer gets no fulfillment.
+#[tokio::test]
+async fn rfd06_native_recovery_event_is_authenticated_idempotent_and_acknowledged() {
+    use axum::{body::Body, http::Request};
+    use zs_infra::db::entity::{procurement_stock_recoveries, site_connections};
+    use zs_shared::zs as protocol;
+    let f = fixture().await;
+    let id = refunded_purchase(&f, 1, "canceled").await;
+    let secret = "native-recovery-test-secret";
+    let now = chrono::Utc::now();
+    site_connections::ActiveModel {
+        id: Set(1),
+        name: Set("Recovery fixture".into()),
+        base_url: Set("https://supplier.example.test".into()),
+        api_key: Set("native-recovery-test-key".into()),
+        callback_url: Set(String::new()),
+        exchange_rate: Set(order_common::dec("1")),
+        price_markup_percent: Set(order_common::dec("0")),
+        api_secret: Set(f.app.ctx.cipher.encrypt(secret).unwrap()),
+        protocol: Set("zebra-store".into()),
+        status: Set("active".into()),
+        created_at: Set(now),
+        updated_at: Set(now),
+        ..Default::default()
+    }
+    .insert(&f.app.db)
+    .await
+    .unwrap();
+    let payload = "SYNTHETIC-NATIVE-RECOVERY";
+    let sealed = protocol::seal_delivery(
+        secret,
+        json!({"type":"auto","payload":payload,"delivery_data":null})
+            .to_string()
+            .as_bytes(),
+    )
+    .unwrap();
+    let event_id = "hongyun-native-stock-recovery-fixture-v1";
+    let body = json!({"id":event_id,"type":"order.delivered","created_at":now,"data":{
+        "order_no":"SYNTHETIC-SUPPLIER-RECEIPT","downstream_order_no":f.app.order(f.child_id).await.order_no,
+        "status":"delivered","items":[{"sku_id":f.sku_id,"quantity":1,"delivery":sealed}]
+    }}).to_string();
+    for _ in 0..2 {
+        let timestamp = chrono::Utc::now().timestamp();
+        let nonce = uuid::Uuid::new_v4().simple().to_string();
+        let signature = protocol::Signed {
+            method: "POST",
+            path: "/api/v1/zs/events",
+            query: "",
+            timestamp,
+            nonce: &nonce,
+            body: body.as_bytes(),
+        }
+        .sign(secret);
+        let req = Request::builder()
+            .method("POST")
+            .uri("/api/v1/zs/events")
+            .header(protocol::HEADER_KEY, "native-recovery-test-key")
+            .header(protocol::HEADER_TIMESTAMP, timestamp.to_string())
+            .header(protocol::HEADER_NONCE, nonce)
+            .header(protocol::HEADER_SIGNATURE, signature)
+            .header(protocol::HEADER_EVENT_ID, event_id)
+            .header("Content-Type", "application/json")
+            .body(Body::from(body.clone()))
+            .unwrap();
+        let (status, _, raw) = f.app.send(req).await;
+        let response: serde_json::Value = serde_json::from_slice(&raw).unwrap();
+        assert_eq!(status, 200, "{response}");
+        assert_eq!(response["ok"], true, "{response}");
+    }
+    let receipt = recovery_receipt(&f).await;
+    assert_eq!(receipt["status"], "recovered");
+    assert_eq!(receipt["procurement_order_id"], id);
+    assert_eq!(
+        receipt["payload_sha256"],
+        zs_shared::crypto::sha256_hex(payload.as_bytes())
+    );
+    assert_eq!(f.app.secrets_with(f.product_id, "available").await, 1);
+    assert_eq!(
+        procurement_stock_recoveries::Entity::find()
+            .count(&f.app.db)
+            .await
+            .unwrap(),
+        1
+    );
+    assert!(f.app.order(f.child_id).await.status == "refunded");
+    assert_eq!(
+        fulfillments::Entity::find().count(&f.app.db).await.unwrap(),
+        0
+    );
 }

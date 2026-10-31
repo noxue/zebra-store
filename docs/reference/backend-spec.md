@@ -982,3 +982,16 @@ Tokens use the current account's identity and token version, ordinary non-rememb
 ### Supplier products with local stock first
 
 Upstream mappings retain `fulfillment_type=upstream`. Administrators may import local cards for their active SKUs without a converter binding or a special batch note. Checkout counts free local cards for the requested SKU, then checks only the missing quantity at the supplier. Prices and quantity discounts are calculated for the original combined quantity. If local inventory covers only part of a line, the priced line is split into an automatic local child and an upstream child; cent rounding, coupon allocations and reseller snapshots preserve the original totals. Local cards are reserved using the existing conditional transaction and released by cancellation/expiry. Fulfillment and procurement are independent, so local goods can be delivered while only the remainder is procured. Existing payment-time reservation settings still apply. Public inventory and stock filters include both sources; reserved, used and deleted cards never count as free local stock.
+
+
+### Refunded upstream stock recovery acknowledgement (RFD-07)
+
+`GET /api/v1/admin/orders/:id` adds `upstream_stock_recovery`, keyed by the original child order ID. It is administrator-only and is not included in buyer/guest order DTOs. An entry exists only for a fully refunded order with a known original supplier order number:
+
+```json
+{"upstream_stock_recovery":{"194":{"procurement_order_id":20,"upstream_order_no":"HY20","status":"pending"}}}
+```
+
+`status` is `pending`, `recovered`, or `review`; `recovered` additionally carries `payload_sha256`, the SHA-256 of the original held batch payload. Suppliers must match the original upstream reference and exact batch hash before acknowledging recovery. `pending` is an explicit capability signal to submit a normal native signed/encrypted `order.delivered` event with a distinct stable recovery event ID. It is not permission to publish a buyer fulfillment: the order-family transaction performs stock recovery and leaves the buyer order refunded. Existing disclosures and ambiguous receipts enter `review`.
+
+An absent entry (including old Store versions) never permits recovery notifications. A successful callback response alone is not proof of recovery; read back the original order acknowledgement. Card secrets and hashes are not added to public storefront order responses.

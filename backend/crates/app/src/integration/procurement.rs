@@ -1262,6 +1262,64 @@ impl ProcurementService {
         Ok(CancelOutcome { refund })
     }
 
+    /// A refunded batch is acknowledged separately from buyer delivery. The
+    /// original supplier reference and digest let its outbox confirm the exact batch.
+    pub async fn stock_recovery_receipts(
+        &self,
+        order: &zs_domain::order::model::Order,
+    ) -> Result<HashMap<Id, zs_domain::integration::hooks::StockRecoveryReceipt>> {
+        use zs_domain::integration::hooks::{StockRecoveryReceipt, StockRecoveryStatus};
+        use zs_domain::order::model::OrderStatus;
+        let root_refunded =
+            order.status == OrderStatus::Refunded && order.refunded_amount >= order.total_amount;
+        let targets = if order.children.is_empty() {
+            vec![order]
+        } else {
+            order.children.iter().collect()
+        };
+        let mut receipts = HashMap::new();
+        for target in targets {
+            if target.status != OrderStatus::Refunded
+                || !(root_refunded || target.refunded_amount >= target.total_amount)
+            {
+                continue;
+            }
+            let Some(p) = self.repo.get_by_local_order_id(target.id).await? else {
+                continue;
+            };
+            if p.upstream_order_no.is_empty() {
+                continue;
+            }
+            let status = if p.status == ProcurementStatus::StockRecovered {
+                StockRecoveryStatus::Recovered
+            } else if target.fulfillment.is_some()
+                || p.error_message
+                    == "refunded upstream delivery requires inventory recovery review"
+            {
+                StockRecoveryStatus::Review
+            } else {
+                StockRecoveryStatus::Pending
+            };
+            let payload_sha256 = (status == StockRecoveryStatus::Recovered)
+                .then(|| {
+                    p.held_delivery
+                        .as_ref()
+                        .map(|f| zs_shared::crypto::sha256_hex(f.payload.as_bytes()))
+                })
+                .flatten();
+            receipts.insert(
+                target.id,
+                StockRecoveryReceipt {
+                    procurement_order_id: p.id,
+                    upstream_order_no: p.upstream_order_no,
+                    status,
+                    payload_sha256,
+                },
+            );
+        }
+        Ok(receipts)
+    }
+
     /// Read-only: a request may stop a queue/known supplier task. Unknown receipts
     /// and purchased-but-undelivered goods never become refundable by relabeling.
     pub async fn can_stop_for_refund(

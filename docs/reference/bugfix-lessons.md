@@ -3143,3 +3143,8 @@ dujiao-next 在约 7 个月内迭代了支付（10+ 网关）、订单/库存、
 
 - **修复要点**：保留原总利润口径，站长利润扣除代理账本净分成；提现拆账不应改变历史收益日期或金额，商品分配依据不可变快照并精确到分。
 - **必测用例**：`dashboard_reports.rs` 的 `owner_profit_deducts_net_reseller_earnings_and_buckets_refunds_by_local_day` 与 `withdrawal_splits_preserve_historical_profit_and_admin_item_allocations`，覆盖日切、退款扣回、提现拆分、订单和采购分配。
+
+#### RFD-07 回库必须有跨服务的明确确认
+
+- **修复要点**：只在管理员原订单明确暴露回库能力、原供应商号匹配且没有既有交付时发送原生加密回库事件。使用独立稳定事件号，读回 recovered 与原批次 SHA256 才确认，不能把 HTTP 成功当作库存完成；已披露或不明确的卡保持人工核查。交付文字中嵌有卡密也属于披露歧义。
+- **必测用例**：`order_admin_force_refund.rs::rfd06_native_recovery_event_is_authenticated_idempotent_and_acknowledged`、`rfd06_recovery_acknowledgement_requires_full_refund_and_supplier_reference` 和既有 `rfd06_ambiguous_or_previously_disclosed_cards_are_held_for_review` 的 embedded-disclosure 分支；配套上游 delivery 测试覆盖旧版本、重复、响应丢失、假成功、原号/摘要不符及交付中退款。

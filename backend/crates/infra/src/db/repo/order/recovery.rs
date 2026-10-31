@@ -128,10 +128,7 @@ pub(crate) async fn recover_in<C: ConnectionTrait>(
             .all(conn)
             .await
             .dom()?;
-        if disclosed
-            .iter()
-            .any(|f| f.payload.lines().any(|line| line.trim() == secret))
-        {
+        if disclosed.iter().any(|f| f.payload.contains(secret)) {
             return Err(review());
         }
     }

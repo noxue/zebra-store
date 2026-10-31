@@ -177,6 +177,7 @@ export interface AdminFulfillment {
 
 export interface AdminOrder {
   reseller_item_profit_amounts?: Record<string, Money>
+  upstream_stock_recovery?: Record<string, { procurement_order_id: number; upstream_order_no: string; status: 'pending' | 'recovered' | 'review'; payload_sha256?: string }>
   id: number
   order_no: string
   original_refund_supported?: boolean

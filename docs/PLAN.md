@@ -160,4 +160,8 @@ cd admin && npm run dev                           # :5186
 
 中文订单状态补齐分站列表中的 fulfilling（处理中）和 partially_delivered（部分交付），三语言键与顾客订单详情保持一致。采购单列表和详情同步展示站长利润与总利润，代理分成从父单账本按不可变商品分配快照分摊；提现拆账不会改变历史盈利。
 
-本地验证（2026-11-01）：Rust workspace 1166 项通过、1 项外部环境测试忽略；格式及严格 Clippy 通过。独立 PostgreSQL 16 退款/回库集成测试 16 项通过。admin 281 项、storefront 232 项测试和两端 typecheck/lint/build 通过。Linux amd64 musl 嵌入双前端发布程序在本地临时数据库容器启动，健康及关键静态资源哈希通过。无真实扣款/退款、无 GitHub Actions；Store 生产发布尚待运维边界授权。
+本地验证（2026-11-01）：Rust workspace 1168 项通过、1 项外部环境测试忽略；格式及严格 Clippy 通过。独立 PostgreSQL 16 退款/回库集成测试 18 项通过。admin 281 项、storefront 232 项测试和两端 typecheck/lint/build 通过。Linux amd64 musl 嵌入双前端发布程序在本地临时数据库容器启动，健康及关键静态资源哈希通过。无真实扣款/退款、无 GitHub Actions；Store 生产发布尚待运维边界授权。
+
+RFD-07 完整联动：管理员原订单提供按子单映射的 upstream_stock_recovery 能力/状态及整批摘要；上游仅在明确 pending 信号及原 HY 号匹配后用单独稳定事件号发送加密原卡。恢复以 recovered 及原批次 SHA256 读回确认为准，不能把 HTTP 成功当成回库完成；旧商城不发卡，已退款待通知任务每 5 分钟只读复核能力，已披露/歧义停止自动处理。
+
+RFD-07 已验证：真实原生签名/加密事件通过公开路由完成回库、摘要确认及重复去重，18 项退款/回库测试在 PostgreSQL 全部通过；全量 workspace 1168 项通过、1 项外部环境测试忽略；更新后的 Linux 发布程序已在本地临时数据库容器验证启动及关键静态资源。
