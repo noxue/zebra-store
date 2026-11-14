@@ -55,8 +55,9 @@ export default defineComponent({
               l.searchQuery.value = v
             }}
             onClearSearch={l.clearSearch}
-          >{{ filters: ({ mobile }: { mobile: boolean }) => <CatalogFacetControls model={l.facets} retry={l.retryFilters} mobile={mobile} onApply={() => { l.showFilterDrawer.value = false }} /> }}</CategorySidebar>
+          />
           <main class="min-w-0 flex-1 space-y-6">
+            <CatalogFacetControls model={l.facets} retry={l.retryFilters} />
             {l.categoryError.value && !l.blocked.value && <div role="alert" class="zs-card space-y-2 text-sm"><p>{t('catalogBrowse.categoriesFailed')}</p><Button size="sm" variant="secondary" onClick={() => void l.retryCategories()}>{t('catalogBrowse.retry')}</Button></div>}
             {!l.loading.value && (l.error.value || l.blocked.value) ? <CatalogListFeedback list={l} /> : !l.loading.value && l.products.value.length === 0 ? (
               <div class="zs-card">
