@@ -123,7 +123,9 @@ pub fn product_to_domain(m: products::Model) -> Product {
 
 /// `EXISTS` an active, non-deleted category for the product row.
 const ACTIVE_CATEGORY_SQL: &str = "EXISTS (SELECT 1 FROM categories c WHERE c.id = products.category_id \
-     AND c.is_active = true AND c.deleted_at IS NULL)";
+     AND c.is_active = true AND c.deleted_at IS NULL \
+     AND (c.parent_id = 0 OR EXISTS (SELECT 1 FROM categories parent \
+     WHERE parent.id = c.parent_id AND parent.is_active = true AND parent.deleted_at IS NULL)))";
 
 // Stock sub-expressions (ORD-12), identical to the original `applyStockStatusFilter`.
 const MANUAL_ACTIVE_SKU: &str = "EXISTS (SELECT 1 FROM product_skus ps WHERE ps.product_id = products.id \
@@ -192,7 +194,7 @@ fn search_condition<C: ConnectionTrait>(conn: &C, search: &str) -> Condition {
     any
 }
 
-fn filter_condition<C: ConnectionTrait>(conn: &C, filter: &ProductFilter) -> Condition {
+pub(super) fn filter_condition<C: ConnectionTrait>(conn: &C, filter: &ProductFilter) -> Condition {
     let mut cond = Condition::all().add(products::Column::DeletedAt.is_null());
     if filter.only_active {
         cond = cond
@@ -229,6 +231,20 @@ fn filter_condition<C: ConnectionTrait>(conn: &C, filter: &ProductFilter) -> Con
         } else {
             Expr::cust(format!("NOT ({nonempty})"))
         });
+    }
+    for (key, value) in filter.facets.entries() {
+        use crate::db::entity::extra::product_catalog_facets as facets;
+        let values = Query::select()
+            .column(facets::Column::ProductId)
+            .from(facets::Entity)
+            .and_where(facets::Column::Dimension.eq(key.as_str()))
+            .and_where(facets::Column::ValueId.eq(value.as_str()))
+            .and_where(facets::Column::ValueKey.eq(value.as_str().as_bytes().to_vec()))
+            .and_where(
+                Expr::col(facets::Column::ProductId).in_subquery(super::facets::valid_documents()),
+            )
+            .to_owned();
+        cond = cond.add(Expr::col((products::Entity, products::Column::Id)).in_subquery(values));
     }
     cond
 }

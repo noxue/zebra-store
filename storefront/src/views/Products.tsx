@@ -2,6 +2,8 @@ import { defineComponent, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { CategorySidebar } from '@/components/product/CategorySidebar'
+import { CatalogFacetControls } from '@/components/product/CatalogFacetControls'
+import { CatalogListFeedback } from '@/components/product/CatalogListFeedback'
 import { ProductGrid } from '@/components/product/ProductGrid'
 import { ProductQuickBuy } from '@/components/product/ProductQuickBuy'
 import { useLocalized } from '@/composables/useLocalized'
@@ -37,6 +39,7 @@ export default defineComponent({
         </div>
         <div class="flex flex-col gap-6 lg:flex-row">
           <CategorySidebar
+            disabled={!l.ready.value}
             categories={l.categoryGroups.value}
             selectedCategory={l.selectedCategory.value}
             expandedParentIds={l.expandedParentIds.value}
@@ -52,9 +55,10 @@ export default defineComponent({
               l.searchQuery.value = v
             }}
             onClearSearch={l.clearSearch}
-          />
+          >{{ filters: ({ mobile }: { mobile: boolean }) => <CatalogFacetControls model={l.facets} retry={l.retryFilters} mobile={mobile} onApply={() => { l.showFilterDrawer.value = false }} /> }}</CategorySidebar>
           <main class="min-w-0 flex-1 space-y-6">
-            {!l.loading.value && l.products.value.length === 0 ? (
+            {l.categoryError.value && !l.blocked.value && <div role="alert" class="zs-card space-y-2 text-sm"><p>{t('catalogBrowse.categoriesFailed')}</p><Button size="sm" variant="secondary" onClick={() => void l.retryCategories()}>{t('catalogBrowse.retry')}</Button></div>}
+            {!l.loading.value && (l.error.value || l.blocked.value) ? <CatalogListFeedback list={l} /> : !l.loading.value && l.products.value.length === 0 ? (
               <div class="zs-card">
                 <EmptyState variant={l.hasFilters.value ? 'search' : 'empty'} title={l.hasFilters.value ? t('products.emptyFiltered') : t('products.empty')}>
                   {l.hasFilters.value ? (

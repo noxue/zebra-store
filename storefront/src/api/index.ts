@@ -1,6 +1,6 @@
 export * from './client'
 export type * from './types'
-export { configAPI, productAPI, postAPI, bannerAPI, categoryAPI, memberLevelAPI, captchaAPI } from './catalog'
+export { catalogFacetAPI, configAPI, productAPI, postAPI, bannerAPI, categoryAPI, memberLevelAPI, captchaAPI } from './catalog'
 export { userAuthAPI, userTotpAPI, GOOGLE_REDIRECT_API_PATHS } from './auth'
 export { userProfileAPI } from './user'
 export { userOrderAPI, guestOrderAPI, paymentAPI, encodeGuestAuthorization } from './order'

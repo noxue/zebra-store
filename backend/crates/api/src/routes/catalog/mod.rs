@@ -1,6 +1,7 @@
 //! Catalog endpoints: categories, products, card secrets.
 
 mod card_secret;
+mod facets;
 mod product;
 
 use axum::extract::State;
@@ -18,8 +19,11 @@ use zs_shared::page::PageRequest;
 /// Routes of the catalog group.
 pub fn routes() -> RouteSet {
     RouteSet {
-        public: public().merge(product::public()),
-        admin: admin().merge(product::admin()).merge(card_secret::admin()),
+        public: public().merge(product::public()).merge(facets::public()),
+        admin: admin()
+            .merge(product::admin())
+            .merge(card_secret::admin())
+            .merge(facets::admin()),
         ..RouteSet::default()
     }
 }

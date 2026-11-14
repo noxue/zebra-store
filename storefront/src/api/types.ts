@@ -287,7 +287,31 @@ export interface Product {
   related_posts?: RelatedPost[] | null
 }
 
-export interface ProductListParams {
+export type CatalogFacetKey = 'family' | 'project' | 'country' | 'city' | 'ip_type' | 'line'
+export type CatalogFacetFilters = Partial<Record<`facet_${CatalogFacetKey}`, string>>
+export interface CatalogFacetCapabilities {
+  schema_version: number
+  dimensions: CatalogFacetKey[]
+  revision_format: 'decimal_string'
+  supports_product_filters: boolean
+  supports_value_search: boolean
+}
+export interface CatalogFacetOption {
+  value_id: string
+  label: LocalizedText
+  product_count: number
+}
+export interface CatalogFacetOptionsParams extends CatalogFacetFilters {
+  dimension: CatalogFacetKey
+  page?: number
+  page_size?: number
+  category_id?: number
+  search?: string
+  option_search?: string
+  value_id?: string
+}
+
+export interface ProductListParams extends CatalogFacetFilters {
   page?: number
   page_size?: number
   category_id?: number

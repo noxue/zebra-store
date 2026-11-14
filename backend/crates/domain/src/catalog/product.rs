@@ -708,6 +708,7 @@ impl StockFilter {
 /// Product list filter shared by public and admin queries.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ProductFilter {
+    pub facets: super::facets::FacetFilters,
     pub page: PageRequest,
     pub category_id: Option<Id>,
     /// Expanded public category ids (takes precedence over `category_id`); `Some(empty)` matches nothing.

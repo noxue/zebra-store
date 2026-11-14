@@ -1,4 +1,4 @@
-import { defineComponent, onBeforeUnmount, ref, watch } from 'vue'
+import { defineComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ArrowLeft, LogIn, ShieldCheck, ShoppingCart, Sparkles } from 'lucide-vue-next'
@@ -23,15 +23,37 @@ export default defineComponent({
     const actionsEl = ref<HTMLElement | null>(null)
     const showMobileBar = ref(false)
     let observer: IntersectionObserver | null = null
+    let pendingFrame: number | null = null
+    const updateMobileBar = () => {
+      const el = actionsEl.value
+      showMobileBar.value = Boolean(el && el.getBoundingClientRect().bottom <= 0)
+    }
+    const scheduleMobileBar = () => {
+      if (pendingFrame === null) pendingFrame = requestAnimationFrame(() => {
+        pendingFrame = null
+        updateMobileBar()
+      })
+    }
     watch(actionsEl, (el) => {
       observer?.disconnect()
+      updateMobileBar()
       if (!el || typeof IntersectionObserver === 'undefined') return
-      observer = new IntersectionObserver(([entry]) => {
-        showMobileBar.value = !entry.isIntersecting && entry.boundingClientRect.top < 0
-      })
+      observer = new IntersectionObserver(updateMobileBar)
       observer.observe(el)
+    }, { flush: 'post' })
+    // IntersectionObserver need not fire when End/anchor scrolling jumps from
+    // below to above the viewport without an intersecting frame in between.
+    onMounted(() => {
+      window.addEventListener('scroll', scheduleMobileBar, { passive: true })
+      window.addEventListener('resize', scheduleMobileBar, { passive: true })
+      scheduleMobileBar()
     })
-    onBeforeUnmount(() => observer?.disconnect())
+    onBeforeUnmount(() => {
+      observer?.disconnect()
+      window.removeEventListener('scroll', scheduleMobileBar)
+      window.removeEventListener('resize', scheduleMobileBar)
+      if (pendingFrame !== null) cancelAnimationFrame(pendingFrame)
+    })
 
     const skeleton = () => (
       <div class="grid gap-8 lg:grid-cols-2">
@@ -123,7 +145,7 @@ export default defineComponent({
                   />
                 </div>
                 {pd.purchaseWarning.value && <Alert tone="warning">{pd.purchaseWarning.value}</Alert>}
-                {pd.cannotPurchaseReason.value && !pd.purchaseWarning.value && <Alert tone="error">{pd.cannotPurchaseReason.value}</Alert>}
+                {pd.cannotPurchaseReason.value && !pd.requiresSkuSelection.value && !pd.purchaseWarning.value && <Alert tone="error">{pd.cannotPurchaseReason.value}</Alert>}
                 <div ref={actionsEl} class="grid grid-cols-2 gap-3">
                   {pd.requiresLogin.value ? (
                     <Button size="lg" block class="col-span-2" onClick={pd.goLogin}>
