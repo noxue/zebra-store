@@ -56,14 +56,17 @@ async fn sync_creates_all_tables_idempotently() {
         .await
         .unwrap();
     // 60 original tables + casbin_rule + jobs + integration / zebra-store extras,
-    // including converter profiles, bindings, event history, and gateway refund attempts.
+    // including converter profiles, bindings, event history, gateway refund attempts,
+    // and the two independent catalog browse metadata tables.
     let names: Vec<String> = rows
         .iter()
         .map(|row| row.try_get("", "name").unwrap())
         .collect();
-    assert_eq!(rows.len(), 80, "tables: {names:?}");
+    assert_eq!(rows.len(), 82, "tables: {names:?}");
     assert!(names.iter().any(|name| name == "gateway_refund_attempts"));
     assert!(names.iter().any(|name| name == "personal_api_keys"));
+    assert!(names.iter().any(|name| name == "product_catalog_documents"));
+    assert!(names.iter().any(|name| name == "product_catalog_facets"));
     assert!(
         names
             .iter()

@@ -1,5 +1,8 @@
 {
   "en-US": {
+    "error.catalog_facets_changed": "Product filters have changed. Refresh the product before saving again.",
+    "error.catalog_facets_revision_invalid": "The product filter revision is invalid. Refresh the product and try again.",
+    "error.catalog_facets_revision_exhausted": "Product filter revisions require administrator maintenance.",
     "error.upstream_recovery_needs_review": "Late upstream delivery requires review: stock recovery cannot confirm that these credentials were never disclosed or duplicated.",
     "error.order_procurement_processing": "Upstream procurement is still processing or unresolved. Refunds are unavailable until it is settled.",
     "email.order_status.body": "Order No: %s\nStatus: %s\nAmount: %s %s\n\nThank you for your purchase.\n\n%s's Site URL: %s",
@@ -435,6 +438,9 @@
     "error.refund_restock_unavailable": "This delivery cannot be mapped to card stock. Refund without restocking and review it manually."
   },
   "zh-CN": {
+    "error.catalog_facets_changed": "商品筛选配置已变更，请刷新商品后重新确认。",
+    "error.catalog_facets_revision_invalid": "商品筛选版本无效，请刷新商品后重试。",
+    "error.catalog_facets_revision_exhausted": "商品筛选版本需要管理员维护。",
     "error.upstream_recovery_needs_review": "退款后的上游交付需要人工核查：无法确认卡密从未交付、数量正确且未重复，暂不自动回库。",
     "error.order_procurement_processing": "上游采购仍在处理中或结果未确定，任务结束并核实前无法退款。",
     "email.order_status.body": "订单号：%s\n状态：%s\n金额：%s %s\n\n感谢您的购买。\n\n%s 的网址：%s",
@@ -870,6 +876,9 @@
     "error.refund_restock_unavailable": "此交付内容无法明确对应卡密库存，请选择不回库退款后人工处理。"
   },
   "zh-TW": {
+    "error.catalog_facets_changed": "商品篩選設定已變更，請重新整理商品後再次確認。",
+    "error.catalog_facets_revision_invalid": "商品篩選版本無效，請重新整理商品後再試。",
+    "error.catalog_facets_revision_exhausted": "商品篩選版本需要管理員維護。",
     "error.upstream_recovery_needs_review": "退款後的上游交付需要人工核查：無法確認卡密從未交付、數量正確且未重複，暫不自動回庫。",
     "error.order_procurement_processing": "上游採購仍在處理中或結果未確定，任務結束並核實前無法退款。",
     "email.order_status.body": "訂單號：%s\n狀態：%s\n金額：%s %s\n\n感謝您的購買。\n\n%s 的網址：%s",

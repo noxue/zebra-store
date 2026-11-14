@@ -1,0 +1,97 @@
+name: Catalog facets candidate
+on:
+  push:
+    branches: [codex/catalog-facets]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    env:
+      RUSTUP_TOOLCHAIN: 1.98.1
+      RUST_TEST_THREADS: '2'
+    services:
+      postgres:
+        image: postgres:16-alpine@sha256:f377d590e5474681d4d7838635031a2b50647923b7abfa803ce9b5ff35d5c663
+        env:
+          POSTGRES_USER: zebra_test
+          POSTGRES_PASSWORD: isolated-ci-fixture-only
+          POSTGRES_DB: wallet_test
+        ports: ['18942:5432']
+        options: --health-cmd "pg_isready -U zebra_test -d wallet_test" --health-interval 5s --health-timeout 3s --health-retries 12
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: {persist-credentials: false}
+      - run: rustup toolchain install 1.98.1 --profile minimal --component rustfmt,clippy
+      - name: Required Rust gates
+        working-directory: backend
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy --locked --workspace --all-targets -- -D warnings
+          cargo test --locked --workspace
+      - name: PostgreSQL refund fault boundaries
+        working-directory: backend
+        env:
+          ZS_REFUND_TEST_DATABASE_URL: postgres://zebra_test:isolated-ci-fixture-only@127.0.0.1:18942/wallet_test
+        run: cargo test --locked -p zs-api --test order_wallet_converter_refund
+      - name: PostgreSQL catalog facet persistence boundaries
+        working-directory: backend
+        env:
+          ZS_CATALOG_TEST_DATABASE_URL: postgres://zebra_test:isolated-ci-fixture-only@127.0.0.1:18942/wallet_test
+        run: cargo test --locked -p zs-api --test catalog_facets
+  web:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: {node-version: '22'}
+      - name: Check and build both frontends
+        run: |
+          for app in storefront admin; do
+            (cd "$app" && npm ci && npm run typecheck && npm run lint && npm run test)
+          done
+          (cd storefront && npm run build)
+          (cd admin && npm run build -- --base=/admin/)
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: catalog-facets-web-${{ github.sha }}
+          path: |
+            storefront/dist
+            admin/dist
+          if-no-files-found: error
+          retention-days: 7
+  linux:
+    needs: [verify, web]
+    runs-on: ubuntu-24.04
+    env:
+      RUSTUP_TOOLCHAIN: 1.98.1
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: {persist-credentials: false}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: catalog-facets-web-${{ github.sha }}
+          path: .
+      - run: rustup toolchain install 1.98.1 --profile minimal --target x86_64-unknown-linux-musl
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29
+        with: {version: 0.16.0, use-cache: false}
+      - run: cargo install cargo-zigbuild --version 0.23.4 --locked
+      - name: Build qualified embedded Linux server
+        working-directory: backend
+        run: cargo zigbuild --locked --release -p zs-server --features embedded-web --target x86_64-unknown-linux-musl
+      - name: Package exact commit and checksums
+        run: |
+          mkdir -p candidate
+          cp backend/target/x86_64-unknown-linux-musl/release/zebra-store candidate/
+          cp backend/Cargo.lock candidate/
+          git rev-parse HEAD > candidate/source-commit.txt
+          git archive --format=tar HEAD | sha256sum > candidate/source-archive.sha256
+          rustc --version --verbose > candidate/rustc-version.txt
+          (cd candidate && sha256sum zebra-store Cargo.lock source-commit.txt source-archive.sha256 rustc-version.txt > SHA256SUMS)
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: catalog-facets-linux-${{ github.sha }}
+          path: candidate/*
+          if-no-files-found: error
+          retention-days: 7
