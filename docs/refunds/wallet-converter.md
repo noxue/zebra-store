@@ -37,3 +37,5 @@ SQLite和本机隔离PostgreSQL使用相同用例；本机Rust workspace、严�
 本机最终验证：Rust1.98.1，fmt与严格Clippy通过，workspace1179项通过、1项既有环境用例忽略；同一11组退款回归在SQLite与隔离PostgreSQL通过。admin283项、storefront232项及两端类型检查/lint/build通过；actionlint通过。新增测试没有ignore或放宽lint规则。生产Store未部署本补丁，正式原单退款未执行。
 
 首个固定候选e609179的远端Linux门禁保留失败证据：分站提现用例在libtest默认栈上发生初始化future栈溢出，Linux制品未构建。共享分站夹具改为在堆上承载嵌套初始化future，不改变业务断言、不跳过用例、不增大线程栈；重新执行原生门禁后生成新候选。
+
+最终固定候选539a748的CI43542806586全部成功：Rust1179项与独立PG11组、双前端及Linux包通过。制品与源码归档/锁文件/工具链核对，实际x86_64 ELF在本机Linux仿真环境启动、PG结账/转换/退款及确认503后的进程重启恢复均通过；2066个前后台文件与同run网页制品逐一一致，退款账本恰好两笔且无重复入账。测试只有模拟转换器、无供应商或生产连接；其HTTP传输URL仅在隔离PG中作为夹具配置植入，实际管理员HTTPS校验没有改变。后续文档提交与该程序候选分开记录，生产仍未部署。[发布与回退清单](wallet-converter-deployment.md)。
