@@ -53,6 +53,17 @@ jobs:
           done
           (cd storefront && npm run build)
           (cd admin && npm run build -- --base=/admin/)
+      - name: Isolated guided SKU browser smoke
+        run: |
+          (cd e2e && npm ci --ignore-scripts --no-audit --no-fund && npx playwright install --with-deps chromium)
+          node e2e/catalog-sku-smoke.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: catalog-sku-browser-${{ github.sha }}
+          path: e2e/test-results/catalog-sku
+          if-no-files-found: warn
+          retention-days: 7
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: catalog-facets-web-${{ github.sha }}

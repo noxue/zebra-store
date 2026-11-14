@@ -21,11 +21,11 @@ export const ProductMobileBar = defineComponent({
       return (
         <Transition name="zs-fade">
           {props.visible && (
-            <div class="fixed inset-x-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-30 lg:hidden">
+            <div role="region" aria-label={t('skuChoices.mobileActions')} class="fixed inset-x-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-30 lg:hidden">
               <div class="zs-glass flex items-center gap-3 rounded-full py-2 pl-5 pr-2 shadow-zs-lg">
                 <div class="min-w-0 flex-1">
-                  <div class="zs-num truncate text-lg font-bold zs-gradient-text">{formatPrice(d.price)}</div>
-                  {d.original && <div class="zs-num text-xs text-muted line-through">{formatPrice(d.original)}</div>}
+                  <div class="zs-num truncate text-lg font-bold zs-gradient-text">{e.requiresSkuSelection.value ? t('skuChoices.choose') : formatPrice(d.price)}</div>
+                  {d.original && !e.requiresSkuSelection.value && <div class="zs-num text-xs text-muted line-through">{formatPrice(d.original)}</div>}
                 </div>
                 {e.requiresLogin.value ? (
                   <Button size="sm" onClick={e.goLogin}>
@@ -34,7 +34,7 @@ export const ProductMobileBar = defineComponent({
                   </Button>
                 ) : (
                   <>
-                    <Button size="icon" variant="soft" disabled={!e.canPurchase.value} onClick={() => e.addToCart()}>
+                    <Button size="icon" variant="soft" aria-label={t('productDetail.addToCart')} disabled={!e.canPurchase.value} onClick={() => e.addToCart()}>
                       <ShoppingCart class="size-4" />
                     </Button>
                     <Button size="sm" disabled={!e.canPurchase.value} onClick={() => e.buyNow()}>

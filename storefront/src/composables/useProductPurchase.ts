@@ -23,6 +23,7 @@ import {
   type PublicStockDisplay,
 } from '@/utils/publicStock'
 import { buildSkuDisplayText, normalizeSkuId } from '@/utils/sku'
+import { initialSkuSelection } from '@/utils/skuChoices'
 import type { BadgeTone } from '@/utils/status'
 import { useLocalized } from './useLocalized'
 import { useMemberPricing } from './useMemberPricing'
@@ -235,7 +236,7 @@ export function useProductPurchase(product: Ref<Product | null>) {
   const canPurchase = computed(() => {
     const p = product.value
     if (!p) return false
-    if (activeSkus.value.length === 0) return false
+    if (activeSkus.value.length === 0 || !selectedSku.value) return false
     if (p.is_sold_out) return false
     if (requiresSkuSelection.value) return false
     if (p.stock_status === 'out_of_stock') return false
@@ -252,19 +253,12 @@ export function useProductPurchase(product: Ref<Product | null>) {
     return t('productDetail.stockUnavailable')
   })
 
+  const selectSku = (id: number) => {
+    selectedSkuId.value = Number.isSafeInteger(id) && id > 0 && activeSkus.value.filter((sku) => normalizeSkuId(sku.id) === id).length === 1 ? id : 0
+  }
+
   const syncSelectedSku = (keepCurrent = true) => {
-    const rows = activeSkus.value
-    if (rows.length === 0) {
-      selectedSkuId.value = 0
-      return
-    }
-    if (rows.length === 1) {
-      selectedSkuId.value = normalizeSkuId(rows[0].id)
-      return
-    }
-    if (keepCurrent && rows.some((s) => normalizeSkuId(s.id) === selectedSkuId.value)) return
-    const first = rows.find((s) => skuPurchasable(s))
-    selectedSkuId.value = normalizeSkuId((first || rows[0]).id)
+    selectedSkuId.value = initialSkuSelection(activeSkus.value, selectedSkuId.value, keepCurrent)
   }
 
   const cartQuantityOfSelected = () => {
@@ -386,6 +380,7 @@ export function useProductPurchase(product: Ref<Product | null>) {
     requiresSkuSelection,
     canPurchase,
     cannotPurchaseReason,
+    selectSku,
     syncSelectedSku,
     addToCart,
     buyNow,

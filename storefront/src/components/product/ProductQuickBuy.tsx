@@ -71,7 +71,7 @@ export const ProductQuickBuy = defineComponent({
                     />
                   </div>
                   {engine.purchaseWarning.value && <Alert tone="warning">{engine.purchaseWarning.value}</Alert>}
-                  {engine.cannotPurchaseReason.value && !engine.purchaseWarning.value && <Alert tone="error">{engine.cannotPurchaseReason.value}</Alert>}
+                  {engine.cannotPurchaseReason.value && !engine.requiresSkuSelection.value && !engine.purchaseWarning.value && <Alert tone="error">{engine.cannotPurchaseReason.value}</Alert>}
                 </div>
               ),
             footer: () =>
