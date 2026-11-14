@@ -81,6 +81,61 @@ impl FacetService {
     }
 }
 
+const MAX_OPTION_SEARCH_CHARACTERS: usize = 160;
+
+/// Reject unrepresentable offsets before a database driver or multiplication can fail.
+pub fn validate_page(page: zs_shared::page::PageRequest) -> Result<()> {
+    let offset = page
+        .page
+        .checked_sub(1)
+        .and_then(|p| p.checked_mul(page.page_size));
+    if !(1..=zs_shared::page::MAX_PAGE_SIZE).contains(&page.page_size)
+        || offset.is_none_or(|n| n > i64::MAX as u64)
+    {
+        return Err(Error::bad_request("error.catalog_facets_page_invalid"));
+    }
+    Ok(())
+}
+
+#[derive(Clone)]
+pub struct FacetBrowseService {
+    repo: Arc<dyn zs_domain::catalog::facets::FacetBrowseRepo>,
+    products: super::product::ProductService,
+}
+impl std::fmt::Debug for FacetBrowseService {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("FacetBrowseService")
+    }
+}
+impl FacetBrowseService {
+    pub fn new(
+        repo: Arc<dyn zs_domain::catalog::facets::FacetBrowseRepo>,
+        products: super::product::ProductService,
+    ) -> Self {
+        Self { repo, products }
+    }
+    pub async fn options(
+        &self,
+        tenant: &zs_domain::reseller::tenant::ResellerTenant,
+        category: &str,
+        search: &str,
+        filters: &zs_domain::catalog::facets::FacetFilters,
+        query: &zs_domain::catalog::facets::FacetOptionsQuery,
+    ) -> Result<zs_shared::page::Page<zs_domain::catalog::facets::FacetOption>> {
+        validate_page(query.page)?;
+        if query.search.chars().count() > MAX_OPTION_SEARCH_CHARACTERS
+            || query.search.chars().any(char::is_control)
+        {
+            return Err(Error::bad_request("error.catalog_facets_search_invalid"));
+        }
+        let scope = self
+            .products
+            .public_filter_for(tenant, category, search, query.page, filters)
+            .await?;
+        self.repo.options(&scope, query).await
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

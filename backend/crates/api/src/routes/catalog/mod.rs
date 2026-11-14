@@ -19,7 +19,7 @@ use zs_shared::page::PageRequest;
 /// Routes of the catalog group.
 pub fn routes() -> RouteSet {
     RouteSet {
-        public: public().merge(product::public()),
+        public: public().merge(product::public()).merge(facets::public()),
         admin: admin()
             .merge(product::admin())
             .merge(card_secret::admin())

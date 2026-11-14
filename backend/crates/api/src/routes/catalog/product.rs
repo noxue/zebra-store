@@ -52,6 +52,8 @@ struct PublicListQuery {
     category_id: String,
     #[serde(default)]
     search: String,
+    #[serde(flatten)]
+    facets: super::facets::FacetQuery,
 }
 
 async fn public_products(
@@ -64,7 +66,13 @@ async fn public_products(
         .svc
         .catalog
         .product
-        .list_public_for(&tenant, &q.category_id, &q.search, req)
+        .list_public_faceted_for(
+            &tenant,
+            &q.category_id,
+            &q.search,
+            req,
+            &q.facets.filters()?,
+        )
         .await?;
     Ok(Paged(page.items, Pagination::new(req, page.total)))
 }

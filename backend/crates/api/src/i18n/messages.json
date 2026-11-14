@@ -1,5 +1,7 @@
 {
   "en-US": {
+    "error.catalog_facets_page_invalid": "The requested product filter page is too large. Return to the first page.",
+    "error.catalog_facets_search_invalid": "The filter search is too long or contains unsupported characters.",
     "error.catalog_facets_value_invalid": "A product filter value has an invalid identifier.",
     "error.catalog_facets_label_invalid": "A product filter label is empty or too long.",
     "error.catalog_facets_duplicate_dimension": "Each product filter dimension accepts one value.",
@@ -443,6 +445,8 @@
     "error.refund_restock_unavailable": "This delivery cannot be mapped to card stock. Refund without restocking and review it manually."
   },
   "zh-CN": {
+    "error.catalog_facets_page_invalid": "筛选页码过大，请返回第一页重试。",
+    "error.catalog_facets_search_invalid": "筛选搜索内容过长或包含不支持的字符。",
     "error.catalog_facets_value_invalid": "商品筛选值的标识格式不正确，请核对来源编号。",
     "error.catalog_facets_label_invalid": "商品筛选名称不能为空、过长或包含控制字符。",
     "error.catalog_facets_duplicate_dimension": "同一商品的每个筛选维度只能设置一个值。",
@@ -886,6 +890,8 @@
     "error.refund_restock_unavailable": "此交付内容无法明确对应卡密库存，请选择不回库退款后人工处理。"
   },
   "zh-TW": {
+    "error.catalog_facets_page_invalid": "篩選頁碼過大，請返回第一頁重試。",
+    "error.catalog_facets_search_invalid": "篩選搜尋內容過長或包含不支援的字元。",
     "error.catalog_facets_value_invalid": "商品篩選值的識別格式不正確，請核對來源編號。",
     "error.catalog_facets_label_invalid": "商品篩選名稱不能為空、過長或包含控制字元。",
     "error.catalog_facets_duplicate_dimension": "同一商品的每個篩選維度只能設定一個值。",

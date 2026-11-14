@@ -16,6 +16,8 @@ pub struct Model {
     pub dimension: String,
     #[sea_orm(column_type = "String(StringLen::N(128))", indexed)]
     pub value_id: String,
+    /// Exact bytes also work on databases with case-insensitive text collations.
+    pub value_key: Vec<u8>,
     #[sea_orm(column_type = "Json")]
     pub label_json: Json,
     pub created_at: DateTimeUtc,

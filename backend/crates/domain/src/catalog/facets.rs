@@ -1,6 +1,6 @@
 //! Optional product browse attributes. These never identify a purchasable SKU.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Deserializer, Serialize};
 use zs_shared::i18n::{LOCALES, LocalizedText};
@@ -18,6 +18,14 @@ pub enum FacetKey {
 }
 
 impl FacetKey {
+    pub const ALL: [Self; 6] = [
+        Self::Family,
+        Self::Project,
+        Self::Country,
+        Self::City,
+        Self::IpType,
+        Self::Line,
+    ];
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Family => "family",
@@ -163,6 +171,62 @@ pub trait FacetRepo: Send + Sync {
     ) -> crate::Result<FacetDocument>;
 }
 
+/// Single selections whose identities never depend on display text.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct FacetFilters(BTreeMap<FacetKey, FacetValueId>);
+
+impl FacetFilters {
+    pub fn entries(&self) -> impl Iterator<Item = (&FacetKey, &FacetValueId)> {
+        self.0.iter()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+    pub fn without(&self, key: FacetKey) -> Self {
+        let mut values = self.clone();
+        values.0.remove(&key);
+        values
+    }
+}
+
+impl TryFrom<Vec<(FacetKey, FacetValueId)>> for FacetFilters {
+    type Error = FacetError;
+    fn try_from(values: Vec<(FacetKey, FacetValueId)>) -> Result<Self, Self::Error> {
+        let mut result = BTreeMap::new();
+        for (key, value) in values {
+            if result.insert(key, value).is_some() {
+                return Err(FacetError::DuplicateDimension);
+            }
+        }
+        Ok(Self(result))
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct FacetOption {
+    pub value_id: FacetValueId,
+    pub label: LocalizedText,
+    /// Visible products, never supplier stock or number counts.
+    pub product_count: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct FacetOptionsQuery {
+    pub dimension: FacetKey,
+    pub search: String,
+    pub exact: Option<FacetValueId>,
+    pub page: zs_shared::page::PageRequest,
+}
+
+#[async_trait::async_trait]
+pub trait FacetBrowseRepo: Send + Sync {
+    async fn options(
+        &self,
+        filter: &super::product::ProductFilter,
+        query: &FacetOptionsQuery,
+    ) -> crate::Result<zs_shared::page::Page<FacetOption>>;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -175,6 +239,38 @@ mod tests {
             value_id: id.to_owned().try_into()?,
             label: LocalizedText::single(label),
         })
+    }
+
+    #[test]
+    fn selections_reject_duplicate_dimensions_and_remove_only_the_requested_dimension() -> TestResult
+    {
+        let selected = FacetFilters::try_from(vec![
+            (FacetKey::Country, "000A".to_owned().try_into()?),
+            (FacetKey::City, "city:01".to_owned().try_into()?),
+        ])?;
+        let alternate = selected.without(FacetKey::Country);
+        assert_eq!(
+            alternate
+                .entries()
+                .map(|(key, id)| (*key, id.as_str()))
+                .collect::<Vec<_>>(),
+            vec![(FacetKey::City, "city:01")]
+        );
+        assert_eq!(selected.entries().count(), 2);
+        assert!(
+            selected
+                .without(FacetKey::Country)
+                .without(FacetKey::City)
+                .is_empty()
+        );
+        assert_eq!(
+            FacetFilters::try_from(vec![
+                (FacetKey::City, "A".to_owned().try_into()?),
+                (FacetKey::City, "B".to_owned().try_into()?)
+            ]),
+            Err(FacetError::DuplicateDimension)
+        );
+        Ok(())
     }
 
     // MCY-04: names and display order never become identity.

@@ -1,6 +1,9 @@
 import { api } from './client'
 import type {
   Banner,
+  CatalogFacetCapabilities,
+  CatalogFacetOption,
+  CatalogFacetOptionsParams,
   CaptchaImage,
   Category,
   Post,
@@ -39,4 +42,9 @@ export const memberLevelAPI = {
 
 export const captchaAPI = {
   image: () => api.get<CaptchaImage>('/public/captcha/image'),
+}
+
+export const catalogFacetAPI = {
+  capabilities: () => api.get<CatalogFacetCapabilities>('/public/catalog-facets'),
+  values: (params: CatalogFacetOptionsParams) => api.get<CatalogFacetOption[]>('/public/catalog-facet-values', { params }),
 }

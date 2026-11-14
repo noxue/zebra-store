@@ -5,7 +5,10 @@ mod common;
 
 use catalog_common::{category, id_of, product};
 use common::TestApp;
-use sea_orm::{ColumnTrait, ConnectionTrait, DbBackend, EntityTrait, PaginatorTrait, QueryFilter};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, ConnectionTrait, DbBackend, EntityTrait, PaginatorTrait,
+    QueryFilter,
+};
 use serde_json::json;
 use zs_domain::ErrorKind;
 use zs_domain::catalog::facets::{FacetRepo, FacetSet};
@@ -24,6 +27,9 @@ fn attributes(label: &str) -> FacetSet {
 
 async fn fixture() -> (TestApp, i64, SeaFacetRepo) {
     let mut config = common::test_config();
+    config.reseller.enabled = true;
+    config.reseller.subdomain_base = "shop.example.test".into();
+    config.reseller.main_hosts = vec!["localhost".into(), "main.example.test".into()];
     let postgres = std::env::var("ZS_CATALOG_TEST_DATABASE_URL").ok();
     if let Some(url) = &postgres {
         assert!(url.starts_with("postgres://zebra_test:") && url.contains("@127.0.0.1:18942/"));
@@ -412,4 +418,625 @@ async fn clearing_empty_metadata_invalidates_initial_and_later_inflight_writes()
         "error.catalog_facets_changed"
     );
     assert_eq!(repo.get(id).await.unwrap(), cleared_again);
+}
+
+async fn public_get(app: &TestApp, url: &str) -> serde_json::Value {
+    app.call("GET", url, None, None).await
+}
+async fn public_at(
+    app: &TestApp,
+    host: &str,
+    url: &str,
+) -> (axum::http::StatusCode, serde_json::Value) {
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
+    let request = axum::http::Request::builder()
+        .uri(url)
+        .header("host", host)
+        .body(axum::body::Body::empty())
+        .unwrap();
+    let response = app.router.clone().oneshot(request).await.unwrap();
+    let status = response.status();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    (status, serde_json::from_slice(&bytes).unwrap())
+}
+
+async fn add_browse_product(
+    app: &TestApp,
+    repo: &SeaFacetRepo,
+    category: i64,
+    slug: &str,
+    values: &[(&str, &str, &str)],
+) -> i64 {
+    let id = id_of(&product(app, category, slug, json!({})).await);
+    let values: Vec<_> = values.iter().map(|(key,id,label)| json!({"key":key,"value_id":id,"label":{"zh-CN":label,"en-US":label}})).collect();
+    repo.replace(id, 0, &serde_json::from_value(json!(values)).unwrap())
+        .await
+        .unwrap();
+    id
+}
+fn listed_ids(body: &serde_json::Value) -> Vec<i64> {
+    assert_eq!(body["status_code"], 0, "{body}");
+    body["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["id"].as_i64().unwrap())
+        .collect()
+}
+fn option_ids(body: &serde_json::Value) -> Vec<&str> {
+    assert_eq!(body["status_code"], 0, "{body}");
+    body["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["value_id"].as_str().unwrap())
+        .collect()
+}
+
+// MCY-04: selection uses fixed, case-sensitive identities, ANDed before pagination.
+#[tokio::test]
+async fn public_filters_intersect_before_pagination_and_preserve_legacy_products() {
+    let (app, _, repo) = fixture().await;
+    let cat = category(&app, "browse", 0).await;
+    let a = add_browse_product(
+        &app,
+        &repo,
+        cat,
+        "browse-a",
+        &[
+            ("family", "ip", "IP"),
+            ("country", "001Ab", "Country A"),
+            ("city", "01", "City"),
+            ("project", "project:01", "Project"),
+            ("ip_type", "native", "Native"),
+            ("line", "NONE", "Standard"),
+        ],
+    )
+    .await;
+    let b = add_browse_product(
+        &app,
+        &repo,
+        cat,
+        "browse-b",
+        &[
+            ("family", "ip", "IP"),
+            ("country", "001Ab", "Country A"),
+            ("city", "02", "Other city"),
+        ],
+    )
+    .await;
+    add_browse_product(
+        &app,
+        &repo,
+        cat,
+        "browse-c",
+        &[("family", "sms", "SMS"), ("country", "001ab", "Country B")],
+    )
+    .await;
+    let legacy = id_of(&product(&app, cat, "browse-legacy", json!({})).await);
+    let all = public_get(&app, &format!("/api/v1/public/products?category_id={cat}")).await;
+    assert_eq!(all["pagination"]["total"], 4);
+    assert!(listed_ids(&all).contains(&legacy));
+    let exact = public_get(&app, &format!("/api/v1/public/products?category_id={cat}&facet_family=ip&facet_country=001Ab&facet_city=01&facet_project=project:01&facet_ip_type=native&facet_line=NONE")).await;
+    assert_eq!(listed_ids(&exact), vec![a]);
+    let wrong_line = public_get(
+        &app,
+        &format!("/api/v1/public/products?category_id={cat}&facet_line=none"),
+    )
+    .await;
+    assert!(listed_ids(&wrong_line).is_empty());
+    let first = public_get(&app, &format!("/api/v1/public/products?category_id={cat}&facet_family=ip&facet_country=001Ab&page_size=1")).await;
+    assert_eq!(first["pagination"]["total"], 2);
+    assert_eq!(listed_ids(&first).len(), 1);
+    let second = public_get(&app, &format!("/api/v1/public/products?category_id={cat}&facet_family=ip&facet_country=001Ab&page_size=1&page=2")).await;
+    let mut ids = listed_ids(&first);
+    ids.extend(listed_ids(&second));
+    ids.sort();
+    assert_eq!(ids, vec![a, b]);
+    let one = public_get(
+        &app,
+        &format!("/api/v1/public/products?category_id={cat}&facet_country=001Ab&facet_city=01"),
+    )
+    .await;
+    assert_eq!(listed_ids(&one), vec![a]);
+    for filters in [
+        "facet_country=001AB",
+        "facet_family=ip&facet_country=001ab",
+        "facet_city=1",
+    ] {
+        let empty = public_get(
+            &app,
+            &format!("/api/v1/public/products?category_id={cat}&{filters}"),
+        )
+        .await;
+        assert!(listed_ids(&empty).is_empty());
+        assert_eq!(empty["pagination"]["total"], 0);
+    }
+}
+
+#[tokio::test]
+async fn options_ignore_their_own_selection_but_apply_all_other_filters_and_counts() {
+    let (app, _, repo) = fixture().await;
+    let cat = category(&app, "option-browse", 0).await;
+    add_browse_product(
+        &app,
+        &repo,
+        cat,
+        "option-a",
+        &[
+            ("family", "ip", "IP"),
+            ("country", "A", "Country A"),
+            ("city", "one", "One"),
+        ],
+    )
+    .await;
+    add_browse_product(
+        &app,
+        &repo,
+        cat,
+        "option-b",
+        &[
+            ("family", "ip", "IP"),
+            ("country", "A", "Country A"),
+            ("city", "two", "Two"),
+        ],
+    )
+    .await;
+    add_browse_product(
+        &app,
+        &repo,
+        cat,
+        "option-c",
+        &[
+            ("family", "ip", "IP"),
+            ("country", "B", "Country B"),
+            ("city", "three", "Three"),
+        ],
+    )
+    .await;
+    add_browse_product(
+        &app,
+        &repo,
+        cat,
+        "option-d",
+        &[
+            ("family", "sms", "SMS"),
+            ("country", "C", "Hidden by family"),
+        ],
+    )
+    .await;
+    let options = public_get(&app, &format!("/api/v1/public/catalog-facet-values?dimension=country&category_id={cat}&facet_family=ip&facet_country=A")).await;
+    assert_eq!(option_ids(&options), vec!["A", "B"]);
+    assert_eq!(options["data"][0]["product_count"], 2);
+    assert_eq!(options["data"][1]["product_count"], 1);
+    let city = public_get(&app, &format!("/api/v1/public/catalog-facet-values?dimension=city&category_id={cat}&facet_country=A&facet_city=missing")).await;
+    assert_eq!(option_ids(&city), vec!["one", "two"]);
+    let search = public_get(&app, &format!("/api/v1/public/catalog-facet-values?dimension=country&category_id={cat}&search=option-c")).await;
+    assert_eq!(option_ids(&search), vec!["B"]);
+}
+
+// Renames update the representative label, without splitting identities or counts.
+#[tokio::test]
+async fn option_search_uses_current_labels_and_escapes_wildcards_after_grouping() {
+    let (app, _, repo) = fixture().await;
+    let cat = category(&app, "renamed-options", 0).await;
+    add_browse_product(
+        &app,
+        &repo,
+        cat,
+        "rename-a",
+        &[("country", "000A", "Old name")],
+    )
+    .await;
+    let b = add_browse_product(
+        &app,
+        &repo,
+        cat,
+        "rename-b",
+        &[("country", "000A", "Old name")],
+    )
+    .await;
+    add_browse_product(
+        &app,
+        &repo,
+        cat,
+        "rename-c",
+        &[("country", "000a", "Other")],
+    )
+    .await;
+    let renamed: FacetSet = serde_json::from_value(json!([{"key":"country","value_id":"000A","label":{"zh-CN":"New 100%_city","en-US":"Translated"}}])).unwrap();
+    repo.replace(b, 1, &renamed).await.unwrap();
+    let base = format!("/api/v1/public/catalog-facet-values?dimension=country&category_id={cat}");
+    let all = public_get(&app, &base).await;
+    assert_eq!(option_ids(&all), vec!["000A", "000a"]);
+    assert_eq!(all["data"][0]["label"]["zh-CN"], "New 100%_city");
+    assert_eq!(all["data"][0]["product_count"], 2);
+    for term in ["New", "100%25_city", "TRANSLATED", "%25", "_"] {
+        let found = public_get(&app, &format!("{base}&option_search={term}")).await;
+        assert_eq!(option_ids(&found), vec!["000A"]);
+        assert_eq!(found["data"][0]["product_count"], 2);
+    }
+    assert!(option_ids(&public_get(&app, &format!("{base}&option_search=Old")).await).is_empty());
+    let page2 = public_get(&app, &format!("{base}&page_size=1&page=2")).await;
+    assert_eq!(option_ids(&page2), vec!["000a"]);
+    assert_eq!(page2["pagination"]["total"], 2);
+    let selected = public_get(&app, &format!("{base}&value_id=000a&page_size=1")).await;
+    assert_eq!(option_ids(&selected), vec!["000a"]);
+    assert_eq!(selected["pagination"]["total"], 1);
+    assert!(option_ids(&public_get(&app, &format!("{base}&value_id=000b")).await).is_empty());
+}
+
+// Active children of an inactive/deleted parent cannot leak through options or details.
+#[tokio::test]
+async fn public_options_list_and_detail_share_product_and_parent_category_visibility() {
+    use sea_orm::Set;
+    use zs_infra::db::entity::{categories, products};
+    let (app, _, repo) = fixture().await;
+    let parent = category(&app, "visibility-parent", 0).await;
+    let child = category(&app, "visibility-child", parent).await;
+    let a = add_browse_product(&app, &repo, child, "visibility-a", &[("country", "A", "A")]).await;
+    let b = add_browse_product(&app, &repo, child, "visibility-b", &[("country", "B", "B")]).await;
+    let c = add_browse_product(&app, &repo, child, "visibility-c", &[("country", "C", "C")]).await;
+    products::Entity::update_many()
+        .col_expr(
+            products::Column::IsActive,
+            sea_orm::sea_query::Expr::value(false),
+        )
+        .filter(products::Column::Id.eq(b))
+        .exec(&app.db)
+        .await
+        .unwrap();
+    products::ActiveModel {
+        id: Set(c),
+        deleted_at: Set(Some(chrono::Utc::now())),
+        ..Default::default()
+    }
+    .update(&app.db)
+    .await
+    .unwrap();
+    let list = public_get(
+        &app,
+        &format!("/api/v1/public/products?category_id={parent}&facet_country=A"),
+    )
+    .await;
+    assert_eq!(listed_ids(&list), vec![a]);
+    let options = public_get(
+        &app,
+        &format!("/api/v1/public/catalog-facet-values?dimension=country&category_id={parent}"),
+    )
+    .await;
+    assert_eq!(option_ids(&options), vec!["A"]);
+    assert_eq!(
+        public_get(&app, "/api/v1/public/products/visibility-a").await["status_code"],
+        0
+    );
+    categories::ActiveModel {
+        id: Set(parent),
+        is_active: Set(false),
+        ..Default::default()
+    }
+    .update(&app.db)
+    .await
+    .unwrap();
+    for scope in [
+        String::new(),
+        format!("&category_id={parent}"),
+        format!("&category_id={child}"),
+    ] {
+        let list = public_get(
+            &app,
+            &format!("/api/v1/public/products?facet_country=A{scope}"),
+        )
+        .await;
+        assert!(listed_ids(&list).is_empty());
+        assert_eq!(list["pagination"]["total"], 0);
+        let options = public_get(
+            &app,
+            &format!("/api/v1/public/catalog-facet-values?dimension=country{scope}&value_id=A"),
+        )
+        .await;
+        assert!(option_ids(&options).is_empty());
+        assert_eq!(options["pagination"]["total"], 0);
+    }
+    assert_ne!(
+        public_get(&app, "/api/v1/public/products/visibility-a").await["status_code"],
+        0
+    );
+    categories::ActiveModel {
+        id: Set(parent),
+        is_active: Set(true),
+        deleted_at: Set(Some(chrono::Utc::now())),
+        ..Default::default()
+    }
+    .update(&app.db)
+    .await
+    .unwrap();
+    assert!(
+        option_ids(
+            &public_get(
+                &app,
+                &format!(
+                    "/api/v1/public/catalog-facet-values?dimension=country&category_id={child}"
+                )
+            )
+            .await
+        )
+        .is_empty()
+    );
+}
+
+#[tokio::test]
+async fn public_capabilities_and_invalid_filters_pages_and_search_fail_explicitly() {
+    let (app, _, _) = fixture().await;
+    let caps = public_get(&app, "/api/v1/public/catalog-facets").await;
+    assert_eq!(
+        caps["data"],
+        json!({"schema_version":1,"dimensions":["family","project","country","city","ip_type","line"],"revision_format":"decimal_string","supports_product_filters":true,"supports_value_search":true})
+    );
+    for url in [
+        "/api/v1/public/products?facet_country=A&facet_country=B",
+        "/api/v1/public/catalog-facet-values?dimension=country&facet_city=A&facet_city=B",
+        "/api/v1/public/catalog-facet-values?dimension=unsupported",
+        "/api/v1/public/products?facet_country=",
+        "/api/v1/public/products?facet_country=bad%20id",
+        "/api/v1/public/catalog-facet-values?dimension=country&value_id=",
+        "/api/v1/public/catalog-facet-values?dimension=country&facet_line=bad%20id",
+    ] {
+        let res = public_get(&app, url).await;
+        assert_eq!(res["status_code"], 400, "{res}");
+        assert_ne!(res["msg"], "error.catalog_facets_value_invalid");
+    }
+    for url in [
+        "/api/v1/public/products?page=18446744073709551615&page_size=200",
+        "/api/v1/public/catalog-facet-values?dimension=country&page=18446744073709551615&page_size=200",
+    ] {
+        let res = public_get(&app, url).await;
+        assert_eq!(res["status_code"], 400, "{res}");
+        assert_ne!(res["msg"], "error.catalog_facets_page_invalid");
+    }
+    for term in ["x".repeat(161), "bad%00term".into()] {
+        let res = public_get(
+            &app,
+            &format!("/api/v1/public/catalog-facet-values?dimension=country&option_search={term}"),
+        )
+        .await;
+        assert_eq!(res["status_code"], 400, "{res}");
+    }
+}
+
+// RSL-06: filtering, options and counts all obey the same reseller scope.
+#[tokio::test]
+async fn reseller_hidden_and_inactive_scopes_never_leak_option_values_or_totals() {
+    use zs_domain::catalog::facets::{FacetFilters, FacetKey, FacetOptionsQuery};
+    use zs_domain::reseller::ports::ProfileRepo;
+    use zs_domain::reseller::pricing::SettingInput;
+    use zs_domain::reseller::tenant::ResellerTenant;
+    use zs_shared::page::PageRequest;
+    let (app, _, repo) = fixture().await;
+    let cat = category(&app, "tenant-options", 0).await;
+    let a = add_browse_product(&app, &repo, cat, "tenant-a", &[("country", "A", "A")]).await;
+    let b = add_browse_product(&app, &repo, cat, "tenant-b", &[("country", "B", "B")]).await;
+    let owner = catalog_common::user(&app, "facets-reseller@example.test", 0).await;
+    let profiles = zs_infra::db::repo::reseller::SeaResellerStore::new(app.db.clone());
+    let profile = profiles
+        .create_profile(owner, "Fixture", chrono::Utc::now())
+        .await
+        .unwrap();
+    app.services
+        .reseller
+        .management
+        .approve(1, profile.id, 0.into(), 0.into())
+        .await
+        .unwrap();
+    app.services
+        .reseller
+        .product_settings
+        .save(
+            zs_app::reseller::product_setting::Owner::Reseller(profile.id),
+            b,
+            &[SettingInput {
+                is_listed: false,
+                ..Default::default()
+            }],
+        )
+        .await
+        .unwrap();
+    let domain = app
+        .services
+        .reseller
+        .management
+        .assign_system_domain(profile.id, "facet-tenant")
+        .await
+        .unwrap();
+    let (_, http_main) = public_at(
+        &app,
+        "main.example.test",
+        &format!("/api/v1/public/catalog-facet-values?dimension=country&category_id={cat}"),
+    )
+    .await;
+    assert_eq!(option_ids(&http_main), vec!["A", "B"]);
+    let (status, http_reseller) = public_at(
+        &app,
+        &domain.domain,
+        &format!("/api/v1/public/catalog-facet-values?dimension=country&category_id={cat}"),
+    )
+    .await;
+    assert_eq!(status, axum::http::StatusCode::OK);
+    assert_eq!(option_ids(&http_reseller), vec!["A"]);
+    assert_eq!(http_reseller["pagination"]["total"], 1);
+    let (_, http_list) = public_at(
+        &app,
+        &domain.domain,
+        &format!("/api/v1/public/products?category_id={cat}&facet_country=B"),
+    )
+    .await;
+    assert!(listed_ids(&http_list).is_empty());
+    assert_eq!(http_list["pagination"]["total"], 0);
+    let (status, _) = public_at(
+        &app,
+        "unknown.shop.example.test",
+        "/api/v1/public/catalog-facet-values?dimension=country",
+    )
+    .await;
+    assert_eq!(status, axum::http::StatusCode::NOT_FOUND);
+    let query = FacetOptionsQuery {
+        dimension: FacetKey::Country,
+        search: String::new(),
+        exact: None,
+        page: PageRequest::default(),
+    };
+    let tenant = ResellerTenant::reseller("tenant.example.test", profile.id, owner, "");
+    let filters = FacetFilters::default();
+    let list = app
+        .services
+        .catalog
+        .product
+        .list_public_faceted_for(&tenant, &cat.to_string(), "", query.page, &filters)
+        .await
+        .unwrap();
+    assert_eq!(list.items.iter().map(|p| p.id).collect::<Vec<_>>(), vec![a]);
+    assert_eq!(list.total, 1);
+    let options = app
+        .services
+        .catalog
+        .browse
+        .options(&tenant, &cat.to_string(), "", &filters, &query)
+        .await
+        .unwrap();
+    assert_eq!(options.total, 1);
+    assert_eq!(options.items[0].value_id.as_str(), "A");
+    assert_eq!(options.items[0].product_count, 1);
+    let main = app
+        .services
+        .catalog
+        .browse
+        .options(
+            &ResellerTenant::main("main.example.test"),
+            &cat.to_string(),
+            "",
+            &filters,
+            &query,
+        )
+        .await
+        .unwrap();
+    assert_eq!(main.total, 2);
+    use sea_orm::Set;
+    use zs_infra::db::entity::reseller_profiles;
+    reseller_profiles::ActiveModel {
+        id: Set(profile.id),
+        status: Set("disabled".into()),
+        ..Default::default()
+    }
+    .update(&app.db)
+    .await
+    .unwrap();
+    for tenant in [
+        tenant,
+        ResellerTenant::reseller("missing.example.test", 99999, owner, ""),
+        ResellerTenant::unavailable("unknown.example.test", "not_found"),
+    ] {
+        let list = app
+            .services
+            .catalog
+            .product
+            .list_public_faceted_for(&tenant, &cat.to_string(), "", query.page, &filters)
+            .await
+            .unwrap();
+        assert_eq!(list.total, 0);
+        assert!(list.items.is_empty());
+        let options = app
+            .services
+            .catalog
+            .browse
+            .options(&tenant, &cat.to_string(), "", &filters, &query)
+            .await
+            .unwrap();
+        assert_eq!(options.total, 0);
+        assert!(options.items.is_empty());
+    }
+    // Storage errors remain errors, rather than masquerading as an empty catalog.
+    app.db
+        .execute_unprepared("DROP TABLE reseller_profiles")
+        .await
+        .unwrap();
+    let broken = ResellerTenant::reseller("broken.example.test", profile.id, owner, "");
+    assert_eq!(
+        app.services
+            .catalog
+            .browse
+            .options(&broken, "", "", &filters, &query)
+            .await
+            .unwrap_err()
+            .kind(),
+        ErrorKind::Internal
+    );
+    assert_eq!(
+        app.services
+            .catalog
+            .product
+            .list_public_faceted_for(&broken, "", "", query.page, &filters)
+            .await
+            .unwrap_err()
+            .kind(),
+        ErrorKind::Internal
+    );
+}
+
+#[tokio::test]
+async fn unsupported_documents_are_excluded_and_corrupt_option_identity_fails_explicitly() {
+    use sea_orm::{Set, sea_query::Expr};
+    let (app, id, repo) = fixture().await;
+    repo.replace(id, 0, &attributes("Valid")).await.unwrap();
+    documents::Entity::update_many()
+        .col_expr(documents::Column::SchemaVersion, Expr::value(2))
+        .exec(&app.db)
+        .await
+        .unwrap();
+    assert!(
+        option_ids(
+            &public_get(
+                &app,
+                "/api/v1/public/catalog-facet-values?dimension=country"
+            )
+            .await
+        )
+        .is_empty()
+    );
+    assert!(
+        listed_ids(
+            &public_get(
+                &app,
+                "/api/v1/public/products?facet_country=provider:country:000A"
+            )
+            .await
+        )
+        .is_empty()
+    );
+    documents::Entity::update_many()
+        .col_expr(documents::Column::SchemaVersion, Expr::value(1))
+        .exec(&app.db)
+        .await
+        .unwrap();
+    let row = rows::Entity::find()
+        .filter(rows::Column::Dimension.eq("country"))
+        .one(&app.db)
+        .await
+        .unwrap()
+        .unwrap();
+    rows::ActiveModel {
+        id: Set(row.id),
+        value_key: Set(b"other".to_vec()),
+        ..Default::default()
+    }
+    .update(&app.db)
+    .await
+    .unwrap();
+    let res = public_get(
+        &app,
+        "/api/v1/public/catalog-facet-values?dimension=country",
+    )
+    .await;
+    assert_eq!(res["status_code"], 500);
+    assert_eq!(repo.get(id).await.unwrap_err().kind(), ErrorKind::Internal);
 }

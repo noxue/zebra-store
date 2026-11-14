@@ -8,7 +8,7 @@ use std::sync::Arc;
 use zs_app::catalog::CatalogServices;
 use zs_app::catalog::card_secret::CardSecretService;
 use zs_app::catalog::category::CategoryService;
-use zs_app::catalog::facets::FacetService;
+use zs_app::catalog::facets::{FacetBrowseService, FacetService};
 use zs_app::catalog::product::{ProductDeps, ProductService};
 use zs_app::reseller::PricingReads;
 
@@ -29,23 +29,27 @@ pub fn build(ctx: &WireCtx) -> CatalogServices {
     let products = Arc::new(SeaProductRepo::new(ctx.db.clone()));
     let secrets = Arc::new(SeaCardSecretRepo::new(ctx.db.clone()));
     let reseller = Arc::new(SeaResellerStore::new(ctx.db.clone()));
+    let product = ProductService::new(ProductDeps {
+        products: products.clone(),
+        categories: categories.clone(),
+        secrets: secrets.clone(),
+        lookup: Arc::new(SeaCatalogLookup::new(ctx.db.clone())),
+        promotions: Arc::new(SeaPromotionRepo::new(ctx.db.clone())),
+        levels: Arc::new(SeaMemberLevelRepo::new(ctx.db.clone())),
+        settings: ctx.settings.clone(),
+        clock: ctx.clock.clone(),
+        reseller: PricingReads {
+            profiles: reseller.clone(),
+            repo: reseller,
+        },
+    });
+    let facets = Arc::new(SeaFacetRepo::new(ctx.db.clone()));
     CatalogServices {
-        facets: FacetService::new(Arc::new(SeaFacetRepo::new(ctx.db.clone()))),
-        category: CategoryService::new(categories.clone()),
-        product: ProductService::new(ProductDeps {
-            products: products.clone(),
-            categories,
-            secrets: secrets.clone(),
-            lookup: Arc::new(SeaCatalogLookup::new(ctx.db.clone())),
-            promotions: Arc::new(SeaPromotionRepo::new(ctx.db.clone())),
-            levels: Arc::new(SeaMemberLevelRepo::new(ctx.db.clone())),
-            settings: ctx.settings.clone(),
-            clock: ctx.clock.clone(),
-            reseller: PricingReads {
-                profiles: reseller.clone(),
-                repo: reseller,
-            },
-        }),
+        facets: FacetService::new(facets.clone()),
+        browse: FacetBrowseService::new(facets, product.clone()),
+        category: CategoryService::new(categories),
+        product,
+
         card_secret: CardSecretService::new(secrets, products, ctx.clock.clone()),
     }
 }

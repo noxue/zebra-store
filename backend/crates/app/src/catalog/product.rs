@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use zs_domain::catalog::card_secret::CardSecretRepo;
 use zs_domain::catalog::category::CategoryRepo;
+use zs_domain::catalog::facets::FacetFilters;
 use zs_domain::catalog::manual_form;
 use zs_domain::catalog::product::{
     CatalogLookup, FulfillmentType, Product, ProductFilter, ProductInput, ProductRepo,
@@ -130,6 +131,7 @@ impl ProductService {
             only_active: false,
             is_active: q.is_active,
             exclude_ids: Vec::new(),
+            facets: FacetFilters::default(),
         };
         let mut page = self
             .d
@@ -676,36 +678,47 @@ impl ProductService {
         Ok(Some(ids))
     }
 
+    /// The list and its facet options share the exact visibility scope before counting.
+    pub async fn public_filter_for(
+        &self,
+        tenant: &ResellerTenant,
+        category_id: &str,
+        search: &str,
+        page: PageRequest,
+        facets: &FacetFilters,
+    ) -> Result<ProductFilter> {
+        super::facets::validate_page(page)?;
+        let mut filter = ProductFilter {
+            page,
+            category_ids: self.expand_public_categories(category_id).await?,
+            search: search.trim().to_owned(),
+            only_active: true,
+            facets: facets.clone(),
+            ..ProductFilter::default()
+        };
+        if tenant.unavailable {
+            filter.category_ids = Some(Vec::new());
+        } else if let Some(id) = tenant.reseller_id.filter(|_| tenant.is_reseller()) {
+            match self.d.reseller.profiles.profile_by_id(id).await? {
+                Some(profile) if profile.is_active() => {
+                    filter.exclude_ids = self.d.reseller.repo.hidden_product_ids(id).await?;
+                }
+                _ => filter.category_ids = Some(Vec::new()),
+            }
+        }
+        Ok(filter)
+    }
+
     pub async fn list_public(
         &self,
         category_id: &str,
         search: &str,
         page: PageRequest,
     ) -> Result<Page<PublicProduct>> {
-        let fetch = |e: Error| e.or_internal("error.product_fetch_failed");
-        let filter = ProductFilter {
-            page,
-            category_ids: self
-                .expand_public_categories(category_id)
-                .await
-                .map_err(fetch)?,
-            search: search.trim().to_owned(),
-            only_active: true,
-            ..ProductFilter::default()
-        };
-        let mut result = self.d.products.list(&filter).await.map_err(fetch)?;
-        self.apply_stock(&mut result.items).await?;
-        let items = std::mem::take(&mut result.items);
-        let decorated = self.decorate_public(items).await.map_err(fetch)?;
-        Ok(Page {
-            items: decorated,
-            total: result.total,
-        })
+        self.list_public_for(&ResellerTenant::main(""), category_id, search, page)
+            .await
     }
 
-    /// Public listing as seen on `tenant`: on a reseller site the products the reseller
-    /// unlisted are excluded and every price is the reseller price the checkout charges
-    /// (LQA-R1, original `ListPublicForTenant` + `decoratePublicProductForTenant`).
     pub async fn list_public_for(
         &self,
         tenant: &ResellerTenant,
@@ -713,40 +726,34 @@ impl ProductService {
         search: &str,
         page: PageRequest,
     ) -> Result<Page<PublicProduct>> {
-        let Some(reseller_id) = tenant.reseller_id.filter(|_| tenant.is_reseller()) else {
-            return self.list_public(category_id, search, page).await;
-        };
+        self.list_public_faceted_for(tenant, category_id, search, page, &FacetFilters::default())
+            .await
+    }
+
+    pub async fn list_public_faceted_for(
+        &self,
+        tenant: &ResellerTenant,
+        category_id: &str,
+        search: &str,
+        page: PageRequest,
+        facets: &FacetFilters,
+    ) -> Result<Page<PublicProduct>> {
         let fetch = |e: Error| e.or_internal("error.product_fetch_failed");
-        let exclude_ids = self
-            .d
-            .reseller
-            .repo
-            .hidden_product_ids(reseller_id)
+        let filter = self
+            .public_filter_for(tenant, category_id, search, page, facets)
             .await
             .map_err(fetch)?;
-        let filter = ProductFilter {
-            page,
-            category_ids: self
-                .expand_public_categories(category_id)
-                .await
-                .map_err(fetch)?,
-            search: search.trim().to_owned(),
-            only_active: true,
-            exclude_ids,
-            ..ProductFilter::default()
-        };
         let mut result = self.d.products.list(&filter).await.map_err(fetch)?;
         self.apply_stock(&mut result.items).await?;
         let items = std::mem::take(&mut result.items);
-        let count = items.len();
-        let shown = self
-            .reseller_views(reseller_id, items)
-            .await
-            .map_err(fetch)?;
-        let dropped = u64::try_from(count - shown.len()).unwrap_or(0);
+        let items = if let Some(id) = tenant.reseller_id.filter(|_| tenant.is_reseller()) {
+            self.reseller_views(id, items).await.map_err(fetch)?
+        } else {
+            self.decorate_public(items).await.map_err(fetch)?
+        };
         Ok(Page {
-            total: result.total.saturating_sub(dropped),
-            items: shown,
+            items,
+            total: result.total,
         })
     }
 
@@ -757,6 +764,9 @@ impl ProductService {
         tenant: &ResellerTenant,
         slug: &str,
     ) -> Result<PublicProduct> {
+        if tenant.unavailable {
+            return Err(not_found());
+        }
         let Some(reseller_id) = tenant.reseller_id.filter(|_| tenant.is_reseller()) else {
             return self.get_public(slug).await;
         };
@@ -798,8 +808,12 @@ impl ProductService {
             return Ok(Vec::new());
         }
         let pricing = &self.d.reseller;
-        let Ok(profile) = pricing.active_profile(reseller_id).await else {
-            // Inactive profile: nothing is sold on the site (the checkout refuses too).
+        let Some(profile) = pricing
+            .profiles
+            .profile_by_id(reseller_id)
+            .await?
+            .filter(|p| p.is_active())
+        else {
             return Ok(Vec::new());
         };
         let priced: Vec<_> = products.iter().map(priced_product).collect();
