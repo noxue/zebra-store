@@ -35,3 +35,5 @@ SQLite和本机隔离PostgreSQL使用相同用例；本机Rust workspace、严�
 生产Store只允许公开HTTPS运维。公开update/capability目前返回can_update=false、can_restart=false、source_build；不能用其start路径部署本补丁，也不能未经授权改用服务器登录、生产数据库或远程执行接口。实际试点原单和未用卡仍须在合法部署后，沿正式退款流程验收；不能预先宣称完成退款。
 
 本机最终验证：Rust1.98.1，fmt与严格Clippy通过，workspace1179项通过、1项既有环境用例忽略；同一11组退款回归在SQLite与隔离PostgreSQL通过。admin283项、storefront232项及两端类型检查/lint/build通过；actionlint通过。新增测试没有ignore或放宽lint规则。生产Store未部署本补丁，正式原单退款未执行。
+
+首个固定候选e609179的远端Linux门禁保留失败证据：分站提现用例在libtest默认栈上发生初始化future栈溢出，Linux制品未构建。共享分站夹具改为在堆上承载嵌套初始化future，不改变业务断言、不跳过用例、不增大线程栈；重新执行原生门禁后生成新候选。
