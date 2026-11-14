@@ -32,6 +32,8 @@ use crate::db::repo::support::DbResultExt;
 
 /// Remark of a wallet refund without one (`管理员退款到余额`).
 const WALLET_REFUND_REMARK: &str = "管理员退款到余额";
+/// Matches the existing refund submission lease; in-flight cancellation is not reclaimed early.
+const WALLET_CANCELLATION_RECLAIM_SECONDS: i64 = 30;
 
 fn gateway_attempt_to_domain(model: gateway_refund_attempts::Model) -> GatewayRefundAttempt {
     let payload = model
@@ -68,15 +70,15 @@ pub(crate) async fn reserve_gateway_refund_in<C: ConnectionTrait>(
     conn: &C,
     input: &NewGatewayRefundAttempt,
 ) -> Result<ReservedGatewayRefund> {
-    // Locking the successful payment serializes retries across processes. A preparing
-    // attempt can be resumed; a pending provider request is only queried.
-    payments::Entity::find_by_id(input.payment_id)
+    // Every competing writer takes the order family first, including payment callbacks.
+    // The payment lock then serializes retries without reversing that lock order.
+    let order = consistency::lock_family(conn, input.order_id).await?;
+    let payment = payments::Entity::find_by_id(input.payment_id)
         .lock_exclusive()
         .one(conn)
         .await
         .dom()?
         .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
-    let order = consistency::lock_family(conn, input.order_id).await?;
     consistency::ensure_refundable(conn, &order).await?;
     if let Some(existing) = gateway_refund_attempts::Entity::find()
         .filter(gateway_refund_attempts::Column::PaymentId.eq(input.payment_id))
@@ -87,6 +89,7 @@ pub(crate) async fn reserve_gateway_refund_in<C: ConnectionTrait>(
             gateway_refund_status::MANUAL_LOCKING,
             gateway_refund_status::MANUAL_AWAITING,
             gateway_refund_status::MANUAL_CANCELING,
+            gateway_refund_status::WALLET_CANCELING,
         ]))
         .order_by_desc(gateway_refund_attempts::Column::Id)
         .lock_exclusive()
@@ -119,6 +122,32 @@ pub(crate) async fn reserve_gateway_refund_in<C: ConnectionTrait>(
             attempt: gateway_attempt_to_domain(existing),
             created: false,
         });
+    }
+    if input.refund_no.starts_with("WR") {
+        // Preflight happens before HTTP. Another refund may finish before this lock:
+        // reject it here, before persisting an intent that could freeze the cards.
+        if input.channel_id != 0
+            || payment.channel_id != 0
+            || payment.order_id != order.id
+            || payment.provider_type != "wallet"
+            || payment.channel_type != "balance"
+            || payment.status != "success"
+            || payment.paid_at.is_none()
+            || payment.currency != order.currency
+            || Amount::new(payment.amount) != order.total_amount
+            || order.parent_id.is_some()
+            || order.user_id <= 0
+            || order.wallet_paid_amount != order.total_amount
+            || order.online_paid_amount != Amount::ZERO
+            || order.refunded_amount != Amount::ZERO
+            || input.amount != order.total_amount
+            || input.payment_fee_refunded
+            || input.admin_options != AdminRefundOptions::default()
+            || input.initial_status != gateway_refund_status::PREPARING
+        {
+            return Err(Error::bad_request("error.payment_provider_not_supported"));
+        }
+        plan_refund(&order, input.amount, 0, input.now)?;
     }
     let model = gateway_refund_attempts::ActiveModel {
         admin_refund_by: Set(input.admin_options.admin_id),
@@ -171,6 +200,48 @@ pub(crate) async fn claim_gateway_refund_submission_in<C: ConnectionTrait>(
         .col_expr(gateway_refund_attempts::Column::UpdatedAt, Expr::value(now))
         .filter(gateway_refund_attempts::Column::Id.eq(attempt_id))
         .filter(gateway_refund_attempts::Column::Status.eq(gateway_refund_status::PREPARING))
+        .exec(conn)
+        .await
+        .dom()?
+        .rows_affected;
+    Ok(changed == 1)
+}
+
+pub(crate) async fn claim_wallet_refund_cancellation_in<C: ConnectionTrait>(
+    conn: &C,
+    attempt_id: Id,
+    now: DateTime<Utc>,
+) -> Result<bool> {
+    let attempt = gateway_refund_attempts::Entity::find_by_id(attempt_id)
+        .one(conn)
+        .await
+        .dom()?
+        .ok_or_else(|| Error::not_found(keys::ORDER_NOT_FOUND))?;
+    if attempt.channel_id != 0 || !attempt.refund_no.starts_with("WR") {
+        return Err(Error::invalid());
+    }
+    consistency::lock_family(conn, attempt.order_id).await?;
+    let changed = gateway_refund_attempts::Entity::update_many()
+        .col_expr(
+            gateway_refund_attempts::Column::Status,
+            Expr::value(gateway_refund_status::WALLET_CANCELING),
+        )
+        .col_expr(gateway_refund_attempts::Column::UpdatedAt, Expr::value(now))
+        .filter(gateway_refund_attempts::Column::Id.eq(attempt_id))
+        .filter(
+            Condition::any()
+                .add(gateway_refund_attempts::Column::Status.eq(gateway_refund_status::PREPARING))
+                .add(
+                    Condition::all()
+                        .add(
+                            gateway_refund_attempts::Column::Status
+                                .eq(gateway_refund_status::WALLET_CANCELING),
+                        )
+                        .add(gateway_refund_attempts::Column::UpdatedAt.lte(
+                            now - chrono::Duration::seconds(WALLET_CANCELLATION_RECLAIM_SECONDS),
+                        )),
+                ),
+        )
         .exec(conn)
         .await
         .dom()?
@@ -286,6 +357,7 @@ pub(crate) async fn unfinished_gateway_refund_attempts_in<C: ConnectionTrait>(
                     gateway_refund_status::MANUAL_PREPARING,
                     gateway_refund_status::MANUAL_LOCKING,
                     gateway_refund_status::MANUAL_CANCELING,
+                    gateway_refund_status::WALLET_CANCELING,
                 ]))
                 .add(
                     Condition::all()
@@ -429,6 +501,43 @@ pub(crate) async fn refund_in<C: ConnectionTrait>(
         if attempt.order_id != order.id || Amount::new(attempt.amount) != req.amount {
             return Err(Error::invalid());
         }
+        if attempt.refund_no.starts_with("WR") {
+            // The family lock also serializes the payment callback. Revalidate the real
+            // wallet payment inside the same transaction that credits the wallet.
+            let payment = payments::Entity::find_by_id(attempt.payment_id)
+                .one(conn)
+                .await
+                .dom()?
+                .ok_or_else(not_found)?;
+            if !req.to_wallet
+                || req.payment_fee_refunded
+                || attempt.payment_fee_refunded
+                || attempt.channel_id != 0
+                || payment.channel_id != 0
+                || payment.order_id != order.id
+                || order.parent_id.is_some()
+                || order.user_id <= 0
+                || payment.provider_type != "wallet"
+                || payment.channel_type != "balance"
+                || payment.status != "success"
+                || payment.paid_at.is_none()
+                || payment.currency != order.currency
+                || Amount::new(payment.amount) != order.total_amount
+                || order.wallet_paid_amount != order.total_amount
+                || order.online_paid_amount != Amount::ZERO
+                || Amount::new(payment.fee_amount) != Amount::ZERO
+                || req.amount != order.total_amount
+                || req.remark != attempt.remark
+                || attempt.force_refund
+                || attempt.restock_cards
+                || (!matches!(
+                    attempt.status.as_str(),
+                    gateway_refund_status::PENDING | gateway_refund_status::SUCCEEDED
+                ))
+            {
+                return Err(Error::bad_request("error.payment_provider_not_supported"));
+            }
+        }
         if attempt.refund_no.starts_with("MR") {
             if attempt.refund_record_id.is_none()
                 && attempt.status != gateway_refund_status::MANUAL_AWAITING
@@ -479,6 +588,7 @@ pub(crate) async fn refund_in<C: ConnectionTrait>(
                 gateway_refund_status::MANUAL_LOCKING,
                 gateway_refund_status::MANUAL_AWAITING,
                 gateway_refund_status::MANUAL_CANCELING,
+                gateway_refund_status::WALLET_CANCELING,
             ]))
             .one(conn)
             .await

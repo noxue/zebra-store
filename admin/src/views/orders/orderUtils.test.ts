@@ -175,11 +175,12 @@ describe('refund rules', () => {
   })
 
   it('refundable amount + availability', () => {
-    const o = order({ paid_at: new Date().toISOString(), refunded_amount: '4.00' })
+    const o = order({ paid_at: new Date().toISOString(), refunded_amount: '4.00', online_paid_amount: '0.00', wallet_paid_amount: '10.00' })
     expect(refundableAmountValue(o)).toBe(6)
     expect(canManualRefund(o, 30)).toBe(true)
     expect(canRefundToWallet(o, 30)).toBe(true)
     expect(canRefundToWallet({ ...o, user_id: 0 }, 30)).toBe(false)
+    expect(canRefundToWallet({ ...o, online_paid_amount: '1.00' }, 30)).toBe(false)
     expect(canManualRefund({ ...o, refunded_amount: '10' }, 30)).toBe(false)
     expect(shouldShowRefundCard({ ...o, status: 'canceled' }, 30)).toBe(false)
     expect(shouldShowRefundCard(order({ paid_at: undefined }), 30)).toBe(false)

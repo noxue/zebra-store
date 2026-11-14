@@ -176,7 +176,9 @@ async fn refund_to_wallet(
         .service
         .refund_to_wallet(id, &amount_text(&req.amount)?, &req.remark)
         .await?;
-    ok(json!({"order": done.order, "transaction": done.transaction}))
+    ok(json!({"order": done.order, "transaction": done.transaction,
+        "refund_state": s.svc.order.service.public_refund_state(id).await?,
+        "attempt": s.svc.order.service.latest_refund_attempt(id).await?}))
 }
 
 async fn manual_refund(

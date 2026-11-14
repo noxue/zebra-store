@@ -60,3 +60,24 @@ describe('RFD-ADMIN-01 administrator original-route refund', () => {
     d.close(); expect(d.original.forceRefund).toBe(false); expect(d.original.restockCards).toBe(false)
   })
 })
+
+
+describe('RFD-08 wallet converter refund', () => {
+  it('chooses the wallet action for an automatic wallet refund', async () => {
+    const order = { ...sample, user_id: 9, wallet_paid_amount: '125.00', online_paid_amount: '0.00', original_refund_supported: false, refund_mode: 'automatic' as const }
+    vi.mocked(adminAPI.getOrder).mockResolvedValue(envelope(order))
+    const d = page(); await d.fetchDetail(137)
+    expect(d.refundTab.value).toBe('wallet')
+  })
+  it('reports card synchronization separately after a successful wallet credit', async () => {
+    const order = { ...sample, user_id: 9, wallet_paid_amount: '125.00', online_paid_amount: '0.00', original_refund_supported: false }
+    const syncing = { ...order, refunded_amount: '125.00', refund_state: 'syncing' as const }
+    vi.mocked(adminAPI.getOrder).mockResolvedValue(envelope(syncing))
+    vi.spyOn(adminAPI, 'refundOrderToWallet').mockResolvedValue(envelope({ order: syncing, transaction: null, refund_state: 'syncing', attempt: null }))
+    const d = page(); d.order.value = order; d.wallet.amount = '125'
+    await d.submitWallet()
+    expect(adminAPI.refundOrderToWallet).toHaveBeenCalledWith(137, { amount: '125', remark: undefined })
+    expect(d.wallet.error).toBe('')
+    expect(d.wallet.success).toBe(i18n.global.t('admin.orders.refundState.syncing'))
+  })
+})

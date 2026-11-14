@@ -73,6 +73,7 @@ pub(crate) async fn ensure_order_open<C: ConnectionTrait>(conn: &C, order: &Orde
             refund_status::MANUAL_LOCKING,
             refund_status::MANUAL_AWAITING,
             refund_status::MANUAL_CANCELING,
+            refund_status::WALLET_CANCELING,
         ]))
         .one(conn)
         .await

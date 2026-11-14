@@ -3148,3 +3148,9 @@ dujiao-next 在约 7 个月内迭代了支付（10+ 网关）、订单/库存、
 
 - **修复要点**：只在管理员原订单明确暴露回库能力、原供应商号匹配且没有既有交付时发送原生加密回库事件。使用独立稳定事件号，读回 recovered 与原批次 SHA256 才确认，不能把 HTTP 成功当作库存完成；已披露或不明确的卡保持人工核查。交付文字中嵌有卡密也属于披露歧义。
 - **必测用例**：`order_admin_force_refund.rs::rfd06_native_recovery_event_is_authenticated_idempotent_and_acknowledged`、`rfd06_recovery_acknowledgement_requires_full_refund_and_supplier_reference` 和既有 `rfd06_ambiguous_or_previously_disclosed_cards_are_held_for_review` 的 embedded-disclosure 分支；配套上游 delivery 测试覆盖旧版本、重复、响应丢失、假成功、原号/摘要不符及交付中退款。
+
+#### RFD-08 钱包付款转换卡须有持久退款屏障
+
+- 全额钱包付款不应依赖在线通道，也不能删除转换卡安全检查来直接入账。冻结卡、原子返款、作废确认须由同一不可变退款意图协调，采用父单→子单→支付锁顺序；初次落库前和实际返款时重验金额与真实钱包凭证。
+- preparing/pending/wallet_canceling/succeeded按资金与卡状态区分，准备/取消未知保留锁；已返款仅恢复确认。转换卡只允许整父单首次全额退款；线上/混合支付、部分与子单请求继续拒绝。
+- 必测用例：`order_wallet_converter_refund.rs`的`rfd08_`组，包含SQLite与PostgreSQL事务故障、并发、用过的卡、原支付变更、跨窗口恢复、多个子单和存储层取消屏障；不能只验证HTTP成功。

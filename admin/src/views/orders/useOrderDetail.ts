@@ -26,7 +26,7 @@ export function useOrderDetail(opts: { maxRefundDays: () => number; onChanged: (
   const downloading = ref(false)
 
   const defaultRefundTab = (o: AdminOrder | null): RefundTab =>
-    (o?.original_refund_supported || o?.refund_mode === 'automatic') ? 'original' : o?.user_id && Number(o?.online_paid_amount ?? 0) === 0 ? 'wallet' : 'manual'
+    o?.user_id && Number(o?.online_paid_amount ?? 0) === 0 ? 'wallet' : (o?.original_refund_supported || o?.refund_mode === 'automatic') ? 'original' : 'manual'
 
   const resetForms = () => {
     Object.assign(wallet, { amount: '', remark: '', error: '', success: '' })
@@ -99,7 +99,7 @@ export function useOrderDetail(opts: { maxRefundDays: () => number; onChanged: (
     try {
       await adminAPI.refundOrderToWallet(o.id, { amount: wallet.amount.trim(), remark: wallet.remark.trim() || undefined })
       await fetchDetail(o.id, true)
-      wallet.success = t('admin.orders.refundSuccess')
+      wallet.success = order.value?.refund_state === 'syncing' ? t('admin.orders.refundState.syncing') : t('admin.orders.refundSuccess')
       wallet.amount = ''
       wallet.remark = ''
       opts.onChanged()

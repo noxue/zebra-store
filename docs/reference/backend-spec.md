@@ -522,7 +522,7 @@ All four paths can be replaced by admin-set custom paths (settings key `callback
 | GET | `/orders` | List |
 | GET | `/orders/:id` | Detail |
 | PATCH | `/orders/:id` | Change status (`{status}`) |
-| POST | `/orders/:id/refund-to-wallet` | Refund to wallet (`amount`, `remark`) |
+| POST | `/orders/:id/refund-to-wallet` | Refund to wallet (`amount`, `remark`); full wallet-paid converter orders use a durable card barrier and atomic credit, returning `order`, `transaction`, `refund_state`, and `attempt`. Online/mixed payments cannot switch to wallet; converted deliveries require a full parent-order refund. |
 | POST | `/orders/:id/manual-refund` | Legacy wallet-only administrative record (`amount`, `remark`, `payment_fee_refunded`); online-paid orders must use the two-step flow |
 | POST | `/orders/:id/manual-refund/prepare` | Unsupported automatic channel: validate payment and amount, reserve a durable manual attempt, lock converter cards; returns `attempt` in `manual_awaiting` with no completed refund record |
 | POST | `/orders/:id/manual-refund/confirm` | After support returns funds to the original method, submit `{attempt_id,transfer_ref}`; idempotently record one refund, invalidate converter cards and release safe upstream binding; failed card confirmation is retried |
@@ -995,3 +995,7 @@ Upstream mappings retain `fulfillment_type=upstream`. Administrators may import 
 `status` is `pending`, `recovered`, or `review`; `recovered` additionally carries `payload_sha256`, the SHA-256 of the original held batch payload. Suppliers must match the original upstream reference and exact batch hash before acknowledging recovery. `pending` is an explicit capability signal to submit a normal native signed/encrypted `order.delivered` event with a distinct stable recovery event ID. It is not permission to publish a buyer fulfillment: the order-family transaction performs stock recovery and leaves the buyer order refunded. Existing disclosures and ambiguous receipts enter `review`.
 
 An absent entry (including old Store versions) never permits recovery notifications. A successful callback response alone is not proof of recovery; read back the original order acknowledgement. Card secrets and hashes are not added to public storefront order responses.
+
+### Wallet-paid converter refunds (RFD-08)
+
+The original buyer `/orders/:order_no/refund` route also supports a full wallet-paid order, using its original successful wallet payment rather than an online gateway. The existing status/refund_no response stays unchanged. WR attempts use the existing refund ledger with channel_id=0; wallet_canceling blocks procurement, delivery and other refund entries while cancellation is unresolved. Crediting the wallet, recording the refund and marking the attempt succeeded are one transaction. A later card-confirmation outage is shown as syncing and is reconciled without a second credit. Initial requests enforce the refund window; recovery honors the original accepted intent. See [wallet converter refunds](../refunds/wallet-converter.md).

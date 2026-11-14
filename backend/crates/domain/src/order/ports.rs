@@ -376,6 +376,12 @@ pub trait OrderStore: Send + Sync {
         attempt_id: Id,
         now: DateTime<Utc>,
     ) -> Result<bool>;
+    /// Cancel an uncredited wallet attempt; a pending/credited attempt cannot be unlocked.
+    async fn claim_wallet_refund_cancellation(
+        &self,
+        attempt_id: Id,
+        now: DateTime<Utc>,
+    ) -> Result<bool>;
     async fn claim_manual_refund_preparation(
         &self,
         attempt_id: Id,

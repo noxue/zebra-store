@@ -22,6 +22,7 @@ use zs_domain::{Error, Id, Result};
 use zs_shared::page::{Page, PageRequest};
 
 use super::OrderService;
+mod wallet;
 
 /// Refund row of the admin lists (`AdminOrderRefundItem`).
 #[derive(Debug, Clone, Serialize)]
@@ -77,6 +78,7 @@ impl OrderService {
             match attempt.as_ref().map(|attempt| attempt.status.as_str()) {
                 Some(gateway_refund_status::PREPARING) => "checking",
                 Some(gateway_refund_status::PENDING) => "processing",
+                Some(gateway_refund_status::WALLET_CANCELING) => "checking",
                 Some(gateway_refund_status::MANUAL_PREPARING) => "checking",
                 Some(gateway_refund_status::MANUAL_LOCKING) => "checking",
                 Some(gateway_refund_status::MANUAL_AWAITING) => "awaiting_support",
@@ -97,7 +99,9 @@ impl OrderService {
     /// Reconciles durable provider attempts after process restarts or transient API failures.
     pub async fn reconcile_gateway_refunds(&self) -> Result<()> {
         for attempt in self.deps.store.unfinished_gateway_refund_attempts().await? {
-            let result = if matches!(
+            let result = if attempt.is_wallet() {
+                self.resume_wallet_refund(&attempt).await.map(|_| ())
+            } else if matches!(
                 attempt.status.as_str(),
                 gateway_refund_status::MANUAL_PREPARING | gateway_refund_status::MANUAL_LOCKING
             ) {
@@ -140,7 +144,7 @@ impl OrderService {
         Ok(())
     }
 
-    async fn ensure_non_gateway_refund_safe(&self, order_id: Id) -> Result<()> {
+    async fn needs_card_refund(&self, order_id: Id) -> Result<bool> {
         let order = self
             .deps
             .repo
@@ -162,17 +166,22 @@ impl OrderService {
                 .as_ref()
                 .is_some_and(|fulfillment| fulfillment.logistics.contains_key("card_converter_id"))
             {
-                return Err(Error::bad_request(
-                    "error.card_converter_refund_review_required",
-                ));
+                return Ok(true);
             }
             if let Some(integration) = &self.deps.integration
                 && integration.requires_converter(target).await?
             {
-                return Err(Error::bad_request(
-                    "error.card_converter_refund_review_required",
-                ));
+                return Ok(true);
             }
+        }
+        Ok(false)
+    }
+
+    async fn ensure_non_gateway_refund_safe(&self, order_id: Id) -> Result<()> {
+        if self.needs_card_refund(order_id).await? {
+            return Err(Error::bad_request(
+                "error.card_converter_refund_review_required",
+            ));
         }
         Ok(())
     }
@@ -266,8 +275,10 @@ impl OrderService {
             return Ok("contact_support");
         }
         if order.refunded_amount != zs_shared::money::Amount::ZERO
-            || order.wallet_paid_amount != zs_shared::money::Amount::ZERO
-            || order.online_paid_amount != order.total_amount
+            || !((order.wallet_paid_amount == order.total_amount
+                && order.online_paid_amount == zs_shared::money::Amount::ZERO)
+                || (order.wallet_paid_amount == zs_shared::money::Amount::ZERO
+                    && order.online_paid_amount == order.total_amount))
             || plan_refund(
                 order,
                 order.total_amount,
@@ -299,6 +310,15 @@ impl OrderService {
                     return Ok("contact_support");
                 }
             }
+        }
+        if order.wallet_paid_amount == order.total_amount
+            && order.online_paid_amount == zs_shared::money::Amount::ZERO
+        {
+            return Ok(if self.wallet_payment(order).await.is_ok() {
+                "automatic"
+            } else {
+                "contact_support"
+            });
         }
         let (payments, _) = self
             .deps
@@ -336,9 +356,21 @@ impl OrderService {
         )
     }
 
-    pub async fn buyer_original_refund(&self, order: &Order) -> Result<OriginalRefundResult> {
+    pub async fn buyer_original_refund(&self, order: &Order) -> Result<GatewayRefundAttempt> {
         if self.buyer_refund_mode(order).await? != "automatic" {
             return Err(Error::bad_request("error.payment_provider_not_supported"));
+        }
+        if order.wallet_paid_amount == order.total_amount
+            && order.online_paid_amount == zs_shared::money::Amount::ZERO
+        {
+            return Ok(self
+                .wallet_converter_refund(
+                    order.id,
+                    &order.total_amount.to_string(),
+                    "buyer_requested_refund",
+                )
+                .await?
+                .attempt);
         }
         self.original_refund(
             order.id,
@@ -348,6 +380,7 @@ impl OrderService {
             "",
         )
         .await
+        .map(|result| result.attempt)
     }
 
     async fn prepare_card_refund(&self, order: &Order, refund_no: &str) -> Result<()> {
@@ -927,7 +960,9 @@ impl OrderService {
             })
             .await
             .map_err(|e| e.or_internal(keys::ORDER_UPDATE_FAILED))?;
-        self.after_refund(&done).await;
+        if !to_wallet || done.transaction.is_some() {
+            self.after_refund(&done).await;
+        }
         Ok(done)
     }
 
@@ -961,7 +996,18 @@ impl OrderService {
         amount: &str,
         remark: &str,
     ) -> Result<RefundDone> {
-        self.ensure_non_gateway_refund_safe(order_id).await?;
+        if self.needs_card_refund(order_id).await? {
+            let result = self
+                .wallet_converter_refund(order_id, amount, remark)
+                .await?;
+            return result.completed.ok_or_else(|| {
+                Error::bad_request(if result.attempt.status == gateway_refund_status::FAILED {
+                    "error.card_converter_refund_review_required"
+                } else {
+                    "error.gateway_refund_pending"
+                })
+            });
+        }
         let order = self
             .deps
             .repo

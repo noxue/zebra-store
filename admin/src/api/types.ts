@@ -1602,6 +1602,13 @@ export interface AdminRefundToWalletPayload {
   remark?: string
 }
 
+export interface AdminWalletRefundResponse {
+  order: AdminOrder
+  transaction: AdminWalletTransaction | null
+  refund_state: NonNullable<AdminOrder['refund_state']>
+  attempt: AdminOrder['refund_attempt']
+}
+
 export interface AdminManualRefundPayload {
   amount: string
   remark?: string
