@@ -1,7 +1,7 @@
 name: Catalog facets candidate
 on:
   push:
-    branches: [codex/catalog-facets]
+    branches: [codex/catalog-facets, codex/catalog-filter-rows]
 permissions:
   contents: read
 jobs:

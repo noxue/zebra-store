@@ -80,8 +80,8 @@ try {
   });
   const page=await context.newPage();page.on('pageerror',error=>errors.push(error.message));
   const controls=()=>page.getByRole('region',{name:'按条件查找',exact:true});
-  const open=async()=>{if(width<1024){await page.getByRole('button',{name:'筛选',exact:true}).click();await page.getByRole('dialog',{name:'筛选',exact:true}).waitFor({state:'visible'});}await controls().waitFor({state:'visible'});};
-  const close=async()=>{if(width<1024){await controls().getByRole('button',{name:'查看商品',exact:true}).click();await page.getByRole('dialog',{name:'筛选',exact:true}).waitFor({state:'hidden'});}};
+  const open=async()=>{await controls().waitFor({state:'visible'});};
+  const close=async()=>{};
   const frames=()=>page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
   try {
    const deep=origin+'/products?facet_family=ip&facet_country='+encodeURIComponent(US)+'&campaign=keep';
@@ -89,20 +89,29 @@ try {
    await controls().getByText('美国',{exact:true}).waitFor();
    assert.equal(new URL(page.url()).searchParams.get('facet_country'),US);
    assert(!(await controls().innerText()).includes(US));
+   await page.screenshot({path:path.join(artifacts,`initial-${mode}-${width}.png`),fullPage:true});
+   assert.equal(await controls().evaluate(el=>Boolean(el.closest('aside,[role="dialog"]'))),false);
+   assert.equal(await controls().count(),1,'Filters must appear once, inline above the product list');
+   const firstProduct=page.getByText('美国IP服务',{exact:true});
+   assert(await controls().evaluate((el,product)=>Boolean(el.compareDocumentPosition(product)&Node.DOCUMENT_POSITION_FOLLOWING),await firstProduct.elementHandle()));
    if(width<1024){
-    const dialog=page.getByRole('dialog',{name:'筛选',exact:true}),first=dialog.locator('button').first();
+    await page.getByRole('button',{name:'筛选',exact:true}).click();
+    const dialog=page.getByRole('dialog',{name:'筛选',exact:true}),first=dialog.locator('button').first(),last=dialog.locator('button').last();
+    await dialog.waitFor({state:'visible'});
+    assert.equal(await dialog.getByRole('region',{name:'按条件查找',exact:true}).count(),0);
     await page.waitForFunction(()=>document.activeElement===document.querySelector('[role="dialog"] button'));
-    await page.keyboard.press('Shift+Tab');assert.equal(await page.evaluate(()=>document.activeElement.textContent.trim()),'查看商品');
+    await page.keyboard.press('Shift+Tab');assert(await last.evaluate(el=>el===document.activeElement));
     await page.keyboard.press('Tab');assert(await first.evaluate(el=>el===document.activeElement));
     await page.keyboard.press('Escape');await dialog.waitFor({state:'hidden'});
     assert(await page.getByRole('button',{name:'筛选',exact:true}).evaluate(el=>el===document.activeElement));
-    assert.equal(await page.evaluate(()=>document.body.style.overflow),'');await open();
+    assert.equal(await page.evaluate(()=>document.body.style.overflow),'');
    }
    // The exact selected value is not in the first twenty country options.
    // legend is not a consistently mapped ARIA role, so use its text for the stable field boundary.
    const field=(name)=>controls().locator('fieldset').filter({has:page.locator('legend').filter({hasText:new RegExp('^'+name+'$')})});
+   await field('国家或地区').getByRole('button',{name:'展开更多',exact:true}).click();
    await field('国家或地区').getByRole('button',{name:'加载更多',exact:true}).click();
-   await field('国家或地区').getByRole('button',{name:/^美国\s*1项商品$/}).waitFor();
+   await field('国家或地区').getByRole('button',{name:/^美国(?:\s*1项商品)?$/}).waitFor();
    await field('城市').getByRole('button',{name:/^美国城市/}).click();
    await controls().getByLabel('搜索国家或地区',{exact:true}).fill('加拿大');
    await field('国家或地区').getByRole('button',{name:/^加拿大/}).click();await close();
@@ -140,21 +149,15 @@ try {
    await page.evaluate(()=>document.fonts.ready);
    const metrics=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth,ids:[...document.querySelectorAll('input[id]')].map(el=>el.id)}));
    assert(metrics.scroll<=metrics.width+1,JSON.stringify(metrics));assert.equal(new Set(metrics.ids).size,metrics.ids.length);
-   if(width<1024){
-    await open();await frames();
-    const dialog=page.getByRole('dialog',{name:'筛选',exact:true});
-    await dialog.evaluate(async el=>{await Promise.all(el.parentElement.getAnimations({subtree:true}).map(animation=>animation.finished.catch(()=>{})));});
-    assert(await dialog.isVisible());assert.equal(await dialog.evaluate(el=>getComputedStyle(el.parentElement).opacity),'1');
-    await page.screenshot({path:path.join(artifacts,`filters-${mode}-${width}.png`),fullPage:false});await close();
-   }
-   else await page.screenshot({path:path.join(artifacts,`filters-${mode}-${width}.png`),fullPage:true});
+   await frames();
+   await page.screenshot({path:path.join(artifacts,`filters-${mode}-${width}.png`),fullPage:true});
    state.productReads=0;await page.goto(origin+'/products?facet_country=A&facet_country=B');
    await page.getByTestId('catalog-list-feedback').getByText('筛选链接不完整或无效，请清除条件后重试。',{exact:true}).waitFor();
    assert.equal(state.productReads,0,'Invalid links must not silently fetch an unfiltered catalog');
    await page.getByTestId('catalog-list-feedback').getByRole('button',{name:'清除筛选条件',exact:true}).click();await page.getByText('美国IP服务',{exact:true}).waitFor();
    assert.equal(new URL(page.url()).searchParams.get('facet_country'),null);
    assert.deepEqual(errors,[]);assert.deepEqual(unexpected,[]);assert.deepEqual(writes,[]);
-   results.push({mode,width,urlIdentity:true,paging:true,parentSwitch:true,errorsDistinct:true,staleResponseDiscarded:true,renameStable:true,newRegion:true,invalidUrlBlocked:true,overflow:false,financialWrites:0});
+   results.push({mode,width,urlIdentity:true,paging:true,parentSwitch:true,errorsDistinct:true,staleResponseDiscarded:true,renameStable:true,newRegion:true,invalidUrlBlocked:true,inlineAboveProducts:true,overflow:false,financialWrites:0});
    await fs.writeFile(path.join(artifacts,'results.json'),JSON.stringify(results,null,2)+'\n');
   }catch(error){
    releaseOld.resolve();await page.screenshot({path:path.join(artifacts,`failed-${mode}-${width}.png`),fullPage:true});

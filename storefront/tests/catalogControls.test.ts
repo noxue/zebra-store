@@ -33,6 +33,27 @@ beforeEach(() => {
 afterEach(() => { wrappers.splice(0).forEach((wrapper) => wrapper.unmount()); document.body.style.overflow = ''; vi.restoreAllMocks(); vi.useRealTimers() })
 
 describe('catalog controls', () => {
+  it('keeps long option rows compact, expands without an inner scrollbar, and preserves a hidden selection when collapsed', async () => {
+    const countries = Array.from({ length: 20 }, (_, index) => option(`C${index}`, `国家${index}`))
+    vi.mocked(catalogFacetAPI.values).mockImplementation(async (params) => params.value_id
+      ? reply(countries.filter((item) => item.value_id === params.value_id), 1, 1, 1)
+      : reply(countries))
+    const { model, wrapper } = fixture(); await model.initialize(); await flushPromises()
+    expect(wrapper.findAll('button[aria-pressed]')).toHaveLength(6)
+    expect(wrapper.find('[role="group"]').classes()).not.toContain('overflow-y-auto')
+    const expand = wrapper.findAll('button').find((button) => button.text() === '展开更多')!
+    expect(expand.attributes('aria-expanded')).toBe('false')
+    await expand.trigger('click')
+    expect(wrapper.findAll('button[aria-pressed]')).toHaveLength(20)
+    await wrapper.findAll('button[aria-pressed]')[19]!.trigger('click'); await vi.advanceTimersByTimeAsync(300); await flushPromises()
+    expect(model.filters.value).toEqual({ facet_country: 'C19' })
+    await wrapper.findAll('button').find((button) => button.text() === '收起选项')!.trigger('click')
+    expect(wrapper.findAll('button[aria-pressed]')).toHaveLength(6)
+    expect(wrapper.text()).toContain('国家19')
+    expect(model.filters.value).toEqual({ facet_country: 'C19' })
+    await wrapper.get('button[aria-label="清除国家或地区"]').trigger('click')
+    expect(model.filters.value).toEqual({})
+  })
   it('displays the exact selected label instead of an internal identifier and supports search, paging and clear', async () => {
     const { model, wrapper, apply } = fixture()
     model.restore({ facet_country: 'supplier:000Ab' }); await model.initialize(); await flushPromises()
