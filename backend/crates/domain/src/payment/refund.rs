@@ -11,6 +11,7 @@ use crate::{Id, Result};
 pub mod status {
     pub const PREPARING: &str = "preparing";
     pub const PENDING: &str = "pending";
+    pub const WALLET_CANCELING: &str = "wallet_canceling";
     pub const MANUAL_PREPARING: &str = "manual_preparing";
     pub const MANUAL_LOCKING: &str = "manual_locking";
     pub const MANUAL_AWAITING: &str = "manual_awaiting";
@@ -48,6 +49,13 @@ pub struct GatewayRefundAttempt {
     pub refund_record_id: Option<Id>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+impl GatewayRefundAttempt {
+    /// Wallet returns share the durable refund ledger, but never call an online gateway.
+    pub fn is_wallet(&self) -> bool {
+        self.channel_id == 0 && self.refund_no.starts_with("WR")
+    }
 }
 
 #[derive(Debug, Clone)]

@@ -352,6 +352,17 @@ impl OrderStore for SeaOrderStore {
         refund::get_gateway_refund_attempt_in(&self.db, id).await
     }
 
+    async fn claim_wallet_refund_cancellation(
+        &self,
+        attempt_id: Id,
+        now: DateTime<Utc>,
+    ) -> Result<bool> {
+        in_txn!(self, |txn| refund::claim_wallet_refund_cancellation_in(
+            &txn, attempt_id, now
+        )
+        .await)
+    }
+
     async fn claim_manual_refund_preparation(
         &self,
         attempt_id: Id,

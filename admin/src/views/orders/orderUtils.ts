@@ -227,7 +227,7 @@ export const refundableAmountValue = (order: AdminOrder | null | undefined) => {
 export const canManualRefund = (order: AdminOrder | null | undefined, maxRefundDays: number) =>
   !!order && isPaidOrder(order) && !isOrderRefundWindowExpired(order, maxRefundDays) && refundableAmountValue(order) > 0
 
-export const canRefundToWallet = (order: AdminOrder | null | undefined, maxRefundDays: number) => !!order?.user_id && canManualRefund(order, maxRefundDays)
+export const canRefundToWallet = (order: AdminOrder | null | undefined, maxRefundDays: number) => !!order?.user_id && Number(order.online_paid_amount || 0) === 0 && canManualRefund(order, maxRefundDays)
 
 export const shouldShowRefundCard = (order: AdminOrder | null | undefined, maxRefundDays: number) =>
   !!order && isPaidOrder(order) && order.status !== 'canceled' && !isOrderRefundWindowExpired(order, maxRefundDays)

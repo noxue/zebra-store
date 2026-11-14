@@ -254,7 +254,7 @@ async fn request_refund(
     let svc = &s.svc.order.service;
     let order = svc.get_order(&viewer, &tenant.0, &order_no).await?;
     let result = svc.buyer_original_refund(&order).await?;
-    ok(json!({"status": result.attempt.status, "refund_no": result.attempt.refund_no}))
+    ok(json!({"status": result.status, "refund_no": result.refund_no}))
 }
 
 async fn download_fulfillment(

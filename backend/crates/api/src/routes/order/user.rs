@@ -224,7 +224,7 @@ async fn request_refund(
         .get_order(&Viewer::User(user.id), &tenant.0, &order_no)
         .await?;
     let result = svc.buyer_original_refund(&order).await?;
-    ok(json!({"status": result.attempt.status, "refund_no": result.attempt.refund_no}))
+    ok(json!({"status": result.status, "refund_no": result.refund_no}))
 }
 
 async fn create(

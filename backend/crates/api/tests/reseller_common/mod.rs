@@ -81,12 +81,15 @@ pub struct App {
 
 impl App {
     pub async fn new() -> Self {
-        Self::with(config()).await
+        // The full application fixture owns a large configuration and services graph.
+        // Keep nested setup futures off libtest's default Linux thread stack; callers
+        // exercise the same routes and assertions without increasing RUST_MIN_STACK.
+        Box::pin(Self::with(config())).await
     }
 
     /// App with `cfg`; logs the admin in and acknowledges the compliance statement.
     pub async fn with(cfg: Config) -> Self {
-        let me = Self::without_ack(cfg).await;
+        let me = Box::pin(Self::without_ack(cfg)).await;
         let ack = me
             .admin_call(
                 "POST",
