@@ -1,5 +1,5 @@
 import { defineComponent, type PropType } from 'vue'
-import { Lock, Pencil, UserPlus, Zap } from 'lucide-vue-next'
+import { Lock, Package, Pencil, UserPlus, Zap } from 'lucide-vue-next'
 import type { Product } from '@/api/types'
 import { useProductLabels } from '@/composables/useProductLabels'
 import { Badge } from '@/components/ui'
@@ -26,8 +26,8 @@ export const ProductBadges = defineComponent({
               {getPurchaseTypeLabel(p.purchase_type)}
             </Badge>
           </span>
-          <Badge size={props.size} tone={p.fulfillment_type === 'auto' ? 'info' : 'neutral'}>
-            {p.fulfillment_type === 'auto' ? <Zap class="size-3" /> : <Pencil class="size-3" />}
+          <Badge size={props.size} tone={p.fulfillment_type === 'auto' || p.fulfillment_type === 'upstream' ? 'info' : 'neutral'}>
+            {p.fulfillment_type === 'auto' ? <Zap class="size-3" /> : p.fulfillment_type === 'upstream' ? <Package class="size-3" /> : <Pencil class="size-3" />}
             {getFulfillmentTypeLabel(p.fulfillment_type)}
           </Badge>
           {props.showStock && (

@@ -1,4 +1,4 @@
-import { defineComponent, Teleport, Transition, type PropType } from 'vue'
+import { defineComponent, nextTick, onBeforeUnmount, ref, Teleport, Transition, useId, watch, type PropType } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ChevronRight, Filter, LayoutGrid, Search, X } from 'lucide-vue-next'
 import { useLocalized } from '@/composables/useLocalized'
@@ -18,6 +18,7 @@ export const CategorySidebar = defineComponent({
     expandedParentIds: { type: Array as PropType<number[]>, default: () => [] },
     showDrawer: Boolean,
     showSearch: Boolean,
+    disabled: Boolean,
     searchQuery: { type: String, default: '' },
   },
   emits: {
@@ -27,9 +28,56 @@ export const CategorySidebar = defineComponent({
     'update:searchQuery': (_v: string) => true,
     clearSearch: () => true,
   },
-  setup(props, { emit }) {
+  setup(props, { emit, slots }) {
     const { t } = useI18n()
     const { getLocalizedText } = useLocalized()
+
+    const drawerEl = ref<HTMLElement | null>(null)
+    const searchId = useId()
+    let previousFocus: HTMLElement | null = null
+    let previousOverflow = ''
+    let locked = false
+    const desktop = typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia('(min-width: 64rem)') : null
+    const onDrawerKey = (event: KeyboardEvent) => {
+      const dialog = drawerEl.value
+      if (!props.showDrawer || !dialog) return
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        emit('update:showDrawer', false)
+      } else if (event.key === 'Tab') {
+        const controls = [...dialog.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])')].filter((element) => element.getClientRects().length > 0)
+        const first = controls[0]
+        const last = controls[controls.length - 1]
+        if (!first || !last) { event.preventDefault(); dialog.focus(); return }
+        if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) { event.preventDefault(); last.focus() }
+        else if (!event.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) { event.preventDefault(); first.focus() }
+      }
+    }
+    const unlock = () => {
+      if (!locked) return
+      document.body.style.overflow = previousOverflow
+      locked = false
+      window.removeEventListener('keydown', onDrawerKey)
+      if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true })
+      previousFocus = null
+    }
+    watch(() => props.showDrawer, async (open) => {
+      if (typeof document === 'undefined') return
+      if (!open) { unlock(); return }
+      if (desktop?.matches) { emit('update:showDrawer', false); return }
+      if (!locked) {
+        previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
+        previousOverflow = document.body.style.overflow
+        locked = true
+        document.body.style.overflow = 'hidden'
+        window.addEventListener('keydown', onDrawerKey)
+      }
+      await nextTick()
+      if (props.showDrawer) drawerEl.value?.querySelector<HTMLElement>('button:not([disabled])')?.focus({ preventScroll: true })
+    }, { immediate: true, flush: 'post' })
+    const onDesktop = () => { if (desktop?.matches && props.showDrawer) emit('update:showDrawer', false) }
+    desktop?.addEventListener('change', onDesktop)
+    onBeforeUnmount(() => { desktop?.removeEventListener('change', onDesktop); unlock() })
 
     const icon = (c: PublicCategory) =>
       c.icon ? <img src={getImageUrl(c.icon)} alt="" class="size-5 shrink-0 rounded-md object-cover" /> : <span class="zs-sparkle text-[10px]">✦</span>
@@ -38,8 +86,9 @@ export const CategorySidebar = defineComponent({
       <button
         key={c.id}
         type="button"
+        disabled={props.disabled}
         class={cn(
-          'flex w-full min-w-0 items-center gap-2 rounded-full px-3 py-2 text-left text-sm font-bold transition',
+          'flex min-h-11 w-full min-w-0 items-center gap-2 rounded-full px-3 py-2 text-left text-sm font-bold transition',
           child && 'pl-8 text-[13px]',
           props.selectedCategory === c.id ? 'zs-gradient-bg text-on-primary shadow-zs' : 'text-fg hover:bg-primary-soft hover:text-primary-text',
         )}
@@ -54,8 +103,9 @@ export const CategorySidebar = defineComponent({
       <div class="space-y-1">
         <button
           type="button"
+          disabled={props.disabled}
           class={cn(
-            'flex w-full items-center gap-2 rounded-full px-3 py-2 text-sm font-bold transition',
+            'flex min-h-11 w-full items-center gap-2 rounded-full px-3 py-2 text-sm font-bold transition',
             props.selectedCategory === null ? 'zs-gradient-bg text-on-primary shadow-zs' : 'text-fg hover:bg-primary-soft hover:text-primary-text',
           )}
           onClick={() => emit('selectCategory', null, close)}
@@ -73,7 +123,8 @@ export const CategorySidebar = defineComponent({
                   <button
                     type="button"
                     aria-expanded={expanded}
-                    class={cn('flex size-8 shrink-0 items-center justify-center rounded-full transition', expanded ? 'bg-primary-soft text-primary-text' : 'text-muted hover:bg-surface-muted')}
+                    aria-label={t('catalogBrowse.toggleCategory', { name: getLocalizedText(group.name as Record<string, string>) })}
+                    class={cn('flex size-11 shrink-0 items-center justify-center rounded-full transition', expanded ? 'bg-primary-soft text-primary-text' : 'text-muted hover:bg-surface-muted')}
                     onClick={() => emit('toggleParent', group.id)}
                   >
                     <ChevronRight class={cn('size-4 transition-transform', expanded && 'rotate-90')} />
@@ -87,9 +138,13 @@ export const CategorySidebar = defineComponent({
       </div>
     )
 
-    const search = () =>
+    const search = (mobile = false) =>
       props.showSearch && (
-        <Input
+        <>
+        <label class="sr-only" for={`${searchId}-${mobile ? 'mobile' : 'desktop'}`}>{t('catalogBrowse.productSearch')}</label>
+        <Input id={`${searchId}-${mobile ? 'mobile' : 'desktop'}`}
+          disabled={props.disabled}
+          inputClass={props.searchQuery ? 'pr-14' : ''}
           modelValue={props.searchQuery}
           placeholder={t('products.searchBoxPlaceholder')}
           onUpdate:modelValue={(v: string) => emit('update:searchQuery', v)}
@@ -98,31 +153,33 @@ export const CategorySidebar = defineComponent({
             prefix: () => <Search class="size-4" />,
             suffix: props.searchQuery
               ? () => (
-                  <button type="button" class="flex size-7 items-center justify-center rounded-full hover:bg-surface-muted" onClick={() => emit('clearSearch')}>
+                  <button type="button" aria-label={t('catalogBrowse.clearSearch')} class="flex size-11 items-center justify-center rounded-full hover:bg-surface-muted" onClick={() => emit('clearSearch')}>
                     <X class="size-4" />
                   </button>
                 )
               : undefined,
           }}
         </Input>
+        </>
       )
 
     return () => (
       <>
         {/* mobile bar */}
         <div class="flex items-center gap-2 lg:hidden">
-          <div class="flex-1">{search()}</div>
-          <Button variant="secondary" onClick={() => emit('update:showDrawer', true)}>
+          <div class="flex-1">{search(true)}</div>
+          <Button variant="secondary" disabled={props.disabled} onClick={(event: MouseEvent) => { if (event.currentTarget instanceof HTMLElement) event.currentTarget.focus({ preventScroll: true }); emit('update:showDrawer', true) }}>
             <Filter class="size-4" />
             {t('products.filter')}
           </Button>
         </div>
         {/* desktop */}
         <aside class="hidden w-64 shrink-0 lg:block">
-          <div class="zs-card sticky top-24 space-y-4 p-4">
+          <div class="zs-card sticky top-24 max-h-[calc(100dvh-7rem)] space-y-4 overflow-y-auto p-4">
             {search()}
             <div class="zs-title px-2 text-sm text-muted">{t('products.categories')}</div>
             {tree(false)}
+            {slots.filters?.({ mobile: false })}
           </div>
         </aside>
         <Teleport to="body">
@@ -130,16 +187,22 @@ export const CategorySidebar = defineComponent({
             {props.showDrawer && (
               <div class="fixed inset-0 z-[65] bg-[var(--zs-overlay)] backdrop-blur-sm lg:hidden" onClick={() => emit('update:showDrawer', false)}>
                 <div
+                  ref={drawerEl}
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label={t('products.filter')}
+                  tabindex={-1}
                   class="zs-pop absolute inset-x-0 bottom-0 max-h-[80vh] overflow-y-auto rounded-t-[var(--zs-radius-lg)] border border-line bg-surface-solid p-5 pb-8"
                   onClick={(e: MouseEvent) => e.stopPropagation()}
                 >
                   <div class="mb-4 flex items-center justify-between">
-                    <h3 class="zs-title text-lg">{t('products.categories')}</h3>
-                    <button type="button" aria-label={t('products.closeFilter')} class="flex size-9 items-center justify-center rounded-full hover:bg-primary-soft" onClick={() => emit('update:showDrawer', false)}>
+                    <h3 class="zs-title text-lg">{t('products.filter')}</h3>
+                    <button type="button" aria-label={t('products.closeFilter')} class="flex size-11 items-center justify-center rounded-full hover:bg-primary-soft" onClick={() => emit('update:showDrawer', false)}>
                       <X class="size-5" />
                     </button>
                   </div>
                   {tree(true)}
+                  {slots.filters?.({ mobile: true })}
                 </div>
               </div>
             )}

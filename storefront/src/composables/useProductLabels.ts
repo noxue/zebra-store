@@ -10,7 +10,7 @@ export function useProductLabels() {
     purchaseType === 'guest' ? t('productPurchase.guest') : t('productPurchase.member')
 
   const getFulfillmentTypeLabel = (fulfillmentType?: string) =>
-    fulfillmentType === 'auto' ? t('products.fulfillmentType.auto') : t('products.fulfillmentType.manual')
+    fulfillmentType === 'auto' ? t('products.fulfillmentType.auto') : fulfillmentType === 'upstream' ? t('catalogBrowse.upstreamDelivery') : t('products.fulfillmentType.manual')
 
   const getStockBadgeVariant = (status?: string): BadgeTone => {
     switch (status) {

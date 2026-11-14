@@ -57,6 +57,15 @@ jobs:
         run: |
           (cd e2e && npm ci --ignore-scripts --no-audit --no-fund && npx playwright install --with-deps chromium)
           node e2e/catalog-sku-smoke.mjs
+      - name: Isolated catalog browse browser smoke
+        run: node e2e/catalog-browse-smoke.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: catalog-browse-browser-${{ github.sha }}
+          path: e2e/test-results/catalog-browse
+          if-no-files-found: warn
+          retention-days: 7
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
