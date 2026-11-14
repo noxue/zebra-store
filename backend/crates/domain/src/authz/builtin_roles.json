@@ -363,6 +363,16 @@
       {
         "object": "/admin/api-key",
         "action": "DELETE"
+      },
+      {
+        "subject": "",
+        "object": "/admin/products/:id/catalog-facets",
+        "action": "GET"
+      },
+      {
+        "subject": "",
+        "object": "/admin/products/:id/catalog-facets",
+        "action": "PUT"
       }
     ],
     "Immutable": true

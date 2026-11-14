@@ -257,3 +257,159 @@ async fn malformed_index_values_are_not_accepted_when_the_document_is_valid() {
         1
     );
 }
+
+#[tokio::test]
+async fn admin_http_uses_exact_revisions_and_returns_distinct_atomic_validation_errors() {
+    let (app, id, repo) = fixture().await;
+    let path = format!("/api/v1/admin/products/{id}/catalog-facets");
+    let before = app.get(&path).await;
+    assert_eq!(
+        common::data(&before),
+        &json!({"schema_version":1,"revision":"0","facets":[]})
+    );
+    let valid = json!({"schema_version":1,"expected_revision":"0","facets":attributes("Country")});
+    let created = app.put(&path, valid.clone()).await;
+    assert_eq!(common::data(&created)["revision"], "1");
+    let original = repo.get(id).await.unwrap();
+    let cases = [
+        (
+            json!({"schema_version":2,"expected_revision":"1","facets":[]}),
+            "暂不支持此商品筛选版本，请刷新后再保存。",
+        ),
+        (
+            json!({"schema_version":1,"expected_revision":"01","facets":[]}),
+            "商品筛选版本无效，请刷新商品后重试。",
+        ),
+        (
+            json!({"schema_version":1,"expected_revision":"1","facets":[{"key":"country","value_id":" padded","label":{"zh-CN":"Country"}}]}),
+            "商品筛选值的标识格式不正确，请核对来源编号。",
+        ),
+        (
+            json!({"schema_version":1,"expected_revision":"1","facets":[{"key":"country","value_id":"a","label":{"zh-CN":""}}]}),
+            "商品筛选名称不能为空、过长或包含控制字符。",
+        ),
+        (
+            json!({"schema_version":1,"expected_revision":"1","facets":[{"key":"country","value_id":"a","label":{"zh-CN":"A"}},{"key":"country","value_id":"b","label":{"zh-CN":"B"}}]}),
+            "同一商品的每个筛选维度只能设置一个值。",
+        ),
+        (
+            json!({"schema_version":1,"expected_revision":"1","facets":vec![json!({"key":"country","value_id":"a","label":{"zh-CN":"A"}});7]}),
+            "商品筛选维度数量超过限制。",
+        ),
+    ];
+    for (body, message) in cases {
+        let result = app.put(&path, body).await;
+        assert_eq!(result["status_code"], 400, "{result}");
+        assert_eq!(result["msg"], message);
+        assert_eq!(repo.get(id).await.unwrap(), original);
+    }
+    for body in [
+        json!({"schema_version":1,"expected_revision":1,"facets":[]}),
+        json!({"schema_version":1,"expected_revision":"1","facets":[],"price_amount":"0.01"}),
+        json!({"schema_version":1,"expected_revision":"1","facets":[{"key":"country","value_id":"a","label":{"zh-CN":"A"},"stock":999}]}),
+    ] {
+        assert_eq!(app.put(&path, body).await["status_code"], 400);
+        assert_eq!(repo.get(id).await.unwrap(), original);
+    }
+    let stale = app.put(&path, valid).await;
+    assert_eq!(stale["status_code"], 400);
+    assert_eq!(stale["msg"], "商品筛选配置已变更，请刷新商品后重新确认。");
+    let english = app
+        .put(
+            &format!("{path}?lang=en-US"),
+            json!({"schema_version":2,"expected_revision":"1","facets":[]}),
+        )
+        .await;
+    assert_eq!(
+        english["msg"],
+        "This product filter schema is not supported. Refresh before saving."
+    );
+    assert_eq!(repo.get(id).await.unwrap(), original);
+}
+
+#[tokio::test]
+async fn admin_metadata_routes_are_catalogued_and_require_the_operations_role() {
+    let (app, id, repo) = fixture().await;
+    let path = format!("/api/v1/admin/products/{id}/catalog-facets");
+    assert_eq!(app.call("GET", &path, None, None).await["status_code"], 401);
+    let created = app
+        .post(
+            "/api/v1/admin/authz/admins",
+            json!({"username":"facetviewer","password":"FacetViewer12345"}),
+        )
+        .await;
+    let aid = common::data(&created)["id"].as_i64().unwrap();
+    let token = app.login("facetviewer", "FacetViewer12345").await;
+    let body = json!({"schema_version":1,"expected_revision":"0","facets":attributes("Country")});
+    assert_eq!(
+        app.call("PUT", &path, Some(body.clone()), Some(&token))
+            .await["status_code"],
+        403
+    );
+    assert_eq!(repo.get(id).await.unwrap().revision, 0);
+    common::data(
+        &app.put(
+            &format!("/api/v1/admin/authz/admins/{aid}/roles"),
+            json!({"roles":["operations"]}),
+        )
+        .await,
+    );
+    let result = app.call("PUT", &path, Some(body), Some(&token)).await;
+    assert_eq!(common::data(&result)["revision"], "1");
+    let catalog = app.get("/api/v1/admin/authz/permissions/catalog").await;
+    let items = common::data(&catalog).as_array().unwrap();
+    for method in ["GET", "PUT"] {
+        assert!(items.iter().any(
+            |item| item["object"] == "/admin/products/:id/catalog-facets"
+                && item["method"] == method
+        ));
+    }
+}
+
+#[tokio::test]
+async fn revisions_beyond_javascript_safe_integers_round_trip_as_exact_decimal_strings() {
+    let (app, id, repo) = fixture().await;
+    repo.replace(id, 0, &attributes("Original")).await.unwrap();
+    // Synthetic isolated fixture, never a production data edit. This value cannot
+    // safely cross a JavaScript Number, but remains exact in the HTTP contract.
+    app.db
+        .execute_unprepared(&format!(
+            "UPDATE product_catalog_documents SET revision=9007199254740993 WHERE product_id={id}"
+        ))
+        .await
+        .unwrap();
+    let path = format!("/api/v1/admin/products/{id}/catalog-facets");
+    assert_eq!(
+        common::data(&app.get(&path).await)["revision"],
+        "9007199254740993"
+    );
+    let updated = app.put(&path, json!({"schema_version":1,"expected_revision":"9007199254740993","facets":attributes("Renamed")})).await;
+    assert_eq!(common::data(&updated)["revision"], "9007199254740994");
+    assert_eq!(repo.get(id).await.unwrap().revision, 9_007_199_254_740_994);
+}
+
+#[tokio::test]
+async fn clearing_empty_metadata_invalidates_initial_and_later_inflight_writes() {
+    let (app, id, repo) = fixture().await;
+    let cleared = repo.replace(id, 0, &FacetSet::default()).await.unwrap();
+    assert_eq!(cleared.revision, 1);
+    assert_eq!(documents::Entity::find().count(&app.db).await.unwrap(), 1);
+    assert_eq!(rows::Entity::find().count(&app.db).await.unwrap(), 0);
+    assert_eq!(
+        repo.replace(id, 0, &attributes("Delayed initial request"))
+            .await
+            .unwrap_err()
+            .key(),
+        "error.catalog_facets_changed"
+    );
+    let cleared_again = repo.replace(id, 1, &FacetSet::default()).await.unwrap();
+    assert_eq!(cleared_again.revision, 2);
+    assert_eq!(
+        repo.replace(id, 1, &attributes("Delayed later request"))
+            .await
+            .unwrap_err()
+            .key(),
+        "error.catalog_facets_changed"
+    );
+    assert_eq!(repo.get(id).await.unwrap(), cleared_again);
+}

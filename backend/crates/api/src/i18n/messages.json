@@ -1,5 +1,10 @@
 {
   "en-US": {
+    "error.catalog_facets_value_invalid": "A product filter value has an invalid identifier.",
+    "error.catalog_facets_label_invalid": "A product filter label is empty or too long.",
+    "error.catalog_facets_duplicate_dimension": "Each product filter dimension accepts one value.",
+    "error.catalog_facets_too_many": "Too many product filter dimensions.",
+    "error.catalog_facets_schema_unsupported": "This product filter schema is not supported. Refresh before saving.",
     "error.catalog_facets_changed": "Product filters have changed. Refresh the product before saving again.",
     "error.catalog_facets_revision_invalid": "The product filter revision is invalid. Refresh the product and try again.",
     "error.catalog_facets_revision_exhausted": "Product filter revisions require administrator maintenance.",
@@ -438,6 +443,11 @@
     "error.refund_restock_unavailable": "This delivery cannot be mapped to card stock. Refund without restocking and review it manually."
   },
   "zh-CN": {
+    "error.catalog_facets_value_invalid": "商品筛选值的标识格式不正确，请核对来源编号。",
+    "error.catalog_facets_label_invalid": "商品筛选名称不能为空、过长或包含控制字符。",
+    "error.catalog_facets_duplicate_dimension": "同一商品的每个筛选维度只能设置一个值。",
+    "error.catalog_facets_too_many": "商品筛选维度数量超过限制。",
+    "error.catalog_facets_schema_unsupported": "暂不支持此商品筛选版本，请刷新后再保存。",
     "error.catalog_facets_changed": "商品筛选配置已变更，请刷新商品后重新确认。",
     "error.catalog_facets_revision_invalid": "商品筛选版本无效，请刷新商品后重试。",
     "error.catalog_facets_revision_exhausted": "商品筛选版本需要管理员维护。",
@@ -876,6 +886,11 @@
     "error.refund_restock_unavailable": "此交付内容无法明确对应卡密库存，请选择不回库退款后人工处理。"
   },
   "zh-TW": {
+    "error.catalog_facets_value_invalid": "商品篩選值的識別格式不正確，請核對來源編號。",
+    "error.catalog_facets_label_invalid": "商品篩選名稱不能為空、過長或包含控制字元。",
+    "error.catalog_facets_duplicate_dimension": "同一商品的每個篩選維度只能設定一個值。",
+    "error.catalog_facets_too_many": "商品篩選維度數量超過限制。",
+    "error.catalog_facets_schema_unsupported": "暫不支援此商品篩選版本，請重新整理後再儲存。",
     "error.catalog_facets_changed": "商品篩選設定已變更，請重新整理商品後再次確認。",
     "error.catalog_facets_revision_invalid": "商品篩選版本無效，請重新整理商品後再試。",
     "error.catalog_facets_revision_exhausted": "商品篩選版本需要管理員維護。",

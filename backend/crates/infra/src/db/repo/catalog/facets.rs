@@ -57,7 +57,9 @@ impl SeaFacetRepo {
         if original.revision != u64::try_from(expected).map_err(Error::internal)? {
             return Err(Error::bad_request(CHANGED));
         }
-        if original.facets == *facets {
+        // An explicit clear is a tombstone even when nothing is stored yet:
+        // it must invalidate an older in-flight initial publication.
+        if original.facets == *facets && !facets.entries().is_empty() {
             txn.commit().await.dom()?;
             return Ok(original);
         }

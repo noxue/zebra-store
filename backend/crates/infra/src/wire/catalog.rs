@@ -8,12 +8,14 @@ use std::sync::Arc;
 use zs_app::catalog::CatalogServices;
 use zs_app::catalog::card_secret::CardSecretService;
 use zs_app::catalog::category::CategoryService;
+use zs_app::catalog::facets::FacetService;
 use zs_app::catalog::product::{ProductDeps, ProductService};
 use zs_app::reseller::PricingReads;
 
 use super::WireCtx;
 use crate::db::repo::catalog::card_secret::SeaCardSecretRepo;
 use crate::db::repo::catalog::category::SeaCategoryRepo;
+use crate::db::repo::catalog::facets::SeaFacetRepo;
 use crate::db::repo::catalog::lookup::SeaCatalogLookup;
 use crate::db::repo::catalog::product::SeaProductRepo;
 use crate::db::repo::marketing::member_level::SeaMemberLevelRepo;
@@ -28,6 +30,7 @@ pub fn build(ctx: &WireCtx) -> CatalogServices {
     let secrets = Arc::new(SeaCardSecretRepo::new(ctx.db.clone()));
     let reseller = Arc::new(SeaResellerStore::new(ctx.db.clone()));
     CatalogServices {
+        facets: FacetService::new(Arc::new(SeaFacetRepo::new(ctx.db.clone()))),
         category: CategoryService::new(categories.clone()),
         product: ProductService::new(ProductDeps {
             products: products.clone(),

@@ -48,6 +48,26 @@ export interface AdminCategory {
 }
 
 // --- Product ---
+export type CatalogFacetKey = 'family' | 'project' | 'country' | 'city' | 'ip_type' | 'line'
+
+export interface AdminCatalogFacet {
+  key: CatalogFacetKey
+  value_id: string
+  label: LocalizedText
+}
+
+export interface AdminCatalogFacetDocument {
+  schema_version: 1
+  revision: string
+  facets: AdminCatalogFacet[]
+}
+
+export interface AdminCatalogFacetReplace {
+  schema_version: 1
+  expected_revision: string
+  facets: AdminCatalogFacet[]
+}
+
 export interface AdminProductSKU {
   id: number
   product_id: number

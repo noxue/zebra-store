@@ -23,6 +23,8 @@ import type {
   AdminCardConverterPending,
   AdminCardSecretBatch,
   AdminCategory,
+  AdminCatalogFacetDocument,
+  AdminCatalogFacetReplace,
   AdminCoupon,
   AdminDashboardInventoryAlert,
   AdminExportAvailableCardSecretsPayload,
@@ -157,6 +159,9 @@ export const adminAPI = {
   batchDeleteMedia: (ids: number[]) => api.post<BatchResult>('/admin/media/batch-delete', { ids }),
 
   // ---- catalog ----
+  getProductFacets: (id: Id) => api.get<AdminCatalogFacetDocument>(`/admin/products/${id}/catalog-facets`),
+  replaceProductFacets: (id: Id, data: AdminCatalogFacetReplace) =>
+    api.put<AdminCatalogFacetDocument>(`/admin/products/${id}/catalog-facets`, data),
   getProducts: (params?: QueryParams) => api.get<AdminProduct[]>('/admin/products', { params }),
   getProduct: (id: Id) => api.get<AdminProduct>(`/admin/products/${id}`),
   createProduct: (data: JsonObject) => api.post<AdminProduct>('/admin/products', data),
